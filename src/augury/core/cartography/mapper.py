@@ -82,6 +82,13 @@ class Cartographer:
                     loc=parsed.loc,
                     imports=frozenset(resolved - {rel}),  # a self-edge is not blast radius
                     signals=parsed.signals,
+                    # A module in this repository is not an unrecognised
+                    # library; it simply has not been read yet.
+                    unmatched_imports=frozenset(
+                        name
+                        for name in parsed.unmatched_imports
+                        if self._resolve(name, index) is None
+                    ),
                     churn=churn.get(rel, 0),
                 )
             )
