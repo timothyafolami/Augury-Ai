@@ -30,11 +30,12 @@ class Pricing(BaseModel):
 
 
 PRICING: dict[str, Pricing] = {
-    # Groq: fast and cheap, which is what makes a full evaluation sweep affordable.
-    "llama-3.3-70b-versatile": Pricing(usd_per_1m_input=0.59, usd_per_1m_output=0.79),
-    "llama-3.1-8b-instant": Pricing(usd_per_1m_input=0.05, usd_per_1m_output=0.08),
+    # Groq serving the open-weight gpt-oss models. Two sizes of the same model
+    # family, which is what makes the capability question answerable: run the
+    # same evaluation on both and see whether the result depends on model size
+    # or on the architecture around it.
     "openai/gpt-oss-120b": Pricing(usd_per_1m_input=0.15, usd_per_1m_output=0.75),
-    "moonshotai/kimi-k2-instruct": Pricing(usd_per_1m_input=1.00, usd_per_1m_output=3.00),
+    "openai/gpt-oss-20b": Pricing(usd_per_1m_input=0.10, usd_per_1m_output=0.50),
     # OpenAI
     "gpt-4o": Pricing(usd_per_1m_input=2.50, usd_per_1m_output=10.00),
     "gpt-4o-mini": Pricing(usd_per_1m_input=0.15, usd_per_1m_output=0.60),
