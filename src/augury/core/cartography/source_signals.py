@@ -57,9 +57,7 @@ def _swallows_an_exception(node: ast.AST) -> bool:
     if not _is_broad(node.type):
         return False
     return not any(
-        _reraises(statement)
-        for statement in node.body
-        if not isinstance(statement, _NESTED_SCOPES)
+        _reraises(statement) for statement in node.body if not isinstance(statement, _NESTED_SCOPES)
     )
 
 
