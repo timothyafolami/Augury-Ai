@@ -162,3 +162,32 @@ def test_recording_the_same_module_twice_does_not_double_count() -> None:
     plan.record(chosen, findings=0, spent_usd=0.01)
 
     assert plan.coverage.analysed == ["a.py"]
+
+
+def test_coverage_is_honest_even_when_the_caller_stops_early() -> None:
+    """Coverage was only computed on the exit path inside next(), so a caller
+    that stopped for any other reason -- a wall-clock cap, a 429, an exception
+    in the fan-out -- published an empty skip list that reads as full
+    coverage. That is exactly when it was least true."""
+    plan = Scheduler(repo(module("a.py"), module("b.py"), module("c.py")))
+
+    read = take(plan)
+    plan.record(read, findings=0, spent_usd=0.01)
+
+    assert plan.coverage.analysed == [read.path]
+    assert set(plan.coverage.skipped) == {"a.py", "b.py", "c.py"} - {read.path}
+    assert plan.coverage.stopped_because == "still running"
+
+
+def test_an_unmatched_module_is_not_reported_as_having_no_signal() -> None:
+    """Skipping because our table did not recognise an import is a fact about
+    us, not about the code."""
+    unrecognised = module(
+        "exotic.py", signals=frozenset(), unmatched_imports=frozenset({"weird_lib"})
+    )
+    plan = Scheduler(repo(module("a.py"), unrecognised))
+
+    plan.record(take(plan), findings=0, spent_usd=0.01)
+    plan.next()
+
+    assert plan.coverage.skipped["exotic.py"] == "no detector matched its imports"
