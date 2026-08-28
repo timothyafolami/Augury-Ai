@@ -1,0 +1,9 @@
+#!/bin/sh
+# Refuse a commit that would not pass CI.
+#
+# This exists because "remember to run make check first" failed repeatedly in
+# practice. A rule a human has to remember is not a rule, it is a hope.
+#
+# Bypass deliberately with `git commit --no-verify` when you know why.
+set -e
+make check
