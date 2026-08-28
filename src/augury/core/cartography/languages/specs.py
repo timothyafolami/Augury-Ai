@@ -94,8 +94,17 @@ JAVA_SIGNALS: dict[str, frozenset[Signal]] = {
     "jakarta.ws.rs": WEB,
 }
 
+# Node builtins are written both bare and `node:`-prefixed; the adapter
+# normalises the prefix away before matching, so one entry covers both.
 TYPESCRIPT_SIGNALS: dict[str, frozenset[Signal]] = {
     "worker_threads": CONCURRENCY,
+    "perf_hooks": OBSERVABILITY,
+    "net": NETWORK,
+    "dns": NETWORK,
+    "tls": NETWORK,
+    "crypto": SECURITY,
+    "os": CONCURRENCY,
+    "v8": CONCURRENCY,
     "cluster": CONCURRENCY,
     "async_hooks": CONCURRENCY,
     "axios": NETWORK,
