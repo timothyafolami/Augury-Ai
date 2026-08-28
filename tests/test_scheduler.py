@@ -93,9 +93,9 @@ def test_exhausting_every_candidate_ends_the_review() -> None:
     assert plan.next() is None
 
 
-def test_reports_what_it_chose_not_to_read() -> None:
-    """Silent truncation reads as 'we covered everything'. Coverage must be
-    reportable, so a skipped module is recorded with a reason."""
+def test_reports_what_the_budget_stopped_it_reading() -> None:
+    """Silent truncation reads as 'we covered everything'. Every unread file
+    is reported, with the reason it was not read."""
     plan = Scheduler(
         repo(module("a.py", fan_in=5), module("b.py", fan_in=1)),
         budget=Budget(usd=0.01),
@@ -104,5 +104,61 @@ def test_reports_what_it_chose_not_to_read() -> None:
     plan.record(take(plan), findings=0, spent_usd=0.01)
     plan.next()
 
-    assert plan.coverage.skipped == ["b.py"]
-    assert plan.coverage.reason == "budget exhausted"
+    assert plan.coverage.skipped == {"b.py": "budget"}
+    assert plan.coverage.stopped_because == "budget exhausted"
+
+
+def test_modules_with_no_signal_are_reported_as_skipped_not_omitted() -> None:
+    """'No signal' can mean 'the mapper missed it'. A consumer seeing
+    analysed=[a.py] and skipped={} would conclude the repo was fully covered."""
+    plan = Scheduler(repo(module("a.py"), module("constants.py", signals=frozenset())))
+
+    plan.record(take(plan), findings=0, spent_usd=0.01)
+    plan.next()
+
+    assert plan.coverage.skipped == {"constants.py": "no signal"}
+    assert plan.coverage.stopped_because == "nothing left worth reading"
+
+
+def test_files_that_failed_to_parse_are_reported_as_skipped() -> None:
+    unreadable = RepoMap(root="/tmp/repo", modules=[module("a.py")], unparsed=["broken.py"])
+    plan = Scheduler(unreadable)
+
+    plan.record(take(plan), findings=0, spent_usd=0.01)
+    plan.next()
+
+    assert plan.coverage.skipped == {"broken.py": "unparsed"}
+
+
+def test_spend_never_exceeds_the_budget_through_float_drift() -> None:
+    """Ten cents of one-cent reads sums to 0.09999999999999999, which is less
+    than 0.10, which buys an eleventh read that was not paid for."""
+    plan = Scheduler(repo(*(module(f"m{i}.py") for i in range(20))), budget=Budget(usd=0.10))
+
+    reads = 0
+    while (chosen := plan.next()) is not None:
+        plan.record(chosen, findings=0, spent_usd=0.01)
+        reads += 1
+
+    assert reads == 10
+
+
+def test_a_module_too_expensive_for_the_remaining_budget_is_not_issued() -> None:
+    """A ceiling that is only checked after the money is gone is not a ceiling."""
+    plan = Scheduler(
+        repo(module("huge.py", loc=500_000)),
+        budget=Budget(usd=0.01, usd_per_1k_loc=1.0),
+    )
+
+    assert plan.next() is None
+    assert plan.coverage.stopped_because == "nothing left fits the remaining budget"
+
+
+def test_recording_the_same_module_twice_does_not_double_count() -> None:
+    plan = Scheduler(repo(module("a.py")))
+    chosen = take(plan)
+
+    plan.record(chosen, findings=0, spent_usd=0.01)
+    plan.record(chosen, findings=0, spent_usd=0.01)
+
+    assert plan.coverage.analysed == ["a.py"]
