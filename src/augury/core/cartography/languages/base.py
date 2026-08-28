@@ -40,6 +40,10 @@ class ParsedModule(BaseModel):
         description="Dotted or quoted names this file depends on, as written",
     )
     signals: frozenset[Signal] = Field(default_factory=frozenset)
+    unmatched_imports: frozenset[str] = Field(
+        default_factory=frozenset,
+        description="External imports no detector recognised",
+    )
 
 
 class LanguageAdapter(Protocol):
