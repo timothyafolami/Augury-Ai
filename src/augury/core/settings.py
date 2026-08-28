@@ -78,7 +78,12 @@ def load_settings() -> Settings:
     replay_only = os.environ.get("AUGURY_REPLAY_ONLY", "") not in ("", "0", "false")
 
     return Settings(
-        spec=ModelSpec(provider=provider, model=model, temperature=_temperature()),
+        spec=ModelSpec(
+            provider=provider,
+            model=model,
+            temperature=_temperature(),
+            max_tokens=_max_tokens(),
+        ),
         # Replay serves recorded answers, so it must work with no key at all.
         # That is the path a judge takes.
         api_key="" if replay_only else _api_key(provider),
@@ -150,6 +155,15 @@ def _api_key(provider: str) -> str:
             "replay recorded runs without a key."
         )
     return key
+
+
+def _max_tokens() -> int:
+    """Room for a reasoning model to think and then answer."""
+    raw = os.environ.get("AUGURY_MAX_TOKENS", "16000")
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise SettingsError(f"AUGURY_MAX_TOKENS={raw!r} is not a whole number") from exc
 
 
 def _temperature() -> float:
