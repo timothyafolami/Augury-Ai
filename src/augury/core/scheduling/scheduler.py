@@ -67,7 +67,8 @@ class Scheduler:
         candidates = [m for m in self._unread() if self._is_worth_reading(m)]
 
         if not candidates:
-            return self._close("nothing left worth reading")
+            self._close("nothing left worth reading")
+            return None
 
         affordable = [m for m in candidates if self._fits(m)]
         if not affordable:
@@ -76,7 +77,8 @@ class Scheduler:
                 if self._spent_micros >= self._budget_micros
                 else "nothing left fits the remaining budget"
             )
-            return self._close(reason)
+            self._close(reason)
+            return None
 
         return max(affordable, key=lambda m: (self._value(m), m.path))
 
