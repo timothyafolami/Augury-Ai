@@ -86,7 +86,9 @@ def _reraises(node: ast.AST) -> bool:
     if isinstance(node, ast.Raise):
         return True
     return any(
-        _reraises(child) for child in ast.iter_child_nodes(node) if not isinstance(child, _NESTED_SCOPES)
+        _reraises(child)
+        for child in ast.iter_child_nodes(node)
+        if not isinstance(child, _NESTED_SCOPES)
     )
 
 
@@ -110,12 +112,18 @@ def _builds_a_query_by_interpolation(node: ast.AST) -> bool:
 
 def _literal_parts(node: ast.JoinedStr) -> str:
     return "".join(
-        part.value for part in node.values if isinstance(part, ast.Constant) and isinstance(part.value, str)
+        part.value
+        for part in node.values
+        if isinstance(part, ast.Constant) and isinstance(part.value, str)
     )
 
 
 def _is_sql_constant(node: ast.expr) -> bool:
-    return isinstance(node, ast.Constant) and isinstance(node.value, str) and _looks_like_sql(node.value)
+    return (
+        isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and _looks_like_sql(node.value)
+    )
 
 
 def _looks_like_sql(text: str) -> bool:
