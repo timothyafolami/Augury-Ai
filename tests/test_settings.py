@@ -31,6 +31,7 @@ def test_the_smaller_model_is_selected_by_environment(monkeypatch: pytest.Monkey
 
 
 def test_reads_the_api_key_for_the_selected_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUGURY_ENV_FILE", "/nonexistent/.env")
     monkeypatch.setenv("AUGURY_PROVIDER", "anthropic")
     monkeypatch.setenv("AUGURY_MODEL", "claude-sonnet-4-5")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
@@ -38,7 +39,10 @@ def test_reads_the_api_key_for_the_selected_provider(monkeypatch: pytest.MonkeyP
     assert load_settings().api_key == "sk-ant-test"
 
 
-def test_a_missing_key_names_the_variable_to_set(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_missing_key_names_the_variable_to_set(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
+) -> None:
+    monkeypatch.setenv("AUGURY_ENV_FILE", "/nonexistent/.env")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("AUGURY_PROVIDER", raising=False)
 
