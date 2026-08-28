@@ -13,7 +13,7 @@ import pytest
 from autogen_core.models import CreateResult, RequestUsage
 from pydantic import BaseModel, ValidationError
 
-from augury.core.adapters.base import ChatModel, ModelSpec
+from augury.core.adapters.base import ChatModel, ModelSpec, Provider
 from augury.core.adapters.provider import Pricing, ProviderAdapter, build_model
 
 
@@ -122,7 +122,7 @@ def test_groq_is_reached_through_the_openai_compatible_path() -> None:
 
 
 @pytest.mark.parametrize("provider", ["openai", "anthropic", "groq"])
-def test_every_declared_provider_can_be_built(provider: str) -> None:
+def test_every_declared_provider_can_be_built(provider: Provider) -> None:
     model = build_model(ModelSpec(provider=provider, model="a-model"), api_key="test-key")
 
     assert isinstance(model, ChatModel)
