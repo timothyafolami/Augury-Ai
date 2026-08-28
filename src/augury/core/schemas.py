@@ -13,6 +13,15 @@ from typing import assert_never
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# A measurement larger than this is not something an experiment produces; a
+# threshold above it excludes nothing. Deliberately generous: a p99 of a
+# billion milliseconds is eleven days.
+VACUOUS_CEILING = 1e9
+
+# A range is honest when it is wide because the mechanism is uncertain. Beyond
+# two orders of magnitude it stops being a claim about anything.
+WIDEST_HONEST_BAND = 100.0
+
 
 class Comparator(StrEnum):
     """How a measurement is compared against the predicted value."""
@@ -57,6 +66,37 @@ class Prediction(BaseModel):
     )
     unit: str = Field(min_length=1, description="Dimension of the measurement, e.g. ms, queries, x")
     condition: str = Field(min_length=1, description="The circumstance under which it holds")
+
+    @model_validator(mode="after")
+    def _must_be_refutable(self) -> Prediction:
+        """Reject claims that no realisable measurement could contradict.
+
+        The first version of this type rejected the never-hit shape (an
+        inverted band) and accepted the always-hit shape. That asymmetry was
+        fatal: a reviewer emitting only `p99 >= 0ms` scored a perfect hit rate
+        while saying nothing, and beat an honest reviewer on both headline
+        metrics. A prediction has to exclude some part of the outcome space or
+        it is not a prediction.
+        """
+        if self.comparator is Comparator.AT_LEAST and self.value <= 0:
+            raise ValueError(
+                "vacuous: every measurement of a magnitude is at least zero, "
+                "so this threshold excludes nothing"
+            )
+        if self.comparator is Comparator.AT_MOST and self.value >= VACUOUS_CEILING:
+            raise ValueError(
+                f"vacuous: no realisable measurement exceeds {VACUOUS_CEILING:g} "
+                f"{self.unit}, so this threshold excludes nothing"
+            )
+        if self.comparator is Comparator.BETWEEN and self.upper is not None:
+            if self.value <= 0:
+                raise ValueError("vacuous: a band starting at or below zero excludes nothing")
+            if self.upper / self.value > WIDEST_HONEST_BAND:
+                raise ValueError(
+                    f"vacuous: a band spanning more than {WIDEST_HONEST_BAND:g}x "
+                    "admits almost every outcome"
+                )
+        return self
 
     @model_validator(mode="after")
     def _range_must_be_a_real_band(self) -> Prediction:
