@@ -36,6 +36,11 @@ class ModuleNode(BaseModel):
         default_factory=frozenset, description="Repo-relative paths this module imports"
     )
     signals: frozenset[Signal] = Field(default_factory=frozenset)
+    unmatched_imports: frozenset[str] = Field(
+        default_factory=frozenset,
+        description="External imports no detector recognised. 'No signal' is a "
+        "claim about the code; this distinguishes it from a gap in our table.",
+    )
     fan_in: int = Field(default=0, ge=0, description="How many modules import this one")
     churn: int = Field(default=0, ge=0, description="Commits touching this file")
 
