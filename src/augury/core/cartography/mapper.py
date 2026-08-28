@@ -7,14 +7,12 @@ files and a reviewer that dies on one is useless.
 
 from __future__ import annotations
 
-import ast
 import subprocess
 from collections import Counter
 from pathlib import Path
 
-from augury.core.cartography.model import ModuleNode, RepoMap, Signal
-from augury.core.cartography.signals import signals_for_import
-from augury.core.cartography.source_signals import signals_from_source
+from augury.core.cartography.languages import EXTENSIONS, ParseError, adapter_for
+from augury.core.cartography.model import ModuleNode, RepoMap
 
 EXCLUDED_DIRS = frozenset(
     {
@@ -50,20 +48,28 @@ class Cartographer:
 
         for path in sources:
             rel = self._relative(path)
+            adapter = adapter_for(path)
+            if adapter is None:  # unreachable: _source_files filters by extension
+                continue
+
             text = path.read_text(encoding="utf-8", errors="replace")
             try:
-                tree = ast.parse(text)
-            except SyntaxError:
+                parsed = adapter.parse(text, package=self._package_of(path))
+            except ParseError:
                 unparsed.append(rel)
                 continue
 
-            imports, signals = self._analyse(tree, path, index)
+            resolved = {
+                target
+                for name in parsed.imports
+                if (target := self._resolve(name, index)) is not None
+            }
             nodes.append(
                 ModuleNode(
                     path=rel,
-                    loc=sum(1 for line in text.splitlines() if line.strip()),
-                    imports=frozenset(imports - {rel}),  # a self-edge is not blast radius
-                    signals=frozenset(signals),
+                    loc=parsed.loc,
+                    imports=frozenset(resolved - {rel}),  # a self-edge is not blast radius
+                    signals=parsed.signals,
                     churn=churn.get(rel, 0),
                 )
             )
@@ -75,8 +81,10 @@ class Cartographer:
     def _source_files(self) -> list[Path]:
         return [
             path
-            for path in self._root.rglob("*.py")
-            if not EXCLUDED_DIRS & set(path.relative_to(self._root).parts)
+            for path in self._root.rglob("*")
+            if path.is_file()
+            and path.suffix.lower() in EXTENSIONS
+            and not EXCLUDED_DIRS & set(path.relative_to(self._root).parts)
         ]
 
     def _relative(self, path: Path) -> str:
@@ -94,6 +102,8 @@ class Cartographer:
         """
         index: dict[str, str] = {}
         for path in sources:
+            if path.suffix != ".py":  # only Python names are dotted module paths
+                continue
             rel = self._relative(path)
             for name in self._names_for(path):
                 # On a collision, a package __init__ wins: it is the name the
@@ -139,48 +149,7 @@ class Cartographer:
         package, _, _ = dotted.rpartition(".")
         return package
 
-    # -- analysis ----------------------------------------------------------
-
-    def _analyse(
-        self, tree: ast.Module, path: Path, index: dict[str, str]
-    ) -> tuple[set[str], set[Signal]]:
-        imports: set[str] = set()
-        signals: set[Signal] = signals_from_source(tree)
-        package = self._package_of(path)
-
-        for node in ast.walk(tree):
-            for dotted in self._imported_names(node, package):
-                signals |= signals_for_import(dotted.split(".")[0])
-                internal = self._resolve(dotted, index)
-                if internal is not None:
-                    imports.add(internal)
-
-        return imports, signals
-
-    @staticmethod
-    def _imported_names(node: ast.AST, package: str) -> list[str]:
-        """Every dotted name this statement could be depending on.
-
-        `from pkg import store` is listed as `pkg.store` before `pkg`, so the
-        submodule is preferred when one exists and the package is used only
-        when the imported name is not a module.
-        """
-        if isinstance(node, ast.Import):
-            return [alias.name for alias in node.names]
-
-        if not isinstance(node, ast.ImportFrom):
-            return []
-
-        base = node.module or ""
-        if node.level:
-            # `from .` is this package; `from ..` is its parent, and so on.
-            ancestors = package.split(".") if package else []
-            prefix = ".".join(ancestors[: len(ancestors) - (node.level - 1)] or ancestors)
-            base = f"{prefix}.{base}".strip(".") if base else prefix
-
-        if not base:
-            return []
-        return [f"{base}.{alias.name}" for alias in node.names] + [base]
+    # -- resolution --------------------------------------------------------
 
     @staticmethod
     def _resolve(dotted: str, index: dict[str, str]) -> str | None:
