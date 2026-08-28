@@ -48,6 +48,10 @@ class RepoMap(BaseModel):
     unparsed: list[str] = Field(
         default_factory=list, description="Files that failed to parse, recorded not hidden"
     )
+    skipped: dict[str, str] = Field(
+        default_factory=dict,
+        description="Files deliberately not read, mapped to why. Never silent.",
+    )
 
     def module(self, path: str) -> ModuleNode:
         for module in self.modules:
