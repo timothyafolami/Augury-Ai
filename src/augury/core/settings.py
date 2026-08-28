@@ -9,7 +9,7 @@ if the model is an edit.
 from __future__ import annotations
 
 import os
-from typing import get_args
+from typing import cast, get_args
 
 from pydantic import BaseModel, ConfigDict
 
@@ -42,12 +42,13 @@ class Settings(BaseModel):
 
 def load_settings() -> Settings:
     """Read the environment, refusing anything that cannot produce a real run."""
-    provider = os.environ.get("AUGURY_PROVIDER", DEFAULT_PROVIDER)
-    if provider not in get_args(Provider):
+    name = os.environ.get("AUGURY_PROVIDER", DEFAULT_PROVIDER)
+    if name not in get_args(Provider):
         raise SettingsError(
-            f"AUGURY_PROVIDER={provider!r} is not supported. "
+            f"AUGURY_PROVIDER={name!r} is not supported. "
             f"Choose one of: {', '.join(get_args(Provider))}"
         )
+    provider = cast("Provider", name)
 
     model = os.environ.get("AUGURY_MODEL", DEFAULT_MODEL)
     try:
