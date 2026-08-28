@@ -71,9 +71,7 @@ class Report(BaseModel):
         default_factory=list,
         description="Findings the Refiner could not make falsifiable, with the reason",
     )
-    coverage: Coverage | None = Field(
-        default=None, description="What was read and what was not"
-    )
+    coverage: Coverage | None = Field(default=None, description="What was read and what was not")
     model_id: str = ""
     usd: float = 0.0
     seconds: float = 0.0
