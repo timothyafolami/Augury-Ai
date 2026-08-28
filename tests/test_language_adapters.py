@@ -116,3 +116,17 @@ def test_a_plain_function_call_is_not_treated_as_an_import(tmp_path: Path) -> No
     write(tmp_path, "svc.js", "log('connecting to redis');\n")
 
     assert Cartographer(tmp_path).map().module("svc.js").signals == frozenset()
+
+
+def test_matches_node_prefixed_builtins(tmp_path: Path) -> None:
+    """`node:http` and `http` are the same module. Modern Node code prefers
+    the prefixed form, and missing it silently zeroes the signal."""
+    write(tmp_path, "svc.js", "const http = require('node:http');\n")
+
+    assert Signal.NETWORK in Cartographer(tmp_path).map().module("svc.js").signals
+
+
+def test_node_crypto_is_a_security_concern(tmp_path: Path) -> None:
+    write(tmp_path, "svc.js", "const crypto = require('node:crypto');\n")
+
+    assert Signal.SECURITY in Cartographer(tmp_path).map().module("svc.js").signals
