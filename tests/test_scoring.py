@@ -8,7 +8,7 @@ including when it is bad.
 
 import pytest
 
-from augury.core.findings import Finding, Report, Severity
+from augury.core.findings import Dropped, Finding, Measurement, Report, Severity
 from augury.core.schemas import Comparator, Outcome, Prediction
 from augury.core.scoring import score
 
@@ -23,6 +23,12 @@ def prediction() -> Prediction:
     )
 
 
+# The verdict is derived from the measurement, so a test states what was
+# observed and lets the type decide the grade. That is the whole point of the
+# change: no component may assert a grade it did not earn.
+OBSERVED = {Outcome.HIT: 1200.0, Outcome.MISS: 400.0, Outcome.BROKEN: None}
+
+
 def finding(*, falsifiable: bool, verdict: Outcome | None = None) -> Finding:
     return Finding(
         path="app/db.py",
@@ -33,18 +39,18 @@ def finding(*, falsifiable: bool, verdict: Outcome | None = None) -> Finding:
         severity=Severity.HIGH,
         remediation="raise pool_size to 20",
         prediction=prediction() if falsifiable else None,
-        verdict=verdict,
+        measurement=(Measurement(value=OBSERVED[verdict]) if verdict is not None else None),
     )
 
 
 def test_falsifiable_precision_is_the_share_carrying_a_prediction() -> None:
     report = Report(
-        findings=[
+        findings=(
             finding(falsifiable=True),
             finding(falsifiable=True),
             finding(falsifiable=False),
             finding(falsifiable=False),
-        ]
+        )
     )
 
     assert score(report).falsifiable_precision == 0.5
@@ -53,18 +59,18 @@ def test_falsifiable_precision_is_the_share_carrying_a_prediction() -> None:
 def test_precision_is_undefined_rather_than_perfect_when_nothing_was_found() -> None:
     """Zero of zero is not 100%. Reporting it as 1.0 would let a reviewer that
     finds nothing top the table."""
-    assert score(Report(findings=[])).falsifiable_precision is None
+    assert score(Report()).falsifiable_precision is None
 
 
 def test_hit_rate_counts_only_predictions_that_were_actually_tested() -> None:
     """An untested prediction is not evidence. Counting it would let the
     reviewer grade its own homework."""
     report = Report(
-        findings=[
+        findings=(
             finding(falsifiable=True, verdict=Outcome.HIT),
             finding(falsifiable=True, verdict=Outcome.MISS),
             finding(falsifiable=True, verdict=None),
-        ]
+        )
     )
 
     assert score(report).hit_rate == 0.5
@@ -74,10 +80,10 @@ def test_a_broken_experiment_is_excluded_from_the_hit_rate() -> None:
     """Broken means the experiment did not run, so the prediction was never
     tested. Counting it either way would misreport the reviewer."""
     report = Report(
-        findings=[
+        findings=(
             finding(falsifiable=True, verdict=Outcome.HIT),
             finding(falsifiable=True, verdict=Outcome.BROKEN),
-        ]
+        )
     )
 
     result = score(report)
@@ -88,7 +94,7 @@ def test_a_broken_experiment_is_excluded_from_the_hit_rate() -> None:
 
 def test_counts_are_reported_alongside_every_rate() -> None:
     """A rate without its denominator hides a sample of one."""
-    report = Report(findings=[finding(falsifiable=True, verdict=Outcome.HIT)])
+    report = Report(findings=(finding(falsifiable=True, verdict=Outcome.HIT),))
 
     result = score(report)
 
@@ -101,23 +107,25 @@ def test_dropped_findings_are_counted_not_hidden() -> None:
     """The refiner drops what it cannot make falsifiable. That number is part
     of the result, not an embarrassment to omit."""
     report = Report(
-        findings=[finding(falsifiable=True)],
-        dropped=[{"claim": "consider adding a timeout", "reason": "no threshold derivable"}],
+        findings=(finding(falsifiable=True),),
+        dropped=(Dropped(symbol="fetch", path="a.py", reason="no threshold derivable"),),
     )
 
-    assert score(report).dropped == 1
+    result = score(report)
+
+    assert result.dropped == 1
+    assert result.falsifiable_precision == 0.5, "dropped stays in the denominator"
 
 
 def test_scoring_never_divides_by_zero() -> None:
-    result = score(Report(findings=[]))
+    result = score(Report())
 
     assert result.hit_rate is None
     assert result.falsifiable_precision is None
     assert result.total_findings == 0
 
 
-@pytest.mark.parametrize("verdict", [Outcome.HIT, Outcome.MISS])
-def test_an_unfalsifiable_finding_cannot_carry_a_verdict(verdict: Outcome) -> None:
+def test_an_unfalsifiable_finding_cannot_carry_a_measurement() -> None:
     """Nothing was predicted, so nothing could have been tested."""
     with pytest.raises(ValueError, match="prediction"):
         Finding(
@@ -129,5 +137,5 @@ def test_an_unfalsifiable_finding_cannot_carry_a_verdict(verdict: Outcome) -> No
             severity=Severity.LOW,
             remediation="r",
             prediction=None,
-            verdict=verdict,
+            measurement=Measurement(value=1.0),
         )
