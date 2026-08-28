@@ -17,7 +17,7 @@ from augury.core.cartography.languages.base import (
     ParseError,
 )
 from augury.core.cartography.model import Signal
-from augury.core.cartography.signals import signals_for_import
+from augury.core.cartography.signals import is_inert, signals_for_import
 from augury.core.cartography.source_signals import signals_from_source
 
 
@@ -36,16 +36,23 @@ class PythonAdapter(LanguageAdapter):
 
         imports: set[str] = set()
         signals: set[Signal] = signals_from_source(tree)
+        unmatched: set[str] = set()
 
         for node in ast.walk(tree):
             for dotted in _imported_names(node, package):
                 imports.add(dotted)
-                signals |= signals_for_import(dotted.split(".")[0])
+                top_level = dotted.split(".")[0]
+                matched = signals_for_import(top_level)
+                if matched:
+                    signals |= matched
+                elif not is_inert(top_level):
+                    unmatched.add(top_level)
 
         return ParsedModule(
             loc=sum(1 for line in source.splitlines() if line.strip()),
             imports=frozenset(imports),
             signals=frozenset(signals),
+            unmatched_imports=frozenset(unmatched),
         )
 
 
