@@ -77,3 +77,22 @@ def test_replay_only_needs_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert settings.replay_only is True
     assert settings.api_key == ""
+
+
+def test_a_generous_output_budget_is_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """gpt-oss reasons before it answers. The provider default cut it off
+    mid-thought, so the request failed with an empty generation rather than a
+    truncated one, which reads like a schema problem and is not."""
+    monkeypatch.setenv("AUGURY_ENV_FILE", "/nonexistent/.env")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.delenv("AUGURY_MAX_TOKENS", raising=False)
+
+    assert load_settings().spec.max_tokens >= 8000
+
+
+def test_the_output_budget_can_be_raised(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUGURY_ENV_FILE", "/nonexistent/.env")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.setenv("AUGURY_MAX_TOKENS", "32000")
+
+    assert load_settings().spec.max_tokens == 32000
