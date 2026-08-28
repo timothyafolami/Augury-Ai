@@ -78,3 +78,9 @@ class ModelSpec(BaseModel):
     provider: Provider
     model: str
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    max_tokens: int = Field(
+        default=16_000,
+        gt=0,
+        description="Output budget. Reasoning models spend it before answering, "
+        "so a small one fails with an empty generation rather than a short answer.",
+    )
