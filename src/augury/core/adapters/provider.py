@@ -7,15 +7,28 @@ of the system sees only `ChatModel`.
 
 from __future__ import annotations
 
-from typing import TypeVar
+from typing import Any, Protocol, TypeVar, cast
 
-from autogen_core.models import ChatCompletionClient, ModelFamily, ModelInfo, UserMessage
+from autogen_core.models import CreateResult, ModelFamily, ModelInfo, UserMessage
 from pydantic import BaseModel
 
 from augury.core.adapters.base import ChatModel, ModelSpec, Usage
 from augury.core.adapters.pricing import Pricing, pricing_for
 
+__all__ = ["MODEL_CAPABILITIES", "CompletionClient", "Pricing", "ProviderAdapter", "build_model"]
+
 T = TypeVar("T", bound=BaseModel)
+
+
+class CompletionClient(Protocol):
+    """The only part of a provider client this adapter depends on.
+
+    Narrower than autogen's `ChatCompletionClient` on purpose: depending on the
+    whole interface would mean a test double has to implement all of it.
+    """
+
+    async def create(self, messages: Any, **kwargs: Any) -> CreateResult: ...
+
 
 # Groq is OpenAI-compatible, so it is a base URL rather than a third client.
 OPENAI_COMPATIBLE_BASE_URLS: dict[str, str | None] = {
@@ -27,7 +40,7 @@ OPENAI_COMPATIBLE_BASE_URLS: dict[str, str | None] = {
 class ProviderAdapter:
     """Turns a provider response into a validated object and a measured cost."""
 
-    def __init__(self, client: ChatCompletionClient, *, model_id: str, pricing: Pricing) -> None:
+    def __init__(self, client: CompletionClient, *, model_id: str, pricing: Pricing) -> None:
         self._client = client
         self._model_id = model_id
         self._pricing = pricing
@@ -65,9 +78,7 @@ class ProviderAdapter:
         self._usage = self._usage + Usage(
             input_tokens=prompt_tokens,
             output_tokens=completion_tokens,
-            usd=self._pricing.cost(
-                input_tokens=prompt_tokens, output_tokens=completion_tokens
-            ),
+            usd=self._pricing.cost(input_tokens=prompt_tokens, output_tokens=completion_tokens),
         )
 
 
@@ -83,21 +94,37 @@ def build_model(spec: ModelSpec, *, api_key: str) -> ChatModel:
         from autogen_ext.models.openai import OpenAIChatCompletionClient
 
         base_url = OPENAI_COMPATIBLE_BASE_URLS[spec.provider]
-        client: ChatCompletionClient = OpenAIChatCompletionClient(
-            model=spec.model,
-            api_key=api_key,
-            temperature=spec.temperature,
-            model_info=MODEL_CAPABILITIES,
-            **({"base_url": base_url} if base_url else {}),
+        # cast because autogen's client declares `create` with named keyword
+        # parameters rather than **kwargs, so it does not structurally satisfy
+        # a Protocol written that way. It does provide what we call.
+        client: CompletionClient = cast(
+            "CompletionClient",
+            OpenAIChatCompletionClient(
+                model=spec.model,
+                api_key=api_key,
+                temperature=spec.temperature,
+                model_info=MODEL_CAPABILITIES,
+                base_url=base_url,
+            )
+            if base_url
+            else OpenAIChatCompletionClient(
+                model=spec.model,
+                api_key=api_key,
+                temperature=spec.temperature,
+                model_info=MODEL_CAPABILITIES,
+            ),
         )
     else:
         from autogen_ext.models.anthropic import AnthropicChatCompletionClient
 
-        client = AnthropicChatCompletionClient(
-            model=spec.model,
-            api_key=api_key,
-            temperature=spec.temperature,
-            model_info=MODEL_CAPABILITIES,
+        client = cast(
+            "CompletionClient",
+            AnthropicChatCompletionClient(
+                model=spec.model,
+                api_key=api_key,
+                temperature=spec.temperature,
+                model_info=MODEL_CAPABILITIES,
+            ),
         )
 
     return ProviderAdapter(client, model_id=spec.model, pricing=pricing)
