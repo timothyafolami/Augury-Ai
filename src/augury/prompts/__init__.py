@@ -10,8 +10,8 @@ failure that reads like a bad model rather than a bug.
 from __future__ import annotations
 
 from functools import cache
-from string import Formatter
 from pathlib import Path
+from string import Formatter
 
 _DIRECTORY = Path(__file__).parent
 _SUFFIX = ".md"
