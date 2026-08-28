@@ -9,6 +9,8 @@ dependencies = [
     "autogen-ext[anthropic,openai]==0.7.5",
     "typer>=0.15",
     "rich>=13.9",
+    "tree-sitter>=0.26.0",
+    "tree-sitter-language-pack>=1.15.8",
 ]
 
 [project.optional-dependencies]
