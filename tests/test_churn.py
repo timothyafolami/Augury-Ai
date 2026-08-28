@@ -16,16 +16,12 @@ from augury.core.cartography import Cartographer
 # operates on Augury's own repository instead of the fixture -- which is how
 # a temp file called "app/café.py" ended up in the real index.
 GIT_ENV = {
-    key: value
-    for key, value in os.environ.items()
-    if not key.startswith(("GIT_", "GIT_INDEX"))
+    key: value for key, value in os.environ.items() if not key.startswith(("GIT_", "GIT_INDEX"))
 } | {"HOME": os.environ.get("HOME", "")}
 
 
 def git(root: Path, *args: str) -> None:
-    subprocess.run(
-        ["git", "-C", str(root), *args], check=True, capture_output=True, env=GIT_ENV
-    )
+    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=GIT_ENV)
 
 
 def commit(root: Path, rel: str, body: str) -> None:
