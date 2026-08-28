@@ -39,7 +39,10 @@ class Coverage(BaseModel):
     skipped: dict[str, str] = Field(
         default_factory=dict, description="Unread path to the reason it was not read"
     )
-    stopped_because: str = ""
+    stopped_because: str = Field(
+        default="still running",
+        description="Why the review ended. 'still running' means it has not.",
+    )
 
 
 class Scheduler:
@@ -60,7 +63,37 @@ class Scheduler:
         self._budget_micros = round(self._budget.usd * MICRO_USD)
         self._seen: set[str] = set()
         self._suspect: dict[str, int] = {}
-        self.coverage = Coverage()
+        self._stopped_because = "still running"
+        self.coverage_analysed: list[str] = []
+
+    @property
+    def coverage(self) -> Coverage:
+        """Computed on read, never written on one exit path.
+
+        The first version wrote this only when `next()` was about to return
+        None, so a caller that stopped for any other reason -- a wall-clock
+        cap, a rate limit, an exception in the fan-out -- published an empty
+        skip list that reads as full coverage. That is precisely when it was
+        least true.
+        """
+        return Coverage(
+            analysed=list(self.coverage_analysed),
+            skipped={
+                **{path: "unparsed" for path in self._repo.unparsed},
+                **dict(self._repo.skipped),
+                **{module.path: self._why_skipped(module) for module in self._unread()},
+            },
+            stopped_because=self._stopped_because,
+        )
+
+    @staticmethod
+    def _why_skipped(module: ModuleNode) -> str:
+        """Distinguish a fact about the code from a gap in our detectors."""
+        if module.signals:
+            return "budget"
+        if module.unmatched_imports:
+            return "no detector matched its imports"
+        return "no signal"
 
     def next(self) -> ModuleNode | None:
         """The next module worth reading, or None when the review is over."""
@@ -91,7 +124,7 @@ class Scheduler:
             return
         self._seen.add(module.path)
         self._spent_micros += round(spent_usd * MICRO_USD)
-        self.coverage.analysed.append(module.path)
+        self.coverage_analysed.append(module.path)
         if findings > 0:
             self._suspect[module.path] = findings
 
@@ -126,13 +159,5 @@ class Scheduler:
     # -- reporting ---------------------------------------------------------
 
     def _close(self, reason: str) -> None:
-        """Record every file left unread, with why, before ending the review."""
-        self.coverage.stopped_because = reason
-        self.coverage.skipped = {
-            **{path: "unparsed" for path in self._repo.unparsed},
-            **{
-                module.path: ("no signal" if not self._is_worth_reading(module) else "budget")
-                for module in self._unread()
-            },
-        }
-        return None
+        """Record why the review ended. What was skipped is derived on read."""
+        self._stopped_because = reason
