@@ -67,11 +67,14 @@ class ChatModel(Protocol):
     def usage(self) -> Usage: ...
 
 
+Provider = Literal["anthropic", "openai", "groq"]
+
+
 class ModelSpec(BaseModel):
     """Declarative model selection, resolved at runtime."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    provider: Literal["anthropic", "openai", "groq"]
+    provider: Provider
     model: str
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
