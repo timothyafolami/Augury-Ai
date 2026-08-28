@@ -5,14 +5,27 @@ edges. When it silently returns nothing, `recency` becomes a constant for the
 whole repository and nobody notices.
 """
 
+import os
 import subprocess
 from pathlib import Path
 
 from augury.core.cartography import Cartographer
 
+# git exports GIT_INDEX_FILE, GIT_DIR and GIT_WORK_TREE to hooks. The
+# pre-commit hook runs this suite, so a bare `git` call here inherits them and
+# operates on Augury's own repository instead of the fixture -- which is how
+# a temp file called "app/café.py" ended up in the real index.
+GIT_ENV = {
+    key: value
+    for key, value in os.environ.items()
+    if not key.startswith(("GIT_", "GIT_INDEX"))
+} | {"HOME": os.environ.get("HOME", "")}
+
 
 def git(root: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(root), *args], check=True, capture_output=True, env=GIT_ENV
+    )
 
 
 def commit(root: Path, rel: str, body: str) -> None:
