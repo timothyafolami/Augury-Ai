@@ -7,12 +7,18 @@ files and a reviewer that dies on one is useless.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections import Counter
 from pathlib import Path
 
 from augury.core.cartography.languages import EXTENSIONS, ParseError, adapter_for
 from augury.core.cartography.model import ModuleNode, RepoMap
+
+# A single source file has no legitimate reason to be larger than this. The cap
+# bounds memory, and it stops a binary shipped with a source extension from
+# becoming replacement-character soup that is parsed and then tokenised at cost.
+MAX_SOURCE_BYTES = 256 * 1024
 
 EXCLUDED_DIRS = frozenset(
     {
@@ -44,10 +50,16 @@ class Cartographer:
 
         nodes: list[ModuleNode] = []
         unparsed: list[str] = []
+        skipped: dict[str, str] = {}
         churn = self._churn()
 
         for path in sources:
             rel = self._relative(path)
+
+            reason = self._refuse(path)
+            if reason is not None:
+                skipped[rel] = reason
+                continue
             adapter = adapter_for(path)
             if adapter is None:  # unreachable: _source_files filters by extension
                 continue
@@ -74,7 +86,26 @@ class Cartographer:
                 )
             )
 
-        return RepoMap(root=str(self._root), modules=self._with_fan_in(nodes), unparsed=unparsed)
+        return RepoMap(
+            root=str(self._root),
+            modules=self._with_fan_in(nodes),
+            unparsed=unparsed,
+            skipped=skipped,
+        )
+
+    def _refuse(self, path: Path) -> str | None:
+        """Why this file will not be read, or None to read it.
+
+        Symlinks are refused because the name is attacker-controlled and the
+        target is not: `config.py -> ~/.aws/credentials` is a valid repository
+        and a .env is largely valid Python, so it parses and survives into a
+        prompt and from there into a committed recording.
+        """
+        if path.is_symlink():
+            return "symlink"
+        if path.stat().st_size > MAX_SOURCE_BYTES:
+            return "larger than the source size cap"
+        return None
 
     # -- traversal ---------------------------------------------------------
 
@@ -199,3 +230,15 @@ class Cartographer:
         if result.returncode != 0:
             return {}
         return Counter(line.strip() for line in result.stdout.splitlines() if line.strip())
+
+
+def _git_environment() -> dict[str, str]:
+    """The minimum git needs, and nothing a reviewed repository could have set."""
+    return {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "HOME": os.environ.get("HOME", ""),
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_OPTIONAL_LOCKS": "0",
+    }
