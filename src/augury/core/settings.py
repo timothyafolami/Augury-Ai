@@ -9,6 +9,7 @@ if the model is an edit.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import cast, get_args
 
 from pydantic import BaseModel, ConfigDict
@@ -42,6 +43,8 @@ class Settings(BaseModel):
 
 def load_settings() -> Settings:
     """Read the environment, refusing anything that cannot produce a real run."""
+    _load_dotenv()
+
     name = os.environ.get("AUGURY_PROVIDER", DEFAULT_PROVIDER)
     if name not in get_args(Provider):
         raise SettingsError(
@@ -65,6 +68,24 @@ def load_settings() -> Settings:
         api_key="" if replay_only else _api_key(provider),
         replay_only=replay_only,
     )
+
+
+def _load_dotenv(path: Path | None = None) -> None:
+    """Fill in anything .env declares that the environment does not already set.
+
+    A real environment variable always wins: CI sets real ones, and a stale
+    .env silently overriding them is a debugging afternoon nobody enjoys.
+    """
+    env_file = path or Path.cwd() / ".env"
+    if not env_file.is_file():
+        return
+
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, _, value = stripped.partition("=")
+        os.environ.setdefault(name.strip(), value.strip().strip("\"'"))
 
 
 def _api_key(provider: str) -> str:
