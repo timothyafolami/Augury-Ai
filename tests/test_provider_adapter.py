@@ -114,11 +114,9 @@ def test_the_adapter_satisfies_the_chat_model_protocol() -> None:
 def test_groq_is_reached_through_the_openai_compatible_path() -> None:
     """Groq speaks the OpenAI API, so it is a base URL and a price table
     rather than a third client implementation."""
-    model = build_model(
-        ModelSpec(provider="groq", model="llama-3.3-70b-versatile"), api_key="test-key"
-    )
+    model = build_model(ModelSpec(provider="groq", model="openai/gpt-oss-120b"), api_key="test-key")
 
-    assert model.model_id == "llama-3.3-70b-versatile"
+    assert model.model_id == "openai/gpt-oss-120b"
 
 
 @pytest.mark.parametrize("provider", ["openai", "anthropic", "groq"])
