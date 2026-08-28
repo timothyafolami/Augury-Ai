@@ -103,3 +103,94 @@ def test_flags_percent_formatted_queries_too(tmp_path: Path) -> None:
     )
 
     assert Signal.SECURITY in Cartographer(tmp_path).map().module("app/legacy.py").signals
+
+
+# -- false positives -------------------------------------------------------
+# The detector uppercased its input before matching, which made it
+# case-insensitive against English prose. "a false signal costs a real model
+# call" is the module's own rule, so these must stay silent.
+
+
+def test_does_not_flag_an_ordinary_log_message(tmp_path: Path) -> None:
+    write(tmp_path, "app/net.py", 'def go(n, url):\n    log(f"downloaded {n} bytes from {url}")\n')
+
+    assert Cartographer(tmp_path).map().module("app/net.py").signals == frozenset()
+
+
+def test_does_not_flag_prose_containing_a_bare_sql_word(tmp_path: Path) -> None:
+    write(tmp_path, "app/msg.py", 'def go(u):\n    log(f"update failed for {u}")\n')
+
+    assert Signal.SECURITY not in Cartographer(tmp_path).map().module("app/msg.py").signals
+
+
+# -- other interpolation shapes -------------------------------------------
+
+
+def test_flags_a_query_built_with_format(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "app/f.py",
+        "def s(t):\n    return execute('SELECT * FROM users WHERE n = {}'.format(t))\n",
+    )
+
+    assert Signal.SECURITY in Cartographer(tmp_path).map().module("app/f.py").signals
+
+
+def test_flags_a_query_built_by_concatenation(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "app/c.py",
+        "def s(t):\n    return execute('SELECT * FROM users WHERE n = ' + t)\n",
+    )
+
+    assert Signal.SECURITY in Cartographer(tmp_path).map().module("app/c.py").signals
+
+
+# -- swallowed exceptions: the shapes the first pass missed ----------------
+
+
+def test_flags_a_tuple_handler_containing_a_broad_exception(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "app/t.py",
+        "def f():\n    try:\n        g()\n    except (ValueError, Exception):\n        pass\n",
+    )
+
+    assert Signal.CRAFT in Cartographer(tmp_path).map().module("app/t.py").signals
+
+
+def test_flags_a_qualified_broad_exception(tmp_path: Path) -> None:
+    write(
+        tmp_path,
+        "app/q.py",
+        "import builtins\n\n\ndef f():\n"
+        "    try:\n        g()\n    except builtins.Exception:\n        pass\n",
+    )
+
+    assert Signal.CRAFT in Cartographer(tmp_path).map().module("app/q.py").signals
+
+
+def test_a_raise_inside_a_nested_function_does_not_count_as_re_raising(tmp_path: Path) -> None:
+    """The handler still swallows. The nested function may never be called."""
+    write(
+        tmp_path,
+        "app/n.py",
+        "def f():\n    try:\n        g()\n    except Exception:\n"
+        "        def helper():\n            raise ValueError()\n        return []\n",
+    )
+
+    assert Signal.CRAFT in Cartographer(tmp_path).map().module("app/n.py").signals
+
+
+def test_a_raise_in_a_nested_handler_does_not_count_as_re_raising(tmp_path: Path) -> None:
+    """Re-raising a different, narrower error from cleanup still loses the
+    original failure."""
+    write(
+        tmp_path,
+        "app/i.py",
+        "def f():\n    try:\n        g()\n    except Exception:\n"
+        "        try:\n            cleanup()\n        except OSError:\n            raise\n"
+        "        return []\n",
+    )
+
+    assert Signal.CRAFT in Cartographer(tmp_path).map().module("app/i.py").signals
