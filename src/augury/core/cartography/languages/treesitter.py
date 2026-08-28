@@ -69,13 +69,19 @@ class TreeSitterAdapter(LanguageAdapter):
 
         imports = self._imports(tree.root_node)
         signals: set[Signal] = set()
+        unmatched: set[str] = set()
         for name in imports:
-            signals |= self._signals_for(name)
+            matched = self._signals_for(name)
+            if matched:
+                signals |= matched
+            else:
+                unmatched.add(name)
 
         return ParsedModule(
             loc=sum(1 for line in source.splitlines() if line.strip()),
             imports=frozenset(imports),
             signals=frozenset(signals),
+            unmatched_imports=frozenset(unmatched),
         )
 
     # -- extraction --------------------------------------------------------
