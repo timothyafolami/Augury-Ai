@@ -105,3 +105,16 @@ def test_augury_can_map_itself(tmp_path: Path) -> None:
     mapper = repo.module("src/augury/core/cartography/mapper.py")
     assert "src/augury/core/cartography/model.py" in mapper.imports
     assert repo.module("src/augury/core/cartography/model.py").fan_in >= 2
+
+
+def test_a_package_wins_a_name_collision_with_a_module(tmp_path: Path) -> None:
+    """`pkg.py` and `pkg/__init__.py` can coexist. Whichever loses the name
+    becomes unreachable as an import target and keeps fan_in=0 forever, so the
+    winner is chosen deterministically rather than by iteration order."""
+    write(tmp_path, "pkg.py")
+    write(tmp_path, "pkg/__init__.py")
+    write(tmp_path, "user.py", "import pkg\n")
+
+    repo = Cartographer(tmp_path).map()
+
+    assert repo.module("user.py").imports == frozenset({"pkg/__init__.py"})
