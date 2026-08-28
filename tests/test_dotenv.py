@@ -11,9 +11,7 @@ import pytest
 from augury.core.settings import load_settings
 
 
-def test_reads_a_key_from_a_dotenv_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_reads_a_key_from_a_dotenv_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / ".env").write_text("GROQ_API_KEY=gsk-from-file\n")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.chdir(tmp_path)
