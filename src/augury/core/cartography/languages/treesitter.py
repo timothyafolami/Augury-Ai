@@ -132,7 +132,13 @@ class TreeSitterAdapter(LanguageAdapter):
 
 
 def _unquote(text: str) -> str:
-    return text.strip().strip("\"'<>`").strip()
+    """Strip the syntax around a name, and normalise Node's `node:` prefix.
+
+    `node:http` and `http` are the same module; modern Node prefers the
+    prefixed form, so not normalising silently zeroes the signal.
+    """
+    name = text.strip().strip("\"'<>`").strip()
+    return name.removeprefix("node:")
 
 
 def _is_leading_segment(prefix: str, name: str) -> bool:
