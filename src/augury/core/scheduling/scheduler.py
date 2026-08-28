@@ -3,7 +3,8 @@
 A repository does not fit in a context window. The naive answers are to read
 everything, which is unaffordable, or to read the first N files, which is
 arbitrary. This picks by expected yield per dollar, learns from what previous
-reads found, and records what it chose to skip so coverage is never overstated.
+reads found, and reports every file it did not read together with the reason,
+because coverage overstated by silence is worse than no coverage number.
 """
 
 from __future__ import annotations
@@ -17,20 +18,28 @@ from augury.core.cartography import ModuleNode, RepoMap, Signal
 ENTRYPOINT_WEIGHT = 2.0
 CHURN_WEIGHT = 0.1
 NEIGHBOUR_WEIGHT = 0.5
+MICRO_USD = 1_000_000
 
 
 class Budget(BaseModel):
-    """Spend ceiling for one review."""
+    """Spend ceiling for one review, and what a read is expected to cost.
+
+    The rate exists so the ceiling can be enforced *before* a module is issued.
+    A limit checked only after the money is gone is not a limit.
+    """
 
     usd: float = Field(default=5.0, gt=0)
+    usd_per_1k_loc: float = Field(default=0.02, gt=0)
 
 
 class Coverage(BaseModel):
-    """What was read, what was not, and why. Reported, never implied."""
+    """What was read, what was not and why, and why the review ended."""
 
     analysed: list[str] = Field(default_factory=list)
-    skipped: list[str] = Field(default_factory=list)
-    reason: str = ""
+    skipped: dict[str, str] = Field(
+        default_factory=dict, description="Unread path to the reason it was not read"
+    )
+    stopped_because: str = ""
 
 
 class Scheduler:
@@ -45,40 +54,60 @@ class Scheduler:
     def __init__(self, repo: RepoMap, budget: Budget | None = None) -> None:
         self._repo = repo
         self._budget = budget or Budget()
-        self._spent = 0.0
+        # Money is counted in integers. Ten one-cent reads sum to less than a
+        # dime in binary floating point, which buys an eleventh read.
+        self._spent_micros = 0
+        self._budget_micros = round(self._budget.usd * MICRO_USD)
         self._seen: set[str] = set()
         self._suspect: dict[str, int] = {}
         self.coverage = Coverage()
 
     def next(self) -> ModuleNode | None:
         """The next module worth reading, or None when the review is over."""
-        candidates = [
-            m for m in self._repo.modules if m.path not in self._seen and self._is_worth_reading(m)
-        ]
+        candidates = [m for m in self._unread() if self._is_worth_reading(m)]
+
         if not candidates:
-            self._close("nothing left worth reading")
-            return None
+            return self._close("nothing left worth reading")
 
-        if self._spent >= self._budget.usd:
-            self._close("budget exhausted", remaining=candidates)
-            return None
+        affordable = [m for m in candidates if self._fits(m)]
+        if not affordable:
+            reason = (
+                "budget exhausted"
+                if self._spent_micros >= self._budget_micros
+                else "nothing left fits the remaining budget"
+            )
+            return self._close(reason)
 
-        return max(candidates, key=lambda m: (self._value(m), m.path))
+        return max(affordable, key=lambda m: (self._value(m), m.path))
 
     def record(self, module: ModuleNode, *, findings: int, spent_usd: float) -> None:
-        """Report the outcome of reading a module, which steers what comes next."""
+        """Report the outcome of reading a module, which steers what comes next.
+
+        Idempotent per module: a caller that records twice does not pay twice.
+        """
+        if module.path in self._seen:
+            return
         self._seen.add(module.path)
-        self._spent += spent_usd
+        self._spent_micros += round(spent_usd * MICRO_USD)
         self.coverage.analysed.append(module.path)
         if findings > 0:
             self._suspect[module.path] = findings
 
-    # -- scoring -----------------------------------------------------------
+    # -- selection ---------------------------------------------------------
+
+    def _unread(self) -> list[ModuleNode]:
+        return [m for m in self._repo.modules if m.path not in self._seen]
 
     @staticmethod
     def _is_worth_reading(module: ModuleNode) -> bool:
         """No signal means no specialist has anything to say about it."""
         return bool(module.signals)
+
+    def _fits(self, module: ModuleNode) -> bool:
+        return self._spent_micros + self._estimate_micros(module) <= self._budget_micros
+
+    def _estimate_micros(self, module: ModuleNode) -> int:
+        return round(module.loc / 1000 * self._budget.usd_per_1k_loc * MICRO_USD)
 
     def _value(self, module: ModuleNode) -> float:
         blast_radius = 1.0 + module.fan_in
@@ -92,6 +121,16 @@ class Scheduler:
 
         return blast_radius * breadth * recency * entrypoint * neighbour / cost
 
-    def _close(self, reason: str, remaining: list[ModuleNode] | None = None) -> None:
-        self.coverage.reason = reason
-        self.coverage.skipped = sorted(m.path for m in remaining or [])
+    # -- reporting ---------------------------------------------------------
+
+    def _close(self, reason: str) -> None:
+        """Record every file left unread, with why, before ending the review."""
+        self.coverage.stopped_because = reason
+        self.coverage.skipped = {
+            **{path: "unparsed" for path in self._repo.unparsed},
+            **{
+                module.path: ("no signal" if not self._is_worth_reading(module) else "budget")
+                for module in self._unread()
+            },
+        }
+        return None
