@@ -3,6 +3,7 @@
 
 install:
 	uv sync --frozen --all-extras
+	git config core.hooksPath .githooks
 
 check: lint types test
 
