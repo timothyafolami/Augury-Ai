@@ -103,6 +103,7 @@ def build_model(spec: ModelSpec, *, api_key: str) -> ChatModel:
                 model=spec.model,
                 api_key=api_key,
                 temperature=spec.temperature,
+                max_tokens=spec.max_tokens,
                 model_info=MODEL_CAPABILITIES,
                 base_url=base_url,
             )
@@ -111,6 +112,7 @@ def build_model(spec: ModelSpec, *, api_key: str) -> ChatModel:
                 model=spec.model,
                 api_key=api_key,
                 temperature=spec.temperature,
+                max_tokens=spec.max_tokens,
                 model_info=MODEL_CAPABILITIES,
             ),
         )
@@ -123,6 +125,7 @@ def build_model(spec: ModelSpec, *, api_key: str) -> ChatModel:
                 model=spec.model,
                 api_key=api_key,
                 temperature=spec.temperature,
+                max_tokens=spec.max_tokens,
                 model_info=MODEL_CAPABILITIES,
             ),
         )
