@@ -72,6 +72,6 @@ class ModelSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    provider: Literal["anthropic", "openai"]
+    provider: Literal["anthropic", "openai", "groq"]
     model: str
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
