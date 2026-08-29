@@ -8,8 +8,13 @@
       "id": "B01-1",
       "lab_topic": "03-data/01-isolation-levels",
       "defect": "debit() reads the wallet, checks the balance, then writes the difference, with no row lock and no atomic update. Two concurrent debits both pass the check and the second overwrites the first.",
-      "locations": ["app/services/wallet.py"],
-      "symbols": ["debit", "balance"],
+      "locations": [
+        "app/services/wallet.py"
+      ],
+      "symbols": [
+        "debit",
+        "balance"
+      ],
       "verification": "differential",
       "expected_metric": "final_balance",
       "notes": "The canonical lost update. Rare in staging at low concurrency, constant in production."
@@ -18,8 +23,15 @@
       "id": "B01-2",
       "lab_topic": "03-data/06-finding-n-plus-1",
       "defect": "list_orders serializes each order in a loop and serialize_order issues a query per order, so query count scales with the result set.",
-      "locations": ["app/api/orders.py", "app/serializers.py"],
-      "symbols": ["serialize_order", "list_orders", "n+1"],
+      "locations": [
+        "app/api/orders.py",
+        "app/serializers.py"
+      ],
+      "symbols": [
+        "serialize_order",
+        "list_orders",
+        "n+1"
+      ],
       "verification": "differential",
       "expected_metric": "queries_per_request",
       "notes": "The loop and the query are in different files, which is why reading either one alone shows nothing wrong."
@@ -28,8 +40,14 @@
       "id": "B01-3",
       "lab_topic": "05-failure/03-retries-that-dont-become-the-outage",
       "defect": "charge() retries three times with a fixed half-second delay, no jitter and no budget, so a gateway blip is amplified threefold at the moment capacity is lowest.",
-      "locations": ["app/clients/payments.py"],
-      "symbols": ["charge", "MAX_ATTEMPTS", "sleep"],
+      "locations": [
+        "app/clients/payments.py"
+      ],
+      "symbols": [
+        "charge",
+        "MAX_ATTEMPTS",
+        "sleep"
+      ],
       "verification": "load",
       "expected_metric": "retry_amplification"
     },
@@ -37,8 +55,13 @@
       "id": "B01-4",
       "lab_topic": "08-craft/03-errors-as-interface",
       "defect": "list_for_customer catches every exception and returns an empty list, so a broken database becomes a fast, successful, empty response that pages nobody.",
-      "locations": ["app/repositories/orders.py"],
-      "symbols": ["list_for_customer", "except"],
+      "locations": [
+        "app/repositories/orders.py"
+      ],
+      "symbols": [
+        "list_for_customer",
+        "except"
+      ],
       "verification": "probe",
       "expected_metric": "http_status"
     },
@@ -46,8 +69,14 @@
       "id": "B01-5",
       "lab_topic": "02-network/03-timeouts-as-a-first-principle",
       "defect": "shipping.quote() creates an httpx client with no timeout, so one slow provider pins a worker indefinitely. The payments client next door sets one, which makes the omission read as intentional.",
-      "locations": ["app/clients/shipping.py"],
-      "symbols": ["quote", "AsyncClient", "timeout"],
+      "locations": [
+        "app/clients/shipping.py"
+      ],
+      "symbols": [
+        "quote",
+        "AsyncClient",
+        "timeout"
+      ],
       "verification": "load",
       "expected_metric": "worker_saturation"
     }
