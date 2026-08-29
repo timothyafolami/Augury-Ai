@@ -11,10 +11,16 @@ The last line printed is the measurement, as an HTTP status code.
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "repo"))
+# The repository under measurement. Overridable so the same experiment can be
+# run against a remediated copy: an experiment that reports the same number
+# either way is not measuring the defect, and tests/test_experiments_
+# discriminate.py proves each one does by pointing this at the fixed version.
+REPO = Path(os.environ.get("AUGURY_CASE_REPO", Path(__file__).resolve().parent.parent / "repo"))
+sys.path.insert(0, str(REPO))
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
