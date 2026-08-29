@@ -29,10 +29,12 @@ from augury.core.layers import Layer
 from augury.core.metrics import describe, vocabulary
 from augury.core.priority import rank
 from augury.core.reachability import cap_severity
+from augury.core.reference import Registry, requirements_of
 from augury.core.repetition import collapse
 from augury.core.scheduling import Budget, Scheduler
 from augury.core.schema import read_migrations
 from augury.core.trajectory import Trajectory
+from augury.core.versions import describe_versions
 from augury.evaluation.reconcile import reconcile
 from augury.prompts import render
 
@@ -63,8 +65,16 @@ class AuguryReviewer:
         # One triage call plus a specialist call each. Declared so the budget
         # is a ceiling on what this arm actually spends, not on a fiction.
         self._budget = budget or Budget(calls_per_module=TYPICAL_CALLS_PER_MODULE)
+        # Resolved once per review in `review`, because the registry is asked
+        # over the network and a specialist call must not wait on it.
+        self._pinned: dict[str, str] = {}
+        self._registry = Registry()
 
     async def review(self, repo: RepoMap, root: Path) -> Report:
+        # What this repository declares it depends on. Read once; the registry
+        # answers are cached per package for the life of the review.
+        self._pinned = requirements_of(root)
+
         started = time.monotonic()
         context = _render_context(repo.context)
         opening = self._model.usage
@@ -185,6 +195,11 @@ class AuguryReviewer:
             # brief names the concern; without this the specialist supplies the
             # runtime-specific half itself, differently each time.
             language_brief=brief_for(Language(language)),
+            # The installed versions, so a claim about a library's defaults is
+            # grounded in what is installed rather than in a training cutoff.
+            versions=describe_versions(
+                set(module.external), pinned=self._pinned, registry=self._registry
+            ),
             fan_in=module.fan_in,
             source=source,
             context=context,
