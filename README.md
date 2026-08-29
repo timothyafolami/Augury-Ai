@@ -83,8 +83,18 @@ The full architecture, written from the code and one recorded run, is in
 
 ## Results
 
-Three cases, ten seeded defects, five seeds per arm, every prediction put to
+Three cases, ten seeded defects, five runs per arm, every prediction put to
 the case's own experiments. `openai/gpt-oss-120b` on Groq at temperature 0.
+
+**What "five seeds" means here, precisely:** the seed is a label on a repeat.
+It does not vary the prompt, the temperature, the case, or the order modules
+are read in -- every run sends byte-identical prompts, which
+[`tests/test_what_a_seed_varies.py`](tests/test_what_a_seed_varies.py) pins.
+So the spread between seeds measures **how much the provider varies when asked
+the same question five times at temperature 0**. It is not a sample over
+anything the harness varied and must not be read as a confidence interval.
+This was discovered by recording the sweep: all five collapsed to one, because
+they were one call repeated.
 
 This is one run of `make evaluate`, the command in the reproduction guide, and
 the table it prints:
