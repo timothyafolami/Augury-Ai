@@ -53,13 +53,13 @@ def test_falsifiable_precision_is_the_share_carrying_a_prediction() -> None:
         )
     )
 
-    assert score(report).falsifiable_precision == 0.5
+    assert score(report, case="c1", arm="test").falsifiable_precision == 0.5
 
 
 def test_precision_is_undefined_rather_than_perfect_when_nothing_was_found() -> None:
     """Zero of zero is not 100%. Reporting it as 1.0 would let a reviewer that
     finds nothing top the table."""
-    assert score(Report()).falsifiable_precision is None
+    assert score(Report(), case="c1", arm="test").falsifiable_precision is None
 
 
 def test_hit_rate_counts_only_predictions_that_were_actually_tested() -> None:
@@ -73,7 +73,7 @@ def test_hit_rate_counts_only_predictions_that_were_actually_tested() -> None:
         )
     )
 
-    assert score(report).hit_rate == 0.5
+    assert score(report, case="c1", arm="test").hit_rate == 0.5
 
 
 def test_a_broken_experiment_is_excluded_from_the_hit_rate() -> None:
@@ -86,7 +86,7 @@ def test_a_broken_experiment_is_excluded_from_the_hit_rate() -> None:
         )
     )
 
-    result = score(report)
+    result = score(report, case="c1", arm="test")
 
     assert result.hit_rate == 1.0
     assert result.broken == 1
@@ -96,7 +96,7 @@ def test_counts_are_reported_alongside_every_rate() -> None:
     """A rate without its denominator hides a sample of one."""
     report = Report(findings=(finding(falsifiable=True, verdict=Outcome.HIT),))
 
-    result = score(report)
+    result = score(report, case="c1", arm="test")
 
     assert result.total_findings == 1
     assert result.falsifiable == 1
@@ -111,14 +111,14 @@ def test_dropped_findings_are_counted_not_hidden() -> None:
         dropped=(Dropped(symbol="fetch", path="a.py", reason="no threshold derivable"),),
     )
 
-    result = score(report)
+    result = score(report, case="c1", arm="test")
 
     assert result.dropped == 1
     assert result.falsifiable_precision == 0.5, "dropped stays in the denominator"
 
 
 def test_scoring_never_divides_by_zero() -> None:
-    result = score(Report())
+    result = score(Report(), case="c1", arm="test")
 
     assert result.hit_rate is None
     assert result.falsifiable_precision is None
