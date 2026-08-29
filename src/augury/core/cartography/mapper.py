@@ -179,6 +179,11 @@ class Cartographer:
                         for name in parsed.unmatched_imports
                         if self._resolve(name, index) is None
                     ),
+                    # Third-party only: a name that resolves to a module in
+                    # this repository is not a dependency to look up.
+                    external=frozenset(
+                        name for name in parsed.third_party if self._resolve(name, index) is None
+                    ),
                     churn=churn.get(rel, 0),
                 )
             )
