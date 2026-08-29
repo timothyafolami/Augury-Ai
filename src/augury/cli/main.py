@@ -85,7 +85,11 @@ def review(
 
 @app.command()
 def evaluate(
-    seeds: int = typer.Option(3, min=1, help="How many times to run each arm"),
+    seeds: int = typer.Option(
+        3,
+        min=1,
+        help="How many times to repeat each arm. Identical input; only the provider varies",
+    ),
     prove: bool = typer.Option(False, help="Run the case's experiments against the claims"),
     case: str = typer.Option("", help="Restrict to one case id"),
 ) -> None:
