@@ -315,7 +315,7 @@ version of every file it breaks, and every experiment is run against both.
 | `final_balance` | 90.0 | 0.0 |
 | `http_status` | 200 | 500 |
 | `queries_per_request` | 51 | 2 |
-| `retry_amplification` | 1.9 | 0.75 |
+| `retry_amplification` | 3.0 | 1.15 |
 | `worker_saturation` | 1.0 | 0.0 |
 
 Three of those columns used to be identical.
