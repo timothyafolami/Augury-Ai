@@ -370,9 +370,15 @@ def _fail(message: str) -> NoReturn:
     raise typer.Exit(code=1)
 
 
-def _print_findings(report: Report) -> None:
-    table = Table("severity", "location", "claim", "verdict")
-    for finding in report.findings:
+# A review of a real repository returns more findings than anyone reads in one
+# sitting. They arrive ordered by evidence, so showing the head of the list is
+# showing the part worth reading first; the rest is in the trajectory.
+SHOWN_BY_DEFAULT = 25
+
+
+def _print_findings(report: Report, *, limit: int = SHOWN_BY_DEFAULT) -> None:
+    table = Table("#", "severity", "location", "claim", "verdict")
+    for position, finding in enumerate(report.findings[:limit], start=1):
         prediction = finding.prediction
         claim = (
             f"{prediction.metric} {prediction.comparator.value} "
@@ -381,6 +387,7 @@ def _print_findings(report: Report) -> None:
             else "[dim]no prediction[/dim]"
         )
         table.add_row(
+            str(position),
             finding.severity.value,
             f"{finding.path}:{finding.line}",
             claim,
@@ -388,8 +395,15 @@ def _print_findings(report: Report) -> None:
         )
     console.print(table)
 
+    hidden = len(report.findings) - min(limit, len(report.findings))
+    if hidden > 0:
+        console.print(
+            f"[dim]{hidden} further findings, ranked below these. "
+            f"--trajectory writes every one.[/dim]"
+        )
+
     for dropped in report.dropped:
-        console.print(f"[dim]dropped {dropped.symbol}: {dropped.reason}[/dim]")
+        console.print(f"[dim]withdrawn {dropped.symbol}: {dropped.reason}[/dim]", markup=False)
 
     console.print(f"\n{len(report.findings)} findings, ${report.usd:.5f}, {report.seconds:.1f}s")
 
