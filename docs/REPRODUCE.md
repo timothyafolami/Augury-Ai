@@ -42,7 +42,7 @@ make check
 ```
 
 Runs ruff, ruff format, mypy strict over `src` and `tests`, and the full test
-suite. Expect **495 passed, 3 skipped**, in about a minute. Nothing here
+suite. Expect **519 passed, 3 skipped**, in about a minute. Nothing here
 reaches the network.
 
 This is the same command CI runs and the same command the pre-commit hook runs.
@@ -162,6 +162,13 @@ README were measured while recording.
 **A difference smaller than the spread is reported as `inconclusive`.** That is
 not editorial caution, it is what `SweepResult.compare` returns; there is no
 path by which an overlapping result can be printed as a win.
+
+**And a difference between repeats that were not independent is also reported
+as `inconclusive`,** which matters precisely here. Replay collapses the five
+repeats to one recording, so both ranges are zero width and do *not* overlap --
+and an earlier comparator called that a win for the pipeline. The permutation
+p-value is withheld for the same reason: on replayed data it computes to
+0.0079, a confident finding drawn from one observation per arm.
 
 ---
 
