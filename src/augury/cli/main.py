@@ -79,6 +79,7 @@ def cases() -> None:
 def survey(
     path: str = typer.Option(..., help="Repository to survey"),
     scope: str = typer.Option("", help="Comma-separated directories to limit the map to"),
+    include_tests: bool = typer.Option(False, help="Count the test suite as part of the service"),
 ) -> None:
     """Read a repository's deployment and structure. Free, and needs no key.
 
@@ -96,7 +97,9 @@ def survey(
     entrypoints = tuple({e for service in found.services for e in service.entrypoints})
 
     try:
-        repo = Cartographer(root, scope=limits, entrypoints=entrypoints).map()
+        repo = Cartographer(
+            root, scope=limits, entrypoints=entrypoints, include_tests=include_tests
+        ).map()
     except ValueError as exc:
         _fail(str(exc))
 
@@ -198,6 +201,9 @@ def report(
         True,
         help="Reuse findings for files whose content and prompt are unchanged",
     ),
+    include_tests: bool = typer.Option(
+        False, help="Review the test suite too. Its defects are real and they are different"
+    ),
     provider: str = typer.Option("", help="groq | openai | anthropic | deepseek"),
     model: str = typer.Option("", help="Model id, e.g. deepseek-v4-flash"),
     api_key: str = typer.Option("", help="Key for this run, instead of the environment"),
@@ -231,7 +237,9 @@ def report(
 
     banner.stage(console, 2, 5, "Cartographer", "six languages, imports, request path")
     try:
-        repo = Cartographer(root, scope=limits, entrypoints=entrypoints).map()
+        repo = Cartographer(
+            root, scope=limits, entrypoints=entrypoints, include_tests=include_tests
+        ).map()
     except ValueError as exc:
         _fail(str(exc))
     reached = len(repo.modules) - len(repo.unreachable)
@@ -334,6 +342,9 @@ def review(
     cache: bool = typer.Option(
         True,
         help="Reuse findings for files whose content and prompt are unchanged",
+    ),
+    include_tests: bool = typer.Option(
+        False, help="Review the test suite too. Its defects are real and they are different"
     ),
     provider: str = typer.Option("", help="groq | openai | anthropic | deepseek"),
     model: str = typer.Option("", help="Model id, e.g. deepseek-v4-flash"),
@@ -448,6 +459,7 @@ def _review_repository(
     provider: str = "",
     model: str = "",
     api_key: str = "",
+    include_tests: bool = False,
 ) -> None:
     """Review a repository that ships no answer key.
 
@@ -463,7 +475,9 @@ def _review_repository(
     limits = tuple(part.strip() for part in scope.split(",") if part.strip())
     entrypoints = tuple({e for service in found.services for e in service.entrypoints})
     try:
-        repo = Cartographer(root, scope=limits, entrypoints=entrypoints).map()
+        repo = Cartographer(
+            root, scope=limits, entrypoints=entrypoints, include_tests=include_tests
+        ).map()
     except ValueError as exc:
         _fail(str(exc))
 
