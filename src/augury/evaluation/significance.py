@@ -119,4 +119,9 @@ def verdict(probability: float | None) -> str:
         return "significant"
     if probability < 0.15:
         return "suggestive, not significant"
-    return "no difference"
+    # Never "no difference". This project's whole argument is that the
+    # measuring apparatus is the thing to distrust, and an apparatus that
+    # turns absence of evidence into evidence of absence is the most
+    # attackable sentence in it. Ten seeded defects cannot resolve a small
+    # difference in either direction.
+    return "no detectable difference"
