@@ -36,12 +36,18 @@ class StubClient:
     completion_tokens: int = 500
     calls: int = 0
     finish_reason: str = "stop"
+    raise_first: Exception | None = None
     last_kwargs: dict[str, Any] | None = None
     every: list[dict[str, Any]] = field(default_factory=list)
     prompts: list[str] = field(default_factory=list)
 
     async def create(self, messages: Any, **kwargs: Any) -> CreateResult:
         self.calls += 1
+        if self.raise_first is not None:
+            # Raised before anything is billed, which is the path that exposed
+            # a call reporting the previous call's cost.
+            failure, self.raise_first = self.raise_first, None
+            raise failure
         self.last_kwargs = kwargs
         self.every.append(kwargs)
         self.prompts.append(str(getattr(messages[0], "content", messages)))
@@ -297,3 +303,76 @@ async def test_a_provider_without_strict_decoding_gets_the_schema_in_the_prompt(
     asked = model._client.prompts[0]  # type: ignore[attr-defined]
     assert "review this" in asked
     assert "confidence" in asked, "the field names have to reach the model somehow"
+
+
+async def test_a_call_that_fails_before_billing_is_not_charged_the_last_one_s_cost() -> None:
+    """`_last_attempt_cost` lives on the adapter, and one adapter serves a review.
+
+    When `create` raises before anything is recorded -- a reset connection, a
+    5xx, a 400 -- the retry loop still added `_last_attempt_cost`, which held
+    whatever the previous *successful* call was billed. A cheap call following
+    an expensive one reported the expensive one's price on top of its own.
+
+    This is the same class of mis-attribution `_record`'s docstring warns
+    about, reintroduced through a second piece of shared mutable state.
+    """
+    expensive = adapter(
+        '{"claim": "c", "confidence": 0.1}', prompt_tokens=100_000, completion_tokens=16_000
+    )
+    await expensive.structured(prompt="a big one", schema=Finding)
+
+    cheap = StubClient(payload='{"claim": "c", "confidence": 0.1}')
+    cheap.prompt_tokens = 10
+    cheap.completion_tokens = 10
+    thrifty = ProviderAdapter(
+        cheap,
+        model_id="stub/model-1",
+        pricing=Pricing(usd_per_1m_input=1.0, usd_per_1m_output=3.0),
+        provider="groq",
+    )
+    # Borrow the expensive adapter's leftover, the way one adapter would.
+    thrifty._last_attempt_cost = expensive._last_attempt_cost
+    cheap.raise_first = ConnectionError("reset by peer")
+
+    completion = await thrifty.call(prompt="a small one", schema=Finding)
+
+    assert completion.usage.usd < 0.001, (
+        f"a call billed for 20 tokens reported ${completion.usage.usd:.6f}"
+    )
+
+
+def test_an_adapter_built_without_a_ceiling_uses_the_same_default_as_the_spec() -> None:
+    """Two defaults for one quantity, one of which the other forbids.
+
+    ModelSpec.max_tokens is `default=16_000, gt=0`; the adapter's was 0. With
+    0, `_more_room(0)` returns 2 -- so the remedy for running out of room asks
+    for a two-token budget, which is guaranteed to run out of room.
+    """
+    from augury.core.adapters.base import ModelSpec
+    from augury.core.adapters.provider import DEFAULT_MAX_TOKENS
+
+    declared = ModelSpec(provider="groq", model="m").max_tokens
+    assert declared == DEFAULT_MAX_TOKENS
+
+    built = ProviderAdapter(
+        StubClient(payload="{}"),
+        model_id="stub/model-1",
+        pricing=Pricing(usd_per_1m_input=1.0, usd_per_1m_output=3.0),
+    )
+
+    assert built._max_tokens == DEFAULT_MAX_TOKENS
+
+
+def test_the_raised_ceiling_never_exceeds_what_the_provider_allows() -> None:
+    """64K is DeepSeek's headroom, not everyone's.
+
+    Applied to a provider with a lower completion limit, the third attempt
+    turns a recoverable truncation into a hard 400 -- whose message will not
+    look like running out of room, so the next correction is about the wrong
+    thing entirely.
+    """
+    from augury.core.adapters.provider import most_tokens_for
+
+    assert most_tokens_for("deepseek") > most_tokens_for("groq")
+    assert most_tokens_for("anthropic") <= 64_000
+    assert most_tokens_for("something-new") <= 64_000
