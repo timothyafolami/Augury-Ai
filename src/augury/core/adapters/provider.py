@@ -19,6 +19,19 @@ __all__ = ["MODEL_CAPABILITIES", "CompletionClient", "Pricing", "ProviderAdapter
 
 T = TypeVar("T", bound=BaseModel)
 
+# A model asked for structured output occasionally returns the schema instead
+# of an instance, or JSON the provider rejects outright. Losing a whole case to
+# that would be a harness failure reported as a reviewer failure. Bounded,
+# because a model that cannot produce the schema will not start doing so.
+MAX_ATTEMPTS = 3
+
+CORRECTION = (
+    "\n\nYour previous response was rejected: {error}\n\n"
+    "Return only the JSON instance. Do not return the schema itself: no "
+    "`$defs`, no `properties`, no `required`, no `title`, no `type`. Emit only "
+    "the described fields and their values."
+)
+
 
 class CompletionClient(Protocol):
     """The only part of a provider client this adapter depends on.
@@ -45,6 +58,7 @@ class ProviderAdapter:
         self._model_id = model_id
         self._pricing = pricing
         self._usage = Usage()
+        self.retries = 0
 
     @property
     def model_id(self) -> str:
@@ -61,6 +75,23 @@ class ProviderAdapter:
         A response that does not match is raised rather than repaired: a
         half-populated finding flowing downstream is worse than a loud failure.
         """
+        last: Exception | None = None
+        attempt_prompt = prompt
+
+        for _ in range(MAX_ATTEMPTS):
+            try:
+                return await self._attempt(attempt_prompt, schema)
+            except Exception as error:  # provider rejection or invalid JSON
+                last = error
+                self.retries += 1
+                # Repeating an identical prompt to a deterministic model
+                # repeats the identical failure, so the retry has to differ.
+                attempt_prompt = prompt + CORRECTION.format(error=_summarise(error))
+
+        assert last is not None  # the loop either returned or recorded an error
+        raise last
+
+    async def _attempt(self, prompt: str, schema: type[T]) -> T:
         response = await self._client.create(
             messages=[UserMessage(content=prompt, source="augury")],
             json_output=schema,
@@ -145,3 +176,8 @@ MODEL_CAPABILITIES: ModelInfo = {
     "family": ModelFamily.UNKNOWN,
     "multiple_system_messages": True,
 }
+
+
+def _summarise(error: Exception) -> str:
+    """Enough of the provider's complaint to be actionable, not the whole dump."""
+    return str(error)[:400]
