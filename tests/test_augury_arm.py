@@ -58,6 +58,7 @@ ONE_FINDING: dict[str, Any] = {
                 "metric": "http_req_duration_p99",
                 "comparator": "at_least",
                 "value": 1000.0,
+                "upper": None,
                 "unit": "ms",
                 "condition": "rate=250rps",
             },
