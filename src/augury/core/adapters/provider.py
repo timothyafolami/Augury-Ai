@@ -7,15 +7,27 @@ of the system sees only `ChatModel`.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from autogen_core.models import CreateResult, ModelFamily, ModelInfo, UserMessage
 from pydantic import BaseModel
 
 from augury.core.adapters.base import ChatModel, Completion, ModelSpec, Usage
+from augury.core.adapters.cassette import CassetteMiss
 from augury.core.adapters.pricing import Pricing, pricing_for
 
-__all__ = ["MODEL_CAPABILITIES", "CompletionClient", "Pricing", "ProviderAdapter", "build_model"]
+if TYPE_CHECKING:  # Settings imports this module's siblings; keep it one-way.
+    from augury.core.settings import Settings
+
+__all__ = [
+    "MODEL_CAPABILITIES",
+    "CompletionClient",
+    "Pricing",
+    "ProviderAdapter",
+    "SealedModel",
+    "build_model",
+    "model_from",
+]
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -205,3 +217,70 @@ MODEL_CAPABILITIES: ModelInfo = {
 def _summarise(error: Exception) -> str:
     """Enough of the provider's complaint to be actionable, not the whole dump."""
     return str(error)[:400]
+
+
+def model_from(settings: Settings) -> ChatModel:
+    """The model every entrypoint should build. Takes Settings, not a spec.
+
+    `build_model` needs a spec and a key, so a caller that forgets replay mode
+    gets a live client and quietly spends money. That failure has already
+    happened in this project once, with experiment conditions: three call
+    sites, one of them updated, a green suite, and a published number produced
+    by a command nobody had actually run.
+
+    The fix is a signature that cannot be called wrongly. Everything that
+    decides between live, recording and replay is decided here, once, and
+    `tests/test_model_from_settings.py` fails if anything reaches past it.
+    """
+    from augury.core.adapters.cassette import CassetteModel
+
+    if not (settings.replay_only or settings.record):
+        return build_model(settings.spec, api_key=settings.api_key)
+
+    directory = settings.cassette_dir
+    if directory is None:  # pragma: no cover - load_settings always resolves one
+        raise ValueError("a cassette directory is required to record or replay")
+
+    # Replay never reaches a provider, so it must not need a client to exist:
+    # the OpenAI client refuses to construct without a key, which is precisely
+    # the situation a judge cloning this repository is in.
+    inner: ChatModel = (
+        SealedModel(settings.spec.model)
+        if settings.replay_only
+        else build_model(settings.spec, api_key=settings.api_key)
+    )
+    return CassetteModel(inner, directory, replay_only=settings.replay_only)
+
+
+class SealedModel:
+    """A model that carries an identity and refuses to be called.
+
+    Used as the inner model in replay, where every answer comes from a
+    recording. If a call ever reaches it, a cassette is missing and the run
+    must stop saying so rather than fall through to a provider.
+    """
+
+    def __init__(self, model_id: str) -> None:
+        self._model_id = model_id
+        self._usage = Usage()
+
+    @property
+    def model_id(self) -> str:
+        return self._model_id
+
+    @property
+    def usage(self) -> Usage:
+        return self._usage
+
+    async def structured(self, *, prompt: str, schema: type[T]) -> T:
+        raise CassetteMiss(self._refusal())
+
+    async def call(self, *, prompt: str, schema: type[T]) -> Completion:
+        raise CassetteMiss(self._refusal())
+
+    def _refusal(self) -> str:
+        return (
+            f"replay is on and no recording covers this call to {self._model_id}. "
+            "The cassette set is incomplete for this run. Re-record with "
+            "AUGURY_RECORD=1 and a provider key, or check AUGURY_CASSETTES."
+        )
