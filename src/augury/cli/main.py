@@ -22,10 +22,11 @@ from rich.table import Table
 from augury.agents.augury import AuguryReviewer
 from augury.agents.baseline import BaselineReviewer
 from augury.cli import banner
+from augury.core.adapters.base import ChatModel
 from augury.core.adapters.provider import model_from
 from augury.core.cartography import Cartographer
 from augury.core.cartography.languages import EXTENSIONS
-from augury.core.findings import Report
+from augury.core.findings import Finding, Measurement, Report
 from augury.core.journal import Journal, Run
 from augury.core.memo import Memo
 from augury.core.reference import Registry, requirements_of
@@ -201,6 +202,14 @@ def report(
         True,
         help="Reuse findings for files whose content and prompt are unchanged",
     ),
+    prove: int = typer.Option(
+        0,
+        min=0,
+        help=(
+            "Settle this many top-ranked findings by writing an experiment and "
+            "running it. This executes generated code against your repository"
+        ),
+    ),
     include_tests: bool = typer.Option(
         False, help="Review the test suite too. Its defects are real and they are different"
     ),
@@ -350,7 +359,15 @@ def review(
     model: str = typer.Option("", help="Model id, e.g. deepseek-v4-flash"),
     api_key: str = typer.Option("", help="Key for this run, instead of the environment"),
     arm: str = typer.Option("augury", help="baseline or augury"),
-    prove: bool = typer.Option(False, help="Run the case's experiments against the claims"),
+    prove: int = typer.Option(
+        0,
+        min=0,
+        help=(
+            "Settle this many findings by experiment. On a case that runs the "
+            "experiments it ships; on a repository it writes them, which "
+            "executes generated code against your files"
+        ),
+    ),
     trajectory: str = typer.Option("", help="Write every step to this JSONL file"),
 ) -> None:
     """Review a case, or any repository, and print what it found."""
@@ -435,6 +452,63 @@ def history(
         mark = "[yellow]![/yellow]" if entry.interrupted else "[green]ok[/green]"
         console.print(f" {mark} {entry.summary()}", markup=True)
         console.print(f"    [dim]{entry.model} · scope={entry.scope or 'whole repo'}[/dim]")
+
+
+async def _settle(report_in: Report, *, root: Path, model: ChatModel, how_many: int) -> Report:
+    """Write and run an experiment for the top findings, and record what it measured.
+
+    Only findings carrying a prediction, and only the top few: findings arrive
+    ranked, and proving all of them means one generated script each.
+
+    A failure to settle one finding must not cost the review. The experiment is
+    the least reliable thing here -- it is generated, then executed -- so
+    anything it raises becomes Broken for that finding and nothing else.
+    """
+    from augury.core.proving import prove_finding
+    from augury.core.proving.generator import CannotMeasure, Generator
+
+    generate = Generator(model)
+    settled: list[Finding] = []
+    remaining = how_many
+
+    console.print(
+        f"\n[bold]Proving[/bold] up to {how_many} findings. "
+        "[dim]This writes an experiment per finding and runs it against your "
+        "repository; each script is saved so you can read what executed.[/dim]"
+    )
+
+    for finding in report_in.findings:
+        if remaining <= 0 or finding.prediction is None:
+            settled.append(finding)
+            continue
+        remaining -= 1
+        try:
+            proof = await prove_finding(finding, root=root, generate=generate)
+        except CannotMeasure as refusal:
+            console.print(f"  [dim]declined {finding.symbol}: {refusal}[/dim]", markup=False)
+            settled.append(finding)
+            continue
+        except Exception as error:
+            console.print(f"  [dim]could not settle {finding.symbol}: {error}[/dim]", markup=False)
+            settled.append(finding)
+            continue
+
+        if proof is None:
+            settled.append(finding)
+            continue
+
+        measured = Measurement(
+            value=proof.measured,
+            experiment=proof.script_path,
+            detail=proof.detail,
+        )
+        settled.append(finding.model_copy(update={"measurement": measured}))
+        shown = "no number" if proof.measured is None else f"{proof.measured:g}"
+        console.print(
+            f"  {finding.symbol}: measured {shown} -> {proof.outcome.value}", markup=False
+        )
+
+    return report_in.model_copy(update={"findings": tuple(settled)})
 
 
 def _memo_for(root: Path, *, enabled: bool) -> Memo:
