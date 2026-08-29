@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import shutil
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -113,7 +114,9 @@ async def _run(
         # a local run stays in the scratch directory beside the script.
         cwd=str(root if where.kind == "compose" else script.parent),
         env={
-            "PATH": "/usr/bin:/bin",
+            # Bare for the experiment; extended only by what is needed to
+            # launch a container, and only when one is being launched.
+            "PATH": where.path(docker_at=_docker_binary()),
             "PYTHONPATH": str(root),
             "AUGURY_CASE_REPO": str(root),
             "HOME": str(Path.home()),
@@ -129,6 +132,12 @@ async def _run(
         await process.wait()
         return None, "", ""
     return process.returncode, out.decode(errors="replace"), err.decode(errors="replace")
+
+
+def _docker_binary() -> Path | None:
+    """Where docker is, if it is anywhere."""
+    found = shutil.which("docker")
+    return Path(found) if found else None
 
 
 def _last_number(stdout: str) -> float | None:
