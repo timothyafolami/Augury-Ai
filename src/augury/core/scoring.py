@@ -35,6 +35,12 @@ class Score(BaseModel):
     )
 
     total_findings: int
+    tested_findings: int = 0
+    """Findings that reached a measurement, before collapsing to experiments.
+
+    Kept so the table can show that N findings rested on M experiments; the
+    rate itself is over experiments.
+    """
     observations: int
     """The falsifiable-precision denominator for this run, computed once.
 
@@ -77,7 +83,6 @@ def score(
     findings = report.findings
     falsifiable = [f for f in findings if f.is_falsifiable]
     tested = [f for f in falsifiable if f.was_tested]
-    hits = [f for f in tested if f.verdict is Outcome.HIT]
     broken = [f for f in falsifiable if f.verdict is Outcome.BROKEN]
 
     # Everything the reviewer produced, including what it could not quantify.
@@ -93,6 +98,8 @@ def score(
     kept = {(f.path, f.symbol) for f in findings}
     discarded = [d for d in report.dropped if (d.path, d.symbol) not in kept]
     observations = len(findings) + len(discarded)
+    # One unit per experiment, not per finding: see _experiment_outcomes.
+    experiment_hits, runs = _experiment_outcomes(tested)
 
     return Score(
         case=case,
@@ -105,34 +112,53 @@ def score(
         total_findings=len(findings),
         observations=observations,
         falsifiable=len(falsifiable),
-        tested=len(tested),
-        experiments=_distinct_experiments(tested),
-        hits=len(hits),
+        tested=runs,
+        tested_findings=len(tested),
+        experiments=runs,
+        hits=experiment_hits,
         broken=len(broken),
         dropped=len(report.dropped),
         falsifiable_precision=_ratio(len(falsifiable), observations),
-        hit_rate=_ratio(len(hits), len(tested)),
+        hit_rate=_ratio(experiment_hits, runs),
+        # Findings over findings. `tested` is now a count of experiments, so
+        # dividing it by a count of findings would compare two different units.
         prediction_coverage=_ratio(len(tested), len(falsifiable)),
         usd=report.usd,
         seconds=report.seconds,
     )
 
 
-def _distinct_experiments(tested: list[Finding]) -> int:
-    """How many experiments actually ran.
+def _by_experiment(tested: list[Finding]) -> dict[object, list[Finding]]:
+    """Tested findings grouped by the experiment that settled them.
 
     One k6 run can answer twenty findings that share a mechanism. Counting it
     twenty times inflates the denominator that makes the hit rate credible by
     the reviewer's own verbosity.
     """
-    return len(
-        {
-            f.measurement.experiment
-            or (f.prediction.metric, f.prediction.condition, f.prediction.value)
-            for f in tested
-            if f.measurement is not None and f.prediction is not None
-        }
-    )
+    groups: dict[object, list[Finding]] = {}
+    for f in tested:
+        if f.measurement is None or f.prediction is None:
+            continue
+        key = f.measurement.experiment or (
+            f.prediction.metric,
+            f.prediction.condition,
+            f.prediction.value,
+        )
+        groups.setdefault(key, []).append(f)
+    return groups
+
+
+def _experiment_outcomes(tested: list[Finding]) -> tuple[int, int]:
+    """(hits, runs), one unit per experiment.
+
+    An experiment counts as a hit only when every claim it settled held. The
+    arm was either right about that mechanism or it was not, and scoring
+    per-finding would let an arm buy a hit by pairing a correct prediction with
+    a wrong one that the same run settles.
+    """
+    groups = _by_experiment(tested)
+    hits = sum(1 for group in groups.values() if all(f.verdict is Outcome.HIT for f in group))
+    return hits, len(groups)
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:
@@ -171,6 +197,7 @@ class ArmScore(BaseModel):
     detection_rate: float | None
 
     total_findings: int
+    tested_findings: int = 0
     falsifiable: int
     tested: int
     experiments: int
@@ -219,6 +246,7 @@ def aggregate(scores: list[Score]) -> ArmScore:
         # reward crashing.
         detection_rate=_ratio(sum(s.found for s in scores), sum(s.seeded for s in scores)),
         total_findings=sum(s.total_findings for s in scores),
+        tested_findings=sum(s.tested_findings for s in scores),
         falsifiable=falsifiable,
         tested=tested,
         experiments=sum(s.experiments for s in scores),
@@ -234,7 +262,9 @@ def aggregate(scores: list[Score]) -> ArmScore:
             if sum(s.experiments for s in scores) >= MIN_TESTED_FOR_A_RATE
             else None
         ),
-        prediction_coverage=_ratio(tested, falsifiable),
+        # Findings over findings. `tested` counts experiments now, so using it
+        # here would divide a count of runs by a count of claims.
+        prediction_coverage=_ratio(sum(s.tested_findings for s in scores), falsifiable),
         per_case_low=min(per_case) if per_case else None,
         per_case_high=max(per_case) if per_case else None,
         usd=sum(s.usd for s in scores),
