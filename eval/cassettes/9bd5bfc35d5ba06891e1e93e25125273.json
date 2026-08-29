@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "security"
+  ],
+  "reasoning": "data: review the database engine creation, session factory, and connection pooling; security: review handling of the DATABASE_URL environment variable and any exposure of credentials or connection settings."
+}
