@@ -71,3 +71,33 @@ def test_separated_ranges_that_both_have_width_still_report_a_winner() -> None:
 
 def test_overlapping_ranges_remain_inconclusive() -> None:
     assert SweepResult.compare(_result(0.700, 0.900), _result(0.600, 0.800)) == "inconclusive"
+
+
+def test_recording_collapses_repeats_exactly_as_replay_does() -> None:
+    """Recording is the other half of the same defect, and it was missed.
+
+    Under AUGURY_RECORD the first repeat calls the provider and writes a
+    cassette; repeats two through five hit that cassette. So recording is
+    non-independent for the same reason replay is, and a record run printed
+    "ranges clear: better" and "permutation p = 0.0079" while the guard --
+    keyed only on replay_only -- let it through.
+    """
+    from augury.core.adapters.base import ModelSpec
+    from augury.core.settings import Settings
+
+    for record, replay in ((True, False), (False, True), (True, True)):
+        settings = Settings(
+            spec=ModelSpec(provider="groq", model="openai/gpt-oss-120b"),
+            api_key="k",
+            replay_only=replay,
+            record=record,
+        )
+        assert not settings.repeats_are_independent, (record, replay)
+
+    live = Settings(
+        spec=ModelSpec(provider="groq", model="openai/gpt-oss-120b"),
+        api_key="k",
+        replay_only=False,
+        record=False,
+    )
+    assert live.repeats_are_independent
