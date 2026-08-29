@@ -238,6 +238,44 @@ architecture.
 
 ---
 
+## Iteration 10 — a metric measured at low coverage measured nothing
+
+**Tried.** Reporting the first hit rate, with three experiments shipped.
+
+**Evidence.** Baseline 0.000, Augury 0.750. It went into the README.
+
+**Then.** Two more experiments were added, raising prediction coverage from
+0.37 to 0.53. The same comparison, three seeds per arm:
+
+| metric | baseline | augury |
+|---|---|---|
+| seeded recall, mean | 0.867 | **1.000** |
+| seeded recall, range | 0.600 - 1.000 | 1.000 - 1.000 |
+| hit rate | 0.571 (7 tested) | 0.500 (10 tested) |
+| prediction coverage | 0.64 | 0.42 |
+| cost | $0.008 | $0.079 |
+
+**The ordering reversed.** The baseline's hit rate went from 0.000 to 0.571,
+not because it improved but because more of what it had always been claiming
+became testable. Which third of the predictions happened to have an experiment
+had decided the earlier result.
+
+**Decided.** The claim is withdrawn. Nothing was wrong with the scoring code;
+the denominator was too small to mean anything and was published anyway. The
+floor under a published rate (Iteration 9) exists because of this, and the
+README now leads with it as the project's main failure mode.
+
+**What actually separates the arms**, on this evidence: consistency. The
+baseline found 5 of 5, 5 of 5, then **3 of 5**. Augury found 5 of 5 every time.
+A reviewer that occasionally misses two fifths of what is there is materially
+worse than one that does not, and a single run would have shown neither.
+
+Hit rate remains **not distinguishable** between the arms, on seven and ten
+tested predictions. Neither denominator supports a claim, and the harness now
+declines to print one.
+
+---
+
 ## Removed
 
 Nothing yet. When something is removed, it stays listed here with what it cost
