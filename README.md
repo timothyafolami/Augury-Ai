@@ -7,17 +7,33 @@ observations: *"this may have concurrency issues"*, *"consider adding a
 timeout"*. Augury emits claims carrying a number, a unit and a condition, and
 then runs an experiment to find out whether they were right.
 
+What `augury review --case B01 --arm augury --prove` actually prints, copied
+from a run you can reproduce with no API key:
+
 ```
-FORECAST-02   app/serializers.py:11                                    high
-  Claim    queries_per_request at most 2 queries, for a 50-order listing
-  Basis    the loop is in api/orders.py, the query is here; one per row plus the list
-  Proof    ran experiments/queries_per_request.py -> measured 51           MISS
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┓
+┃ severity ┃ location                  ┃ claim                      ┃ verdict  ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━┩
+│ medium   │ app/serializers.py:10     │ queries_per_request        │ hit      │
+│          │                           │ at_least 51queries @ GET   │          │
+│          │                           │ /orders listing for a      │          │
+│          │                           │ customer with 50 orders    │          │
+│ high     │ app/services/wallet.py:15 │ no prediction              │ untested │
+│ high     │ app/services/wallet.py:31 │ final_balance between 10x  │ hit      │
+└──────────┴───────────────────────────┴────────────────────────────┴──────────┘
+dropped debit: vacuous: a band starting at or below zero excludes nothing
 ```
 
-The `Proof` line is the product. It is not what distinguishes the two arms --
-both are graded by the same experiments, which is the only way the comparison
-could be fair. It is what distinguishes either of them from a review nobody
-can check.
+Three things in that table are the product. The **claim** column carries a
+metric, a comparator, a number with a unit and the condition it holds under.
+The **verdict** column is what an experiment measured, not what the model
+believes. And `no prediction` and `dropped` are printed rather than hidden: a
+finding the reviewer could not make testable is still shown, and a claim the
+falsifiability gate refused says why.
+
+None of that is what distinguishes the two arms -- both are graded by the same
+experiments, which is the only way the comparison could be fair. It is what
+distinguishes either of them from a review nobody can check.
 
 ---
 
@@ -124,7 +140,8 @@ one asserted the vacuity rule for the analyst *by name*, and one accepted a
 ### The result after fixing it
 
 A sweep was recorded call by call and the recordings committed, so this is
-reproducible exactly, with no API key: `make eval-replay` prints it verbatim.
+reproducible exactly, with no API key: `make eval-replay` prints these numbers; the table below adds the hand-audited
+recall row and omits the range, broken and seconds rows the command also prints.
 
 | metric | baseline | augury |
 |---|---|---|
@@ -160,8 +177,8 @@ prediction with a wrong one the same run decides.
 #### Recall, audited by hand
 
 Recall is matched by prose against a manifest, and prose matching cannot tell a
-correct diagnosis from a wrong one that mentions the right word. So all twenty
-matches in the run above were read by hand. One is wrong:
+correct diagnosis from a wrong one that mentions the right word. So all sixteen
+matches in the run above -- eight per arm -- were read by hand. One is wrong:
 
 **C01-3** is a session leaked when the body raises. The baseline was credited
 with it for this finding:
@@ -227,9 +244,10 @@ is a single prediction on a run whose repeats carry no independent information.
 
 It is also not shown to be worse. Ten seeded defects over three cases cannot
 resolve a difference this size in either direction, and saying so is the honest
-end of this experiment rather than a hedge before a claim. The verdict column
-above says "no detectable difference" and not "no difference" for that reason:
-a study too small to find one has not shown there is none.
+end of this experiment rather than a hedge before a claim. `significance.verdict`
+returns "no detectable difference" and never "no difference", and on this run it
+returns "not measured" instead, because a study too small to find a difference
+has not shown there is none.
 
 That is the result. It is not the one this was built to produce, and it is the
 one the evidence supports.
@@ -237,9 +255,9 @@ one the evidence supports.
 A note on the case set. **A04 is pooled into these numbers and should not carry
 weight**: its own manifest calls it too easy to distinguish the arms, both
 score 1.000 on it, and it ships no experiments, so it pulls both arms toward
-parity. On B01 and C01 alone the picture is the same shape -- recall 0.730
-against 0.725, hit rates 0.893 and 0.757 unchanged, since A04 contributes no
-tested predictions at all.
+parity. Dropping it changes nothing that matters -- on B01 and C01 alone recall
+is 0.778 for both arms, and the hit rates are identical to the pooled figures,
+5/6 against 5/5, because A04 contributes no tested predictions at all.
 
 ### The finding is about measurement, not about agents
 
@@ -285,7 +303,7 @@ and against more than one remediation, because passing against one is how
 ```bash
 make install
 cp .env.example .env      # add GROQ_API_KEY
-make check                # lint, types, 519 tests
+make check                # lint, types, 534 tests
 ```
 
 Full instructions, including reproducing the published numbers with no API key,
