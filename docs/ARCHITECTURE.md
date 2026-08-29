@@ -1,63 +1,90 @@
 # Architecture
 
-What was built. `docs/planning/BUILD_PLAN.md` describes what was *planned* and
-is wrong in several places; this document is written from the code and from one
-recorded run.
+What is built, as of the latest commit. `docs/planning/` describes what was
+planned and is wrong in most places.
 
 ---
 
-## The shape of it
+## The claim
+
+**Seven stages. Two of them consult a language model.**
+
+Everything a parser, a graph or a registry can answer is answered that way,
+because those answers are the same every run and cost nothing. The model is
+asked only the question nothing else can answer: *given this file, this
+concern, this runtime and these versions, what breaks under load?*
 
 ```
-  augury review --case B01 --arm augury
-        |
-        v
-  Cartographer .................... no model call
-        |   maps the repository: AST or tree-sitter per language,
-        |   import graph, fan-in, git churn, layer signals,
-        |   deployment configuration
-        v
-  Scheduler ....................... no model call
-        |   picks the next module worth reading by expected yield
-        |   per dollar, under a budget; stops when nothing left is
-        |   worth its cost; records every file it skipped and why
-        v
-  Triage .......................... one model call per module
-        |   narrows the specialists the module's signals allow to
-        |   the ones it needs. Can narrow, never widen.
-        v
-  LayerAnalyst x N ................ one model call per specialist
-        |   run concurrently. Each reads for one concern only,
-        |   briefed from the practice-lab layer that defines it.
-        v
-  Reconciler ...................... no model call
-        |   merges findings colliding on one construct
-        v
-  falsifiability gate ............. no model call
-        |   a prediction survives only if it validates: a metric
-        |   from the published vocabulary, a comparator, a number
-        |   with a unit, a condition, and a claim some measurement
-        |   could contradict
-        v
-  Prover .......................... no model call
-            runs the case's own experiment and records what it
-            measured. Grades both arms identically.
+augury review --path REPO --scope backend --budget 0.25
+  │
+  ├─ 1  Surveyor .................................. no model, $0
+  │       docker-compose.yml → services, commands, ports, depends_on
+  │       "backend/ is a service, redis is a broker, --concurrency=1"
+  │       a worker's capacity ceiling exists in no source file
+  │
+  ├─ 2  Cartographer .............................. no model, $0
+  │       six languages, scoped, excludes vendored trees
+  │       imports — including the ones written as strings
+  │       BFS from entrypoints → depth per module, unreachable set
+  │
+  ├─ 3  Scheduler ................................. no model, $0  ←┐
+  │       ranks by depth from an entrypoint, fan-in, signals,      │
+  │       churn, ÷ cost. Stops when nothing left is worth its      │
+  │       price, and records what it skipped and why               │
+  │                                                                │
+  ├─ 4  Triage ...................... one model call per module    │
+  │       signals allow {data, network, craft}; triage narrows     │
+  │       it can narrow, never widen                               │
+  │                                                                │
+  ├─ 5  LayerAnalyst × N ............ one model call each          │
+  │       concurrent. Each reads for one concern, briefed with     │
+  │       its lab layer, its language's failure modes, and the     │
+  │       versions this file actually runs against                 │
+  │                                                                │
+  ├─ 6  ──────────────────────────────────────────────────────────┘
+  │       until the budget is spent
+  │
+  └─ 7  Five deterministic passes ................. no model, $0
+          reconcile   merge findings colliding on one construct
+          gate        withdraw claims that are not falsifiable
+          disprove    withdraw index claims the migrations settle
+          collapse    one sentence about sixteen files is one finding
+          rank        by evidence, not by the model's adjective
 ```
 
-**Five of the seven steps above consult no model** -- cartography, scheduling,
-reconciliation, the falsifiability gate and the prover. Only triage and the
-specialists do. That is the engineering claim this project makes: knowing which
-parts must not be a language model.
+The loop at 3↔6 is the progressive part: the Scheduler re-ranks after every
+module, and a module whose neighbours produced findings is promoted.
+
+---
+
+## Why the orchestration is not an agent framework
+
+`autogen-core` and `autogen-ext` are dependencies, and every import of them is
+in one file — `core/adapters/provider.py` — where they supply the model client
+for Groq, OpenAI and Anthropic behind one `ChatModel` protocol.
+
+No `AssistantAgent`, no `Swarm`, no `RoundRobinGroupChat`, no `GraphFlow`. The
+orchestration is `asyncio` and a scheduler loop. That is a decision, and these
+are the reasons:
+
+| pattern | where it would fit | why it is not used |
+|---|---|---|
+| Handoff / `Swarm` | triage → specialists | Triage returns a *set*, not a delegation. Handoff lets the model choose the next agent; here that choice is a deterministic narrowing, so a hallucinated layer name cannot buy a model call. |
+| `RoundRobin` / `Selector` group chat | the eight specialists | They never see each other's output. Reconciliation is deterministic on `(path, symbol)`. In a group chat one specialist's wrong claim anchors the next one's. |
+| Sequential | survey → map → schedule | It *is* sequential, as a function pipeline rather than as agents, because five of the seven stages contain no model. |
+
+A framework that made every stage an agent would make five stages
+non-deterministic to no benefit.
 
 ---
 
 ## The eight specialists
 
-One `LayerAnalyst` class, instantiated eight times from a layer spec. The
-specialists are the practice lab's own layers, so the agent that hunts a defect
-is the one that owns the layer defining it.
+One `LayerAnalyst` class, instantiated eight times from a layer spec. Each is
+one layer of the practice lab, so the agent hunting a defect is the one that
+owns the layer defining it.
 
-| specialist | lab layer | routed by signal |
+| specialist | lab layer | routed by |
 |---|---|---|
 | `concurrency` | `01-machine` | concurrency |
 | `network` | `02-network` | network, entrypoint |
@@ -68,148 +95,46 @@ is the one that owns the layer defining it.
 | `security` | `07-security` | security |
 | `craft` | `08-craft` | craft |
 
-Eight instances of one class is cheap. Eight bespoke agents would not be, and
-would be worse code.
+Each call carries three briefs: the **layer** brief (what this concern is), the
+**language** brief (how that concern shows up in this runtime — a blocking call
+in `async def`, a goroutine with no context, one of libuv's four threads), and
+the **versions** this file imports, so a claim about a library's defaults is
+grounded in what is installed rather than in a training cutoff.
 
 ---
 
-## Routing, in order
+## What the model is never asked
 
-1. **Cartographer** detects `Signal`s. Import tables are per language: `sqlalchemy`
-   in Python, `database/sql` in Go, `sqlx` in Rust and `java.sql` in Java all
-   map to `DATA`. Plus AST detectors for what no import reveals -- a swallowed
-   exception, an interpolated query, shared mutable state.
-2. `specialists_for(signals)` gives the specialists the file *allows*.
-3. **Triage** narrows that set with one small model call. It can narrow but
-   never widen, so a hallucinated layer name cannot buy a model call.
-4. The chosen specialists run **concurrently** on that module.
-
-Routing on presence rather than certainty is deliberate: a specialist never
-called cannot find anything, and nothing downstream recovers the miss.
-
----
-
-## What one real review actually did
-
-From [`trajectories/augury-B01.jsonl`](trajectories/augury-B01.jsonl), a
-twenty-three-module repository:
-
-| | |
-|---|---|
-| steps recorded | 59 |
-| model calls | 41 |
-| deterministic steps | 18 |
-| scheduler decisions | 17 |
-| triage calls | 16 |
-| specialist calls | 25 |
-
-Specialists actually invoked: `data` 13, `network` 6, `observability` 3,
-`security` 1, `craft` 1, `concurrency` 1. Two of the eight were never called,
-which is the routing working: fanning out to all eight would have cost about
-five times as much (8 over 1.6) and produced confident opinions from reviewers with nothing to
-look at.
-
-Roughly 1.6 specialists per module, not 8.
+- **Where a symbol is.** The specialist names it; tree-sitter finds the line.
+  Measured: every finding named the right function and one named a line 140
+  away from it.
+- **Whether a column is indexed.** The migrations say. Three claims of a
+  missing index were withdrawn on one real repository, one with an invented
+  row count.
+- **Which version of a library is installed.** The registry says.
+- **Whether a claim is falsifiable.** A validator says. A rule that can be
+  written down does not need a model to apply it, and a model applying it can
+  be argued with.
+- **How severe a finding is.** It is asked, and the answer is used only to
+  break ties: told nothing anchors the word, it answered "high" 92 times out
+  of 141.
 
 ---
-
-## Six languages
-
-`tree-sitter-language-pack` parses Python, TypeScript/JavaScript, Go, Rust,
-Java and C++ behind one `LanguageAdapter` boundary. Python keeps a native `ast`
-adapter, because the source-level detectors need real Python semantics and it
-keeps the common case free of a parser dependency.
-
-Everything above cartography consumes `ModuleNode` and never learns which
-language produced it.
-
-**Known gap:** the AST-level detectors are Python-only, so `CRAFT` is
-unreachable in the other five languages. Import-based signals work everywhere.
-
----
-
-## The other arm
-
-`BaselineReviewer` is one prompt containing the whole repository, no tools, one
-call. It receives the same instructions, the same metric vocabulary, the same
-experiment conditions and the same deployment configuration as the pipeline --
-enforced by [`tests/test_arm_parity.py`](../tests/test_arm_parity.py), because
-for a while it did not, and that made the comparison unfair in the pipeline's
-favour.
-
-It is not a strawman. On the published evaluation it is not beaten.
-
----
-
-## What is not here
-
-The planning documents describe these. None was built.
-
-| | |
-|---|---|
-| VS Code extension | not built |
-| FastAPI serving layer | not built |
-| Live docker-compose stack, k6, Grafana | not built; experiments run in process |
-| ReAct tool-calling loop | not built; each specialist is one structured call |
-| Runbook retrieval corpus | not built; layer briefs are static prompts |
-| A Refiner agent | not built, and not needed: the falsifiability gate is a validator, and a rule that can be written cannot hallucinate |
-
-`src/augury/prompts/refiner.md` is on disk and unwired. It is kept, rewritten,
-as the specification of the validator that replaced it -- and it is worth
-saying that it did not start out accurate. It described a gate that accepted
-wide ranges the validator rejects, and claimed a rejected finding is dropped
-when in fact the finding is kept and only its claim is withdrawn. A document
-confidently describing the wrong rule is the failure this project is about, so
-it was corrected rather than deleted.
-
----
-
-## The MCP surface
-
-`augury mcp --root <dir>` serves the same pipeline over the Model Context
-Protocol on stdio, so the reviewer runs inside whatever agent the reader already
-has rather than only behind this CLI.
-
-```
-  client  --JSON-RPC over stdio-->  serve()  -->  Server.handle(request)
-                                     |                    |
-                              no decisions        pure function,
-                              only framing        no IO of its own
-```
-
-Three tools. Two of them are free and need no API key, because cartography is
-deterministic and the layer briefs are files on disk:
-
-| tool | what it returns | cost |
-|---|---|---|
-| `augury_map` | modules per language, concerns per file, what was skipped and why | free |
-| `augury_explain` | one specialist's brief, or the metric vocabulary | free |
-| `augury_review` | findings with predictions, plus what it spent | metered |
-
-Being able to see the map and the cost before buying the review is the point of
-splitting them.
-
-**The root is a launch argument, not a call argument.** An MCP client is driven
-by a language model, and a model that can name any path can read any file on the
-machine. `Server._resolve` refuses anything outside the boundary it was
-constructed with.
-
-The stdio protocol is implemented directly rather than through the `mcp` SDK:
-the framing is small, it keeps the dependency list installable offline, and it
-made `handle` a pure request-to-response function that the tests drive without
-spawning anything.
 
 ## Where things live
 
 | | |
 |---|---|
-| `core/cartography/` | Repository mapping, six languages, signals |
+| `core/survey/` | The deployment: services, commands, backing services, entrypoints |
+| `core/cartography/` | Six languages, imports, signals, depth, reachability |
 | `core/scheduling/` | Budget-bounded selection and coverage |
-| `core/adapters/` | Provider clients, pricing, record-and-replay |
-| `core/schemas.py`, `core/findings.py` | Prediction, Finding, Measurement |
-| `core/scoring.py`, `evaluation/significance.py` | Metrics and the tests that judge them |
-| `core/layers.py`, `prompts/layers/` | The eight specialists and their briefs |
-| `agents/` | Baseline, Triage, the pipeline |
-| `evaluation/` | Cases, runner, prover, reconciler, sweep |
-| `mcp/` | The MCP server: dispatch, tools, stdio framing |
-| `cli/` | The only evaluated surface |
+| `core/schema/` | Migrations read as a schema, and what they do to live tables |
+| `core/reference/` | Registry versions, dependency staleness, changelog links |
+| `core/adapters/` | Providers, pricing, record-and-replay |
+| `core/layers.py`, `prompts/layers/` | The eight concerns |
+| `core/languages.py`, `prompts/languages/` | How each runtime fails |
+| `core/priority.py`, `reachability.py`, `repetition.py`, `indexes.py` | The passes over a finished report |
+| `core/report.py` | The document a team acts on |
+| `agents/` | Baseline, triage, the pipeline |
+| `evaluation/` | Cases, runner, prover, significance |
+| `cli/` | `survey`, `review`, `report`, `evaluate`, `mcp` |
