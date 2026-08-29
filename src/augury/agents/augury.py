@@ -46,13 +46,14 @@ class AuguryReviewer:
 
     async def review(self, repo: RepoMap, root: Path) -> Report:
         started = time.monotonic()
+        context = _render_context(repo.context)
         opening = self._model.usage
         plan = Scheduler(repo, self._budget)
         drafts: list[DraftReport] = []
 
         while (module := plan.next()) is not None:
             before = self._model.usage
-            findings = await self._review_module(module, root)
+            findings = await self._review_module(module, root, context)
             drafts.append(findings)
             plan.record(
                 module,
@@ -69,24 +70,26 @@ class AuguryReviewer:
         )
         return report.model_copy(update={"coverage": plan.coverage})
 
-    async def _review_module(self, module: ModuleNode, root: Path) -> DraftReport:
+    async def _review_module(
+        self, module: ModuleNode, root: Path, context: str
+    ) -> DraftReport:
         source = self._read(root / module.path)
         language = EXTENSIONS[Path(module.path).suffix.lower()].value
 
-        chosen = await self._triage.route(module, source, language)
+        chosen = await self._triage.route(module, source, language, context)
         if not chosen:
-            return DraftReport()
+            return DraftReport(findings=[])
 
         # Specialists are independent by construction: each reads for its own
         # concern only. Running them concurrently costs the same and takes the
         # time of the slowest rather than the sum.
         results = await asyncio.gather(
-            *(self._ask(layer, module, source, language) for layer in chosen)
+            *(self._ask(layer, module, source, language, context) for layer in chosen)
         )
         return DraftReport(findings=[f for result in results for f in result.findings])
 
     async def _ask(
-        self, layer: Layer, module: ModuleNode, source: str, language: str
+        self, layer: Layer, module: ModuleNode, source: str, language: str, context: str
     ) -> DraftReport:
         return await self._model.structured(
             prompt=render(
@@ -98,6 +101,7 @@ class AuguryReviewer:
                 language=language,
                 fan_in=module.fan_in,
                 source=source,
+                context=context,
             ),
             schema=DraftReport,
         )
@@ -108,3 +112,10 @@ class AuguryReviewer:
         if len(text) <= MAX_SOURCE_CHARS:
             return text
         return text[:MAX_SOURCE_CHARS] + "\n... truncated ...\n"
+
+
+def _render_context(files: dict[str, str]) -> str:
+    """The deployment files, or an honest statement that there are none."""
+    if not files:
+        return "(no deployment configuration was found in this repository)"
+    return "\n\n".join(f"### {name}\n```\n{text}\n```" for name, text in files.items())
