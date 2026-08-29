@@ -28,6 +28,15 @@ class SweepResult(BaseModel):
     recall_low: float | None
     recall_high: float | None
 
+    # Pooled across seeds rather than averaged. A single run of a case yields
+    # too few distinct experiments to support a rate, so every per-seed value
+    # is withheld and averaging withheld values gives nothing. Pooling is how
+    # the floor is reached honestly.
+    hits: int
+    tested: int
+    experiments: int
+    hit_rate: float | None
+
     precision_mean: float | None
     usd_mean: float
     seconds_mean: float
@@ -77,9 +86,15 @@ def summarise(scores: list[Score]) -> SweepResult:
         run.falsifiable_precision for run in per_seed if run.falsifiable_precision is not None
     ]
 
+    pooled = aggregate(scores)
+
     return SweepResult(
         arm=arms.pop(),
         seeds=len(by_seed),
+        hits=pooled.hits,
+        tested=pooled.tested,
+        experiments=pooled.experiments,
+        hit_rate=pooled.hit_rate,
         recall_mean=fmean(recalls) if recalls else None,
         recall_low=min(recalls) if recalls else None,
         recall_high=max(recalls) if recalls else None,
