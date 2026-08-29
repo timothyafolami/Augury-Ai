@@ -32,4 +32,4 @@ review-augury:
 	uv run python -m augury.cli review --arm augury --case B01
 
 evaluate:
-	uv run python -m augury.cli evaluate --seeds 3 --prove
+	uv run python -m augury.cli evaluate --seeds 5 --prove
