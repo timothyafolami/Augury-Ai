@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import cast
 
 from augury.core.adapters.base import ChatModel
 from augury.core.cartography import RepoMap
@@ -20,6 +21,7 @@ from augury.core.drafts import DraftReport, to_report
 from augury.core.findings import Report
 from augury.core.metrics import describe, vocabulary
 from augury.core.scheduling import Coverage
+from augury.core.trajectory import Trajectory
 from augury.prompts import render
 
 # What one prompt can hold. The limit is the defining constraint of this arm,
@@ -39,10 +41,12 @@ class BaselineReviewer:
         *,
         char_budget: int = DEFAULT_CHAR_BUDGET,
         experiments: dict[str, str] | None = None,
+        trajectory: Trajectory | None = None,
     ) -> None:
         self._model = model
         self._budget = char_budget
         self._experiments = experiments or {}
+        self._trace = trajectory
 
     async def review(self, repo: RepoMap, root: Path) -> Report:
         included, skipped = self._select(repo, root)
@@ -50,17 +54,29 @@ class BaselineReviewer:
             return Report(model_id=self._model.model_id, coverage=Coverage(skipped=skipped))
 
         started = time.monotonic()
-        before = self._model.usage
-        draft = await self._model.structured(
-            prompt=render(
-                "baseline",
-                repository="\n\n".join(included),
-                metrics=vocabulary(),
-                experiments=describe(self._experiments),
-            ),
-            schema=DraftReport,
+        prompt = render(
+            "baseline",
+            repository="\n\n".join(included),
+            metrics=vocabulary(),
+            experiments=describe(self._experiments),
         )
-        spent = self._model.usage - before
+        completion = await self._model.call(prompt=prompt, schema=DraftReport)
+        draft = cast("DraftReport", completion.result)
+        spent = completion.usage
+
+        if self._trace is not None:
+            self._trace.record(
+                agent="baseline",
+                action="selected",
+                detail={"included": len(included), "skipped": skipped},
+            )
+            self._trace.record_call(
+                agent="baseline",
+                prompt=prompt,
+                response=draft.model_dump(),
+                usage=completion.usage,
+                retries=completion.retries,
+            )
 
         report = to_report(
             draft,
