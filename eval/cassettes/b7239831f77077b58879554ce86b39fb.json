@@ -1,0 +1,8 @@
+{
+  "specialists": [
+    "concurrency",
+    "network",
+    "observability"
+  ],
+  "reasoning": "concurrency: async function with retries and asyncio.sleep; network: uses httpx.AsyncClient to call external payment gateway; observability: logs warnings on failed attempts."
+}
