@@ -108,3 +108,55 @@ def test_every_make_target_names_a_runnable_command(target: str) -> None:
 
     assert target in makefile
     assert "python -m augury.cli " in makefile or "augury " in makefile
+
+
+# -- flags that do nothing are worse than flags that do not exist ----------
+
+
+def test_review_with_prove_attaches_measurements(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--prove` was accepted and ignored, so every verdict printed
+    `untested` while the command reported success. That reads as the
+    experiments having run and found nothing to say."""
+    import inspect
+
+    from augury.cli.main import review
+
+    source = inspect.getsource(review)
+    assert "prove" in source.split('"""')[-1], "review declares --prove and never reads it"
+
+
+def test_a_sweep_in_which_every_review_failed_does_not_print_a_recall() -> None:
+    """A dead arm produced range 0.000-0.000, which is the same zero-variance
+    signature the results table uses as evidence of consistency."""
+    from augury.core.scoring import Score
+    from augury.evaluation.sweep import summarise
+
+    dead = [
+        Score(
+            case="B01",
+            arm="a",
+            seed=s,
+            model_id="m",
+            seeded=5,
+            found=0,
+            failed=True,
+            total_findings=0,
+            falsifiable=0,
+            tested=0,
+            experiments=0,
+            hits=0,
+            broken=0,
+            dropped=0,
+            falsifiable_precision=None,
+            hit_rate=None,
+            prediction_coverage=None,
+            usd=0.0,
+            seconds=0.0,
+        )
+        for s in range(3)
+    ]
+
+    result = summarise(dead)
+
+    assert result.failed == 3
+    assert result.recall_mean is None, "a run in which nothing completed has no recall"
