@@ -1,22 +1,33 @@
 """How many queries one call to the orders list endpoint issues.
 
-Runs the case repository's own `serialize_order` against an in-memory database
-holding a known number of orders, and counts the statements SQLAlchemy actually
-sends. Nothing is simulated: the code under measurement is the code under
-review, and the count is taken from the engine rather than from reading the
-source.
+Calls the case repository's own `list_orders` endpoint function against a
+database holding a known number of orders, and counts the statements
+SQLAlchemy actually sends. The count is taken at the engine rather than
+inferred from reading the source.
+
+An earlier version built its own loop over its own query and called
+`serialize_order` directly. That measured the experiment, not the endpoint: a
+repository whose list path had been fixed to batch its loads still reported the
+same 51, because the N+1 being counted was the one this file wrote. The
+endpoint is now called as a request would call it.
 
 The last line printed is the measurement, in queries.
 """
 
 import asyncio
+import os
 import sys
 from decimal import Decimal
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "repo"))
+# The repository under measurement. Overridable so the same experiment can be
+# run against a remediated copy: an experiment that reports the same number
+# either way is not measuring the defect, and tests/test_experiments_
+# discriminate.py proves each one does by pointing this at the fixed version.
+REPO = Path(os.environ.get("AUGURY_CASE_REPO", Path(__file__).resolve().parent.parent / "repo"))
+sys.path.insert(0, str(REPO))
 
-from sqlalchemy import event, select  # noqa: E402
+from sqlalchemy import event  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
 from app.models.base import Base  # noqa: E402
@@ -24,7 +35,7 @@ from app.models.customer import Customer  # noqa: E402
 from app.models.line_item import LineItem  # noqa: E402
 from app.models.order import Order  # noqa: E402
 from app.models.wallet import Wallet  # noqa: E402
-from app.serializers import serialize_order  # noqa: E402
+from app.api.orders import list_orders  # noqa: E402
 
 ORDERS = 50
 ITEMS_PER_ORDER = 3
@@ -64,12 +75,12 @@ async def main() -> None:
     print(f"seeded {ORDERS} orders with {ITEMS_PER_ORDER} items each")
 
     async with sessions() as session:
-        # Count only the read path an incoming request would take.
+        # Exactly what a GET /orders?customer_id=1 request runs.
         event.listen(engine.sync_engine, "before_cursor_execute", count)
-        result = await session.execute(select(Order).where(Order.customer_id == 1))
-        for order in result.scalars().all():
-            await serialize_order(session, order)
+        payload = await list_orders(customer_id=1, session=session)
         event.remove(engine.sync_engine, "before_cursor_execute", count)
+
+    print(f"the endpoint returned {len(payload)} orders")
 
     await engine.dispose()
 
