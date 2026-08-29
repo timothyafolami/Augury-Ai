@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -38,6 +40,25 @@ from augury.core.versions import describe_versions
 from augury.evaluation.reconcile import reconcile
 from augury.prompts import render
 
+# Modules reviewed at once. Full coverage of a real backend is 261 modules and
+# one at a time is an hour, which is why the first runs were budget-capped at a
+# sixth of the repository -- hiding wall-clock behind a cost ceiling. The cost
+# of the whole thing is under two dollars.
+DEFAULT_CONCURRENCY = 8
+
+
+@dataclass(frozen=True)
+class Progress:
+    """One module finished, for a caller that wants to watch."""
+
+    path: str
+    depth: int | None
+    findings: int
+    read: int
+    total: int
+    usd: float
+
+
 # One file is read once per specialist, so a very long file is trimmed rather
 # than allowed to dominate the budget it shares with every other module.
 MAX_SOURCE_CHARS = 40_000
@@ -57,6 +78,8 @@ class AuguryReviewer:
         budget: Budget | None = None,
         trajectory: Trajectory | None = None,
         experiments: dict[str, str] | None = None,
+        concurrency: int = DEFAULT_CONCURRENCY,
+        watching: Callable[[Progress], None] | None = None,
     ) -> None:
         self._model = model
         self._trace = trajectory
@@ -69,6 +92,10 @@ class AuguryReviewer:
         # over the network and a specialist call must not wait on it.
         self._pinned: dict[str, str] = {}
         self._registry = Registry()
+        self._concurrency = max(1, concurrency)
+        # Called after every module. A review of a real backend runs for
+        # minutes; silence for that long is indistinguishable from a hang.
+        self._watching = watching
 
     async def review(self, repo: RepoMap, root: Path) -> Report:
         # What this repository declares it depends on. Read once; the registry
@@ -90,24 +117,49 @@ class AuguryReviewer:
             },
         )
 
-        while (module := plan.next()) is not None:
-            self._record(
-                "scheduler",
-                "selected",
-                {
-                    "path": module.path,
-                    "fan_in": module.fan_in,
-                    "signals": sorted(s.value for s in module.signals),
-                },
-            )
+        while batch := plan.next_batch(self._concurrency):
+            for module in batch:
+                self._record(
+                    "scheduler",
+                    "selected",
+                    {
+                        "path": module.path,
+                        "depth": module.depth,
+                        "fan_in": module.fan_in,
+                        "signals": sorted(s.value for s in module.signals),
+                    },
+                )
+
             before = self._model.usage
-            findings = await self._review_module(module, root, context)
-            drafts.append(findings)
-            plan.record(
-                module,
-                findings=len(findings.findings),
-                spent_usd=(self._model.usage - before).usd,
+            # One batch at a time rather than the whole repository at once: the
+            # scheduler promotes a module whose neighbours produced findings,
+            # and that adaptivity needs results back before the next choice.
+            results = await asyncio.gather(
+                *(self._review_module(module, root, context) for module in batch)
             )
+            batch_usd = (self._model.usage - before).usd
+
+            for module, found in zip(batch, results, strict=True):
+                drafts.append(found)
+                # The batch's cost, apportioned. Per-module attribution would
+                # need per-call accounting through the gather, and the
+                # scheduler only needs the total to know when to stop.
+                plan.record(
+                    module,
+                    findings=len(found.findings),
+                    spent_usd=batch_usd / len(batch),
+                )
+                if self._watching is not None:
+                    self._watching(
+                        Progress(
+                            path=module.path,
+                            depth=module.depth,
+                            findings=len(found.findings),
+                            read=len(plan.coverage_analysed),
+                            total=len(repo.modules),
+                            usd=(self._model.usage - opening).usd,
+                        )
+                    )
 
         self._record("scheduler", "stopped", plan.coverage.model_dump())
         spent = self._model.usage - opening
