@@ -743,6 +743,48 @@ were written to confirm a fix rather than to falsify one.
 
 ---
 
+## 22. Two more units that were wrong, both found by the same review
+
+**What prompted it.** The same adversarial pass that produced iteration 21 had
+five findings left in it.
+
+**The hit rate was a rate over findings.** `_distinct_experiments` was written
+because "one k6 run can answer twenty findings that share a mechanism, and
+counting it twenty times inflates the denominator by the reviewer's own
+verbosity". That argument was applied to the gate that decides whether a rate
+may be published and never to the rate. On the published run two of the
+pipeline's B01 findings both predict `queries_per_request` and are both settled
+by one measurement, so one experiment moved two units on one arm and one on the
+other. Scored at the unit the module already argued for, the margin is 5/5
+against 5/6 rather than 6/6 against 5/6.
+
+An experiment counts as a hit only when every claim it settled held. Anything
+weaker lets an arm buy a hit by pairing a correct prediction with a wrong one
+the same run decides.
+
+**`reconcile._strictest` ranked malformed predictions best.** It selects the
+narrowest `BETWEEN` band, and the shapes `Prediction` rejects -- an upper bound
+at or below the lower, or none at all -- have width zero or less. Reconcile runs
+on the draft, before validation, so a malformed sibling selected itself and
+discarded a valid prediction with it. Only an arm producing two findings at one
+construct can reach this, so it fell on the pipeline alone.
+
+**What was decided.** Both fixed. Both moved the numbers against the pipeline
+or, in reconcile's case, removed a penalty that had been applied to it. The
+published table has now been corrected four times in two days, every time by a
+review rather than by reading, and every correction has moved the result toward
+"no difference".
+
+**The pattern is the finding.** Across four adversarial reviews, every defect
+that changed a number was found by mutation testing or by an agent told to
+break something. The defects found by reading were cosmetic. A suite that kills
+92% of mutations does not protect a published result, because the 8% it misses
+is not randomly distributed: it sits exactly where a test was written to
+confirm a fix rather than to falsify one. Three of the fixes in this changelog
+shipped with tests that passed without the fix working.
+
+---
+
 ## Still open
 
 - The pipeline costs five times the baseline. It finds the same defects, states
