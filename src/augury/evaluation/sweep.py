@@ -44,7 +44,12 @@ class SweepResult(BaseModel):
         Ranges that overlap mean the arms were not distinguished. Calling that
         a win is how a submission ends up defending a number it cannot support.
         """
-        if left.recall_low is None or right.recall_low is None:
+        if (
+            left.recall_low is None
+            or left.recall_high is None
+            or right.recall_low is None
+            or right.recall_high is None
+        ):
             return "inconclusive"
         if left.recall_low > right.recall_high:
             return "better"
@@ -69,9 +74,7 @@ def summarise(scores: list[Score]) -> SweepResult:
     per_seed = [aggregate(runs) for runs in by_seed.values()]
     recalls = [run.detection_rate for run in per_seed if run.detection_rate is not None]
     precisions = [
-        run.falsifiable_precision
-        for run in per_seed
-        if run.falsifiable_precision is not None
+        run.falsifiable_precision for run in per_seed if run.falsifiable_precision is not None
     ]
 
     return SweepResult(
