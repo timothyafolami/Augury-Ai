@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "concurrency"
+  ],
+  "reasoning": "The file uses an asyncio.Queue for buffering events, involving concurrency behavior."
+}
