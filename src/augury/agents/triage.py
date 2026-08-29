@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from augury.core.adapters.base import ChatModel
 from augury.core.cartography import ModuleNode
 from augury.core.layers import Layer, specialists_for
+from augury.core.trajectory import Trajectory
 from augury.prompts import render
 
 
@@ -30,8 +31,9 @@ class TriageDecision(BaseModel):
 class Triage:
     """Narrows the specialists a module's signals allow to the ones it needs."""
 
-    def __init__(self, model: ChatModel) -> None:
+    def __init__(self, model: ChatModel, *, trajectory: Trajectory | None = None) -> None:
         self._model = model
+        self._trace = trajectory
 
     async def route(
         self, module: ModuleNode, source: str, language: str, context: str = ""
@@ -46,20 +48,27 @@ class Triage:
         if not allowed:
             return []
 
-        decision = await self._model.structured(
-            prompt=render(
-                "triage",
-                path=module.path,
-                language=language,
-                loc=module.loc,
-                fan_in=module.fan_in,
-                signals=", ".join(sorted(s.value for s in module.signals)),
-                source=source,
-                context=context or "(none found)",
-                specialists="\n".join(f"- {layer.name}: {layer.lab_layer}" for layer in allowed),
-            ),
-            schema=TriageDecision,
+        prompt = render(
+            "triage",
+            path=module.path,
+            language=language,
+            loc=module.loc,
+            fan_in=module.fan_in,
+            signals=", ".join(sorted(s.value for s in module.signals)),
+            source=source,
+            context=context or "(none found)",
+            specialists="\n".join(f"- {layer.name}: {layer.lab_layer}" for layer in allowed),
         )
+        before = self._model.usage
+        decision = await self._model.structured(prompt=prompt, schema=TriageDecision)
+        if self._trace is not None:
+            self._trace.record_call(
+                agent=f"triage:{module.path}",
+                prompt=prompt,
+                response=decision.model_dump(),
+                usage=self._model.usage - before,
+                retries=getattr(self._model, "retries", 0),
+            )
 
         chosen = {name.strip().lower() for name in decision.specialists}
         return [layer for layer in allowed if layer.name in chosen]
