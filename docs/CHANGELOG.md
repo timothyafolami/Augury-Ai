@@ -459,6 +459,51 @@ test before writing the sentence is now in place.
 
 ---
 
+## Iteration 16 — the documented command was not the command that produced the numbers
+
+**Tried.** Submitting.
+
+**Evidence.** A review asked one question: *the changelog credits publishing
+each experiment's conditions with the largest movement in this project, so
+show the line where `make evaluate` does that.*
+
+There is no such line. The commit named "Give both arms the case's experiment
+conditions" patched the `review` command and never touched `_one_run`, so the
+sweep sent both arms
+
+> (this repository ships no experiments, so no claim about it can be settled)
+
+for cases shipping nine, and then graded the resulting claims against those
+nine. No test reached that construction, which is how one commit could claim
+two paths and fix one.
+
+**The published numbers were not affected** -- they came from a script that
+passes the conditions -- but the documented command could not reproduce them,
+which is the same failure wearing different clothes. The whole argument of this
+project is that a number is worth what the reader can check.
+
+**Decided.** Fixed, with a test on the construction. The results table now
+publishes what `make evaluate` prints, and states the spread observed between
+runs rather than a single point estimate.
+
+Three presentational corrections from the same review, all of which ran toward
+asserting equivalence rather than superiority:
+
+- `verdict()` returned **"no difference"** for any p above 0.15. For a project
+  arguing that the measuring apparatus is what to distrust, an apparatus
+  converting absence of evidence into evidence of absence was the most
+  attackable line in it. It says "no detectable difference" now, and a test
+  refuses any verdict that asserts the null.
+- "produces more findings of the same quality" was an equivalence claim drawn
+  from p = 0.21, on a metric whose point estimate favours the baseline by 13.6
+  points.
+- A04 is pooled into the headline. Its own manifest says it cannot distinguish
+  the arms; both score 1.000 on it; it ships no experiments. Including it pulls
+  both arms toward the null being reported. It is now marked as carrying no
+  weight, with the two-case figures quoted beside it.
+
+---
+
 ## Removed
 
 Nothing yet. When something is removed, it stays listed here with what it cost
