@@ -5,16 +5,16 @@
       "line": 18,
       "layer": "craft",
       "symbol": "list_for_customer",
-      "mechanism": "Broad exception handler catches all errors and returns an empty list, swallowing the failure so the caller believes the customer has no orders (reference: silent failure description).",
+      "mechanism": "Broad exception handler catches all errors and returns an empty list, so callers cannot distinguish a genuine empty result from a database failure (reference: highest‑severity silent failure).",
       "severity": "high",
-      "remediation": "Remove the blanket except block; let database exceptions propagate or translate them to an explicit error response (e.g., raise HTTPException 500) instead of returning [] on failure.",
-      "arithmetic": "The function always returns [] on any exception, so the HTTP layer will serialize this as a successful 200 response with an empty array. Therefore the observed http_status under a database‑unreachable condition is 200.",
+      "remediation": "Remove the blanket except block; let the exception propagate or raise a specific error, and have the API translate it to a 5xx response.",
+      "arithmetic": "Because the except returns [], FastAPI serialises [] as a 200 OK response; when the DB is down the endpoint will still return 200, hiding the failure.",
       "prediction": {
         "metric": "http_status",
         "comparator": "between",
         "value": 200.0,
-        "upper": 200.0,
-        "unit": "x",
+        "upper": 299.0,
+        "unit": "code",
         "condition": "database unreachable"
       }
     }
