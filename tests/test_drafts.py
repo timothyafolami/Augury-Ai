@@ -34,6 +34,7 @@ def good_prediction() -> DraftPrediction:
         metric="http_req_duration_p99",
         comparator=Comparator.AT_LEAST,
         value=1000.0,
+        upper=None,
         unit="ms",
         condition="rate=250rps",
     )
@@ -78,6 +79,7 @@ def test_an_empty_unit_is_rejected() -> None:
         metric="latency",
         comparator=Comparator.AT_LEAST,
         value=1.0,
+        upper=None,
         unit="",
         condition="under load",
     )
@@ -91,7 +93,12 @@ def test_a_rejected_prediction_keeps_the_finding_visible_to_the_user() -> None:
     """Silently discarding a reviewer's output is the very failure this tool
     exists to catch. The finding stays; only the claim to be testable goes."""
     bad = DraftPrediction(
-        metric="", comparator=Comparator.AT_LEAST, value=1.0, unit="ms", condition="c"
+        metric="",
+        comparator=Comparator.AT_LEAST,
+        value=1.0,
+        upper=None,
+        unit="ms",
+        condition="c",
     )
 
     report = to_report(DraftReport(findings=[draft(bad)]))
@@ -110,3 +117,46 @@ def test_conversion_carries_the_run_metadata() -> None:
 
     assert report.model_id == "openai/gpt-oss-120b"
     assert report.usd == 0.0031
+
+
+def test_every_field_is_required_so_strict_providers_accept_the_schema() -> None:
+    """Groq and OpenAI structured output run in strict mode, which demands
+    that every declared property also appear in `required`. Optional fields
+    are expressed as nullable, not as absent.
+
+    This is not pedantry: a correct, fully-reasoned finding was rejected with
+    `missing properties: 'prediction'` and the whole review failed with it.
+    """
+    for schema in (DraftReport, DraftFinding, DraftPrediction):
+        emitted = schema.model_json_schema()
+        declared = set(emitted.get("properties", {}))
+        required = set(emitted.get("required", []))
+
+        assert declared == required, (
+            f"{schema.__name__} declares {sorted(declared - required)} without "
+            "requiring them; a strict provider will reject the whole response"
+        )
+
+
+def test_a_nullable_prediction_is_still_expressible() -> None:
+    """Required does not mean present. The model states null when it has no
+    prediction, which is the honest answer and must remain sayable."""
+    report = to_report(
+        DraftReport(
+            findings=[
+                DraftFinding(
+                    path="a.py",
+                    line=1,
+                    layer="craft",
+                    symbol="f",
+                    mechanism="m",
+                    severity=Severity.LOW,
+                    remediation="r",
+                    arithmetic="",
+                    prediction=None,
+                )
+            ]
+        )
+    )
+
+    assert not report.findings[0].is_falsifiable
