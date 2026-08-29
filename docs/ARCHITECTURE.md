@@ -44,8 +44,10 @@ recorded run.
             measured. Grades both arms identically.
 ```
 
-**Four of the six stages consult no model.** That is the engineering claim this
-project makes: knowing which parts must not be a language model.
+**Five of the seven steps above consult no model** -- cartography, scheduling,
+reconciliation, the falsifiability gate and the prover. Only triage and the
+specialists do. That is the engineering claim this project makes: knowing which
+parts must not be a language model.
 
 ---
 
