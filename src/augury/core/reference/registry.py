@@ -46,6 +46,7 @@ class PackageFacts:
 
 def _fetch(url: str) -> str | None:
     """One GET, no dependencies, every failure swallowed."""
+    import http.client
     import urllib.error
     import urllib.request
 
@@ -54,7 +55,11 @@ def _fetch(url: str) -> str | None:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             body: str = response.read().decode("utf-8", errors="replace")
             return body
-    except (urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
+        # HTTPException is none of the other three -- IncompleteRead and
+        # BadStatusLine inherit from it directly -- so a truncated response
+        # escaped "every failure is None", left the thread pool mid-batch, and
+        # ended the command before the review began.
         return None
 
 
@@ -99,11 +104,15 @@ class Registry:
         permanent "unknown" for a package the registry knows perfectly well,
         and unknown reads to a reader like a package with nothing wrong.
         """
+        import http.client
+
         for _ in range(ATTEMPTS):
             try:
                 body = self._fetch(url)
-            except OSError:
+            except (OSError, ValueError, http.client.HTTPException):
                 # Offline is a normal state, not an error worth surfacing.
+                # Widened to match _fetch: a caller may supply its own fetch,
+                # and a per-package failure has to stay a per-package None.
                 return None
             if body:
                 return body
