@@ -13,7 +13,6 @@ import pytest
 from pydantic import BaseModel
 
 from augury.core.adapters.base import Usage
-from augury.core.findings import Report
 from augury.core.scoring import aggregate
 from augury.evaluation.cases import load_cases
 from augury.evaluation.runner import run_arm
