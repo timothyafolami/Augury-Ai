@@ -206,6 +206,36 @@ arm.
 `inconclusive` whenever the ranges overlap, so an unsupported win cannot be
 reported by accident, and the spread is printed beside every mean.
 
+**Result, three seeds per arm on B01:**
+
+| metric | baseline | augury |
+|---|---|---|
+| seeded recall, mean | **0.933** | 0.867 |
+| seeded recall, range | 0.800 - 1.000 | 0.800 - 1.000 |
+| falsifiable precision | 0.397 | **0.768** |
+| cost | $0.0041 | $0.0268 (6.5x) |
+| time | 10.6 s | 45.9 s (4.3x) |
+
+**Verdict on recall: inconclusive.** The ranges are identical and the baseline
+is marginally ahead on the mean. Three seeds each gave 5/4/5 and 4/4/5.
+
+This is the result, and it is worth stating plainly rather than framed: **on a
+seventeen-module repository, routing to specialists does not find more seeded
+defects than one good prompt.** The extra spend buys falsifiable precision -- a
+claim carrying a number, a unit and a condition roughly twice as often -- and
+nothing measurable in coverage.
+
+Two honest readings, and the evaluation cannot yet separate them:
+
+1. Seventeen modules still fits comfortably in one prompt, so the Scheduler has
+   nothing to earn. The crossover, if it exists, is at a repository size not
+   yet tested.
+2. The architecture does not pay for itself, and the falsifiable-precision gain
+   is the whole return on 6.5x the cost.
+
+The next experiment is designed to distinguish them, not to defend the
+architecture.
+
 ---
 
 ## Removed
