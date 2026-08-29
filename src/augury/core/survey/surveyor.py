@@ -168,3 +168,75 @@ def _as_environment(value: Any) -> dict[str, str]:
         if key:
             pairs[key] = val
     return pairs
+
+
+# -- what a command says about where code starts ---------------------------
+
+# Runners that take the module as the argument to a flag.
+_FLAGGED = {"celery": "-A", "flask": "--app"}
+
+# Runners that take `module:attribute` as their first positional argument.
+_COLON_RUNNERS = {"uvicorn", "gunicorn", "hypercorn", "daphne", "granian"}
+
+_SCRIPT_SUFFIXES = (".py", ".js", ".mjs", ".ts", ".go", ".rb")
+
+
+def _first_positional(tokens: list[str]) -> str:
+    """The first argument that is neither a flag nor a flag's value."""
+    skip_next = False
+    for token in tokens:
+        if skip_next:
+            skip_next = False
+            continue
+        if token.startswith("-"):
+            # `--flag=value` carries its value; a bare flag may take the next.
+            skip_next = "=" not in token
+            continue
+        return token
+    return ""
+
+
+def entrypoint_refs(command: str) -> tuple[str, ...]:
+    """The modules a service command starts, as path stems.
+
+    A Celery worker's module looks like nothing to a signal detector: it has no
+    route decorator and no server. The command is the only place that says
+    `src.tasks.celery_app` is where this process begins, and without it every
+    background task in a repository is unreachable.
+    """
+    tokens = command.split()
+    if not tokens:
+        return ()
+
+    found: list[str] = []
+
+    def add(ref: str) -> None:
+        stem = ref.split(":", 1)[0].replace(".", "/").strip("/")
+        if stem and stem not in found:
+            found.append(stem)
+
+    runner = Path(tokens[0]).name
+    flag = _FLAGGED.get(runner)
+    if flag and flag in tokens:
+        index = tokens.index(flag)
+        if index + 1 < len(tokens):
+            add(tokens[index + 1])
+        return tuple(found)
+
+    if runner in _COLON_RUNNERS:
+        add(_first_positional(tokens[1:]))
+        return tuple(found)
+
+    if runner.startswith("python") or runner in {"node", "ruby", "deno", "bun"}:
+        rest = tokens[1:]
+        if rest[:1] == ["-m"] and len(rest) > 1:
+            add(rest[1])
+            return tuple(found)
+        token = _first_positional(rest)
+        if token.endswith(_SCRIPT_SUFFIXES):
+            add(token.rsplit(".", 1)[0])
+        elif token:
+            add(token)
+        return tuple(found)
+
+    return tuple(found)
