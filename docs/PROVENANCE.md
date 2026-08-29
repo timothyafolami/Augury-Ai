@@ -22,8 +22,8 @@ each message says what changed in that file.
 | `src/augury/evaluation/` | Cases, runner, prover, reconciler, sweep |
 | `src/augury/prompts/` | Every prompt, including the eight layer briefs |
 | `src/augury/cli/` | The command line |
-| `eval/cases/` | Both case repositories and all five experiments |
-| `tests/` | 321 tests |
+| `eval/cases/` | Three case repositories, ten seeded defects, nine experiments, and the remediated version of every file broken |
+| `tests/` | 422 tests |
 
 ---
 
