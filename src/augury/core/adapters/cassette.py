@@ -18,7 +18,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from augury.core.adapters.base import ChatModel, Usage
+from augury.core.adapters.base import ChatModel, Completion, Usage
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -69,6 +69,17 @@ class CassetteModel:
     def usage(self) -> Usage:
         """Spend incurred in this process. Replays contribute nothing."""
         return self._usage
+
+    async def call(self, *, prompt: str, schema: type[T]) -> Completion:
+        """A recorded answer costs nothing, and says so.
+
+        Replaying is free by construction, so a replayed call reports zero
+        usage rather than the price the original run paid. A report built
+        entirely from cassettes should read as costing nothing, because it did.
+        """
+        before = self._usage
+        result = await self.structured(prompt=prompt, schema=schema)
+        return Completion(result=result, usage=self._usage - before, retries=0)
 
     async def structured(self, *, prompt: str, schema: type[T]) -> T:
         path = self._path_for(prompt, schema)
