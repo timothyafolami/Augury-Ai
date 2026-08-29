@@ -35,3 +35,34 @@ def test_the_help_says_generated_code_will_run() -> None:
 
     assert "generated" in help_text.lower()
     assert "run" in help_text.lower() or "execut" in help_text.lower()
+
+
+def test_the_report_command_actually_calls_the_proving_pass() -> None:
+    """The flag existed, was documented, and was wired to nothing.
+
+    `--prove 2` ran a full review and printed no proving output at all: the
+    call had been inserted into the `--case` branch instead of the repository
+    one. Both accept the flag, so nothing failed and nothing happened -- the
+    same shape as the `--prove` that was accepted and ignored before, and as
+    `AUGURY_REPLAY_ONLY` being documented for weeks while nothing read it.
+
+    Checked by reading the source, because the alternative is a live review.
+    """
+    import ast
+    from pathlib import Path
+
+    source = Path("src/augury/cli/main.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    report_fn = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "report"
+    )
+    called = {
+        node.func.id
+        for node in ast.walk(report_fn)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+    assert "_settle" in called, "report accepts --prove and never proves anything"
