@@ -13,6 +13,8 @@ from one that found four. A coin flip does not.
 from __future__ import annotations
 
 import json
+import re
+from functools import lru_cache
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,11 +46,16 @@ class Defect(BaseModel):
         name may appear in the symbol or in the prose, because reviewers name a
         construct either way and penalising that measures formatting rather
         than detection.
+
+        The name must appear as a whole word. Substring matching turned recall
+        into a lottery: `except` matched "an exception type is not declared",
+        `balance` matched "should load-balance across replicas", and five
+        findings describing nothing seeded scored a perfect 1.000.
         """
         return any(
             finding.path in self.locations
             and any(
-                symbol.lower() in f"{finding.symbol} {finding.mechanism}".lower()
+                _mentions(symbol, f"{finding.symbol} {finding.mechanism}")
                 for symbol in self.symbols
             )
             for finding in report.findings
@@ -89,3 +96,18 @@ def load_cases(root: Path | None = None) -> list[Case]:
         ),
         key=lambda case: case.id,
     )
+
+
+@lru_cache(maxsize=512)
+def _pattern(symbol: str) -> re.Pattern[str]:
+    """A whole-word match, tolerating a trailing `()` and a dotted prefix.
+
+    Word boundaries rather than substrings, because `except` inside
+    `exception` is not a mention of the handler. Underscores are part of a
+    word in Python's own sense, so `pool_size` matches as written.
+    """
+    return re.compile(rf"(?<![\w-]){re.escape(symbol)}(?![\w-])", re.IGNORECASE)
+
+
+def _mentions(symbol: str, text: str) -> bool:
+    return _pattern(symbol).search(text) is not None
