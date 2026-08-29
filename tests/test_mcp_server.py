@@ -14,9 +14,15 @@ from pathlib import Path
 import pytest
 
 from augury.core.findings import Finding, Report, Severity
-from augury.core.scheduling import Coverage
+from augury.core.scheduling import Budget, Coverage
 from augury.core.schemas import Comparator, Prediction
-from augury.mcp.server import PROTOCOL_VERSION, Server
+from augury.mcp.server import (
+    INVALID_REQUEST,
+    METHOD_NOT_FOUND,
+    PARSE_ERROR,
+    PROTOCOL_VERSION,
+    Server,
+)
 
 
 class _StubReviewer:
@@ -218,3 +224,168 @@ def test_the_server_speaks_the_protocol_over_a_real_pipe(repo: Path) -> None:
     assert len(replies[1]["result"]["tools"]) == 3
     mapped = json.loads(replies[2]["result"]["content"][0]["text"])
     assert mapped["languages"] == {"go": 1, "python": 1}
+
+
+# -- hostile input ---------------------------------------------------------
+
+
+def test_a_top_level_value_that_is_not_an_object_is_an_invalid_request() -> None:
+    """A JSON-RPC batch is an array, and several MCP clients send one.
+
+    `handle` did `request.get("id")` unguarded, so any valid JSON that is not
+    an object raised AttributeError out of the stdio loop and killed the
+    session mid-stream.
+    """
+    for hostile in (5, "x", [{"jsonrpc": "2.0", "id": 1, "method": "initialize"}], None):
+        out = Server().handle(hostile)
+        assert out is not None, hostile
+        assert out["error"]["code"] == INVALID_REQUEST
+
+
+def test_malformed_json_is_answered_with_a_parse_error_not_silence(repo: Path) -> None:
+    """A truncated request with an id must be told, not left waiting."""
+    import subprocess
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "augury.cli", "mcp", "--root", str(repo)],
+        input='{"jsonrpc": "2.0", "id": 1, "meth\n{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n',
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert completed.returncode == 0, completed.stderr
+    replies = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+    assert replies[0]["error"]["code"] == PARSE_ERROR
+    # And the stream survives: the next well-formed request is still answered.
+    assert replies[1]["id"] == 2
+
+
+def test_a_bad_line_does_not_kill_the_session(repo: Path) -> None:
+    """The whole point: one bad request must cost one request, not the run."""
+    import subprocess
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "augury.cli", "mcp", "--root", str(repo)],
+        input='{"jsonrpc":"2.0","id":1,"method":"initialize"}\n5\n'
+        '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n',
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert completed.returncode == 0, completed.stderr
+    replies = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+    assert [r["id"] for r in replies] == [1, 2, 3] or [r["id"] for r in replies] == [1, None, 2]
+    assert any(r.get("id") == 2 and "result" in r for r in replies)
+
+
+def test_a_failure_inside_a_tool_is_not_reported_as_a_missing_method(repo: Path) -> None:
+    """`except KeyError` straddled the whole pipeline.
+
+    A KeyError raised anywhere inside a review came back as -32601 "Unknown
+    method: tools/call", which many clients treat as "this server has no
+    tools" and drop the tool set for the session -- after the review was paid
+    for.
+    """
+
+    class _Exploding:
+        async def review(self, repo: object, root: Path) -> Report:
+            raise KeyError("layer-name")
+
+    out = Server(api_key="k", reviewer_factory=lambda **_: _Exploding()).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {"name": "augury_review", "arguments": {"path": str(repo)}},
+        }
+    )
+    assert out is not None
+    assert "error" not in out or out["error"]["code"] != METHOD_NOT_FOUND
+
+
+def test_a_malformed_arguments_shape_is_a_tool_error_not_a_protocol_error(repo: Path) -> None:
+    out = Server(api_key=None).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {"name": "augury_map", "arguments": ["/etc"]},
+        }
+    )
+    assert out is not None
+    assert out["result"]["isError"] is True
+
+
+def test_an_explicit_zero_budget_is_not_silently_turned_into_the_default(repo: Path) -> None:
+    """`float(args.get("budget_usd") or DEFAULT)` read an explicit 0 as absent."""
+    seen: list[float] = []
+
+    class _Recording:
+        async def review(self, repo: object, root: Path) -> Report:
+            return Report()
+
+    def factory(**kwargs: Budget) -> _Recording:
+        seen.append(kwargs["budget"].usd)
+        return _Recording()
+
+    out = Server(api_key="k", reviewer_factory=factory).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {"name": "augury_review", "arguments": {"path": str(repo), "budget_usd": 0}},
+        }
+    )
+    assert out is not None
+    assert out["result"]["isError"] is True
+    assert seen == [], "a zero budget must be refused, never quietly raised to the default"
+
+
+def test_a_client_cannot_exceed_the_launcher_s_spending_ceiling(repo: Path) -> None:
+    """The root is fixed by the launcher; so must the money be.
+
+    The client here is a language model, and the tool description is written to
+    persuade it that reviewing is worthwhile.
+    """
+    seen: list[float] = []
+
+    class _Recording:
+        async def review(self, repo: object, root: Path) -> Report:
+            return Report()
+
+    def factory(**kwargs: Budget) -> _Recording:
+        seen.append(kwargs["budget"].usd)
+        return _Recording()
+
+    server = Server(api_key="k", reviewer_factory=factory, max_budget_usd=0.10)
+    server.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {
+                "name": "augury_review",
+                "arguments": {"path": str(repo), "budget_usd": 1_000_000_000},
+            },
+        }
+    )
+    assert seen == [0.10]
+
+
+def test_a_symlink_out_of_the_root_is_refused(tmp_path: Path, repo: Path) -> None:
+    """The boundary survived replacing resolve() with absolute(); this fails it."""
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "escape").symlink_to(repo, target_is_directory=True)
+
+    out = Server(api_key=None, allowed_root=root).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 13,
+            "method": "tools/call",
+            "params": {"name": "augury_map", "arguments": {"path": str(root / "escape")}},
+        }
+    )
+    assert out is not None
+    assert out["result"]["isError"] is True
+    assert "outside" in out["result"]["content"][0]["text"].lower()
