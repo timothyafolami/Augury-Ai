@@ -29,6 +29,7 @@ from augury.core.cartography.languages import EXTENSIONS
 from augury.core.findings import Finding, Measurement, Report
 from augury.core.journal import Journal, Run
 from augury.core.memo import Memo
+from augury.core.proving.environment import Environment, choose_environment
 from augury.core.reference import Registry, requirements_of
 from augury.core.reference.changelog import changelog_notes
 from augury.core.reference.staleness import dependency_findings
@@ -301,7 +302,16 @@ def report(
     reviewed = asyncio.run(run())
 
     if prove:
-        reviewed = asyncio.run(_settle(reviewed, root=root, model=built_model, how_many=prove))
+        # Where the experiments can import the code they measure. A repository
+        # whose dependencies live in an image cannot be measured beside it.
+        where = choose_environment(root=root, scope=limits, survey=found)
+        if where.kind == "compose":
+            banner.note(console, f"proving inside the {where.service} image, which has the deps")
+        elif where.why:
+            banner.note(console, f"proving on this machine: {where.why}")
+        reviewed = asyncio.run(
+            _settle(reviewed, root=root, model=built_model, how_many=prove, environment=where)
+        )
 
     # Where to read about each major gap. Optional and best-effort: search is
     # the first thing to fail offline, and its absence costs the report a
@@ -457,7 +467,14 @@ def history(
         console.print(f"    [dim]{entry.model} · scope={entry.scope or 'whole repo'}[/dim]")
 
 
-async def _settle(report_in: Report, *, root: Path, model: ChatModel, how_many: int) -> Report:
+async def _settle(
+    report_in: Report,
+    *,
+    root: Path,
+    model: ChatModel,
+    how_many: int,
+    environment: Environment | None = None,
+) -> Report:
     """Write and run an experiment for the top findings, and record what it measured.
 
     Only findings carrying a prediction, and only the top few: findings arrive
@@ -486,7 +503,9 @@ async def _settle(report_in: Report, *, root: Path, model: ChatModel, how_many: 
             continue
         remaining -= 1
         try:
-            proof = await prove_finding(finding, root=root, generate=generate)
+            proof = await prove_finding(
+                finding, root=root, generate=generate, environment=environment
+            )
         except CannotMeasure as refusal:
             console.print(f"  [dim]declined {finding.symbol}: {refusal}[/dim]", markup=False)
             settled.append(finding)
