@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from pathlib import Path
 from typing import NoReturn
 
 import typer
@@ -22,6 +23,7 @@ from augury.core.cartography import Cartographer
 from augury.core.findings import Report
 from augury.core.scoring import Score
 from augury.core.settings import Settings, SettingsError, load_settings
+from augury.core.trajectory import Trajectory
 from augury.evaluation.cases import Case, load_cases
 from augury.evaluation.runner import run_arm
 from augury.evaluation.significance import fisher_exact, verdict
@@ -53,6 +55,7 @@ def review(
     case: str = typer.Option(..., help="Case id, e.g. B01"),
     arm: str = typer.Option("augury", help="baseline or augury"),
     prove: bool = typer.Option(False, help="Run the case's experiments against the claims"),
+    trajectory: str = typer.Option("", help="Write every step to this JSONL file"),
 ) -> None:
     """Review one case with one arm and print what it found."""
     chosen = _case(case)
@@ -61,10 +64,15 @@ def review(
 
     model = build_model(settings.spec, api_key=settings.api_key)
 
+    recording = Trajectory(Path(trajectory)) if trajectory else None
+
     async def run() -> Report:
-        result: Report = await reviewer(model, experiments=chosen.experiment_conditions()).review(
-            Cartographer(chosen.repo).map(), chosen.repo
+        built = reviewer(
+            model,
+            experiments=chosen.experiment_conditions(),
+            trajectory=recording,
         )
+        result: Report = await built.review(Cartographer(chosen.repo).map(), chosen.repo)
         return result
 
     report = asyncio.run(run())
