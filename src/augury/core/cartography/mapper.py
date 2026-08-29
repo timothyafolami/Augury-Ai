@@ -98,11 +98,24 @@ EXCLUDED_DIRS = frozenset(
 class Cartographer:
     """Builds a `RepoMap` from a repository root."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, scope: tuple[str, ...] = ()) -> None:
+        """`scope` limits the map to these repo-relative directories.
+
+        A repository is a set of services, and reviewing all of them at once
+        ranks a React component and a Celery worker on one scale. The survey
+        names the directories each service is built from; this is how that
+        answer is used.
+        """
         self._root = Path(root)
+        self._scope = tuple(part.strip("/") for part in scope if part.strip("/"))
 
     def map(self) -> RepoMap:
         sources = sorted(self._source_files())
+        if self._scope and not sources:
+            raise ValueError(
+                f"scope {list(self._scope)} matched no files under {self._root}. "
+                "Reviewing nothing and reporting nothing reads as a clean bill of health."
+            )
         index = self._index(sources)
 
         nodes: list[ModuleNode] = []
@@ -198,7 +211,14 @@ class Cartographer:
             if path.is_file()
             and path.suffix.lower() in EXTENSIONS
             and not EXCLUDED_DIRS & set(path.relative_to(self._root).parts)
+            and self._in_scope(path)
         ]
+
+    def _in_scope(self, path: Path) -> bool:
+        if not self._scope:
+            return True
+        relative = path.relative_to(self._root).as_posix()
+        return any(relative == part or relative.startswith(f"{part}/") for part in self._scope)
 
     def _relative(self, path: Path) -> str:
         return path.relative_to(self._root).as_posix()
