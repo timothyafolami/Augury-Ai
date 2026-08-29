@@ -160,3 +160,14 @@ def test_a_sweep_in_which_every_review_failed_does_not_print_a_recall() -> None:
 
     assert result.failed == 3
     assert result.recall_mean is None, "a run in which nothing completed has no recall"
+
+
+def test_a_trajectory_can_be_produced_by_a_documented_command() -> None:
+    """The committed trajectory had no reproducing command: `Trajectory` was
+    constructed only in tests. An artefact a reader cannot regenerate is the
+    same kind of evidence as a summary."""
+    import inspect
+
+    from augury.cli.main import review
+
+    assert "trajectory" in inspect.signature(review).parameters
