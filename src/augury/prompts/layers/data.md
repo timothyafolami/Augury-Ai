@@ -11,14 +11,13 @@ because the loop and the query live in different layers.
 Specifically look for:
 
 - Read-modify-write on a row without `SELECT ... FOR UPDATE`, an atomic
-  `UPDATE ... SET x = x + n`, or SERIALIZABLE. Predict the divergence under
+  `UPDATE ... SET x = x + n`, or SERIALIZABLE. Predict `final_balance` under
   N concurrent writers.
 - Queries issued inside a loop or a serializer, where the count scales with the
-  result set. Predict queries per request at a stated row count.
-- Filters, joins and ORDER BY on columns with no index. Predict the latency at
-  a stated table size, and say which index would remove it.
+  result set. Predict `queries_per_request` at a stated row count.
+- Filters, joins and ORDER BY on columns with no index. Predict `http_req_duration_p99` at a stated table size, and say which index would remove it.
 - Pool size against the real concurrency ceiling: worker count times threads.
-  Predict the arrival rate at which requests begin queueing rather than failing.
+  Predict `active_connections` against the pool size, and the `worker_saturation` that follows.
 - Transactions held open across a network call.
 
 Do not report a missing index you cannot tie to a query in this file, and do
