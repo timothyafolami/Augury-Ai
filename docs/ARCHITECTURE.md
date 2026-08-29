@@ -154,9 +154,13 @@ The planning documents describe these. None was built.
 | Runbook retrieval corpus | not built; layer briefs are static prompts |
 | A Refiner agent | not built, and not needed: the falsifiability gate is a validator, and a rule that can be written cannot hallucinate |
 
-`src/augury/prompts/refiner.md` is on disk and unwired. It is kept because it
-states the rule the validator enforces, and because deleting the thinking that
-led to a deterministic answer would hide how it was reached.
+`src/augury/prompts/refiner.md` is on disk and unwired. It is kept, rewritten,
+as the specification of the validator that replaced it -- and it is worth
+saying that it did not start out accurate. It described a gate that accepted
+wide ranges the validator rejects, and claimed a rejected finding is dropped
+when in fact the finding is kept and only its claim is withdrawn. A document
+confidently describing the wrong rule is the failure this project is about, so
+it was corrected rather than deleted.
 
 ---
 
