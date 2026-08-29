@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from augury.core.cartography import ModuleNode, RepoMap, Signal
 from augury.core.scheduling import Budget, Scheduler
+from augury.core.scheduling.scheduler import ENOUGH_TO_TRUST, PROBE_BATCH
 
 
 def _repo(count: int) -> RepoMap:
@@ -31,8 +32,21 @@ def _repo(count: int) -> RepoMap:
     )
 
 
+def _rate_known(scheduler: Scheduler, repo: RepoMap) -> None:
+    """Record enough cheap reads that the scheduler has measured the rate.
+
+    Before that it deliberately hands out small batches, because the estimate
+    it starts with is a guess and a guess ten times too cheap spends the whole
+    ceiling before the first result comes back.
+    """
+    for module in repo.modules[:ENOUGH_TO_TRUST]:
+        scheduler.record(module, findings=0, spent_usd=0.0001)
+
+
 def test_a_batch_is_handed_out_whole() -> None:
-    scheduler = Scheduler(_repo(20), Budget(usd=5.0))
+    repo = _repo(20)
+    scheduler = Scheduler(repo, Budget(usd=5.0))
+    _rate_known(scheduler, repo)
 
     batch = scheduler.next_batch(8)
 
@@ -41,9 +55,17 @@ def test_a_batch_is_handed_out_whole() -> None:
 
 
 def test_a_batch_never_exceeds_what_is_left() -> None:
-    scheduler = Scheduler(_repo(3), Budget(usd=5.0))
+    repo = _repo(6)
+    scheduler = Scheduler(repo, Budget(usd=5.0))
+    _rate_known(scheduler, repo)
 
-    assert len(scheduler.next_batch(8)) == 3
+    assert len(scheduler.next_batch(8)) == 3, "three of the six are already read"
+
+
+def test_the_first_batch_is_small_while_the_rate_is_still_a_guess() -> None:
+    scheduler = Scheduler(_repo(20), Budget(usd=5.0))
+
+    assert len(scheduler.next_batch(8)) == PROBE_BATCH
 
 
 def test_an_exhausted_scheduler_returns_an_empty_batch() -> None:
