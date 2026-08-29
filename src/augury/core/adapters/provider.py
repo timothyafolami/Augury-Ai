@@ -82,15 +82,33 @@ NOTHING_BACK = (
 _RAN_OUT = ("eof while parsing", "unexpected end of", "eof expected")
 
 
-# DeepSeek allows 384K output tokens; the others allow far less, and a
-# ceiling nobody reaches costs nothing. This is a backstop against a loop
-# that keeps asking for more, not a target.
+# The same value ModelSpec declares. Two defaults for one quantity, one of
+# which the other forbids, meant an adapter built without a ceiling raised its
+# retry to two tokens -- so the remedy for running out of room guaranteed
+# running out of room.
+DEFAULT_MAX_TOKENS = 16_000
+
+# How much output a provider will actually produce. Raising the ceiling past
+# what a provider allows turns a recoverable truncation into a hard 400 whose
+# message looks nothing like running out of room -- so the next correction
+# would be about the wrong thing entirely.
 MOST_TOKENS = 64_000
+_HEADROOM = {
+    "deepseek": 64_000,
+    "groq": 32_000,
+    "openai": 32_000,
+    "anthropic": 32_000,
+}
 
 
-def _more_room(current: int) -> int:
-    """Twice what was not enough, up to a ceiling worth stopping at."""
-    return min(max(current, 1) * 2, MOST_TOKENS)
+def most_tokens_for(provider: str) -> int:
+    """The largest output budget worth asking this provider for."""
+    return _HEADROOM.get(provider, 16_000)
+
+
+def _more_room(current: int, ceiling: int = MOST_TOKENS) -> int:
+    """Twice what was not enough, up to what the provider will produce."""
+    return min(max(current, 1) * 2, ceiling)
 
 
 def ran_out_of_room(error: str) -> bool:
@@ -206,7 +224,7 @@ class ProviderAdapter:
         model_id: str,
         pricing: Pricing,
         provider: str = "",
-        max_tokens: int = 0,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> None:
         self._client = client
         self._model_id = model_id
@@ -215,6 +233,7 @@ class ProviderAdapter:
         self._max_tokens = max_tokens
         self._usage = Usage()
         self._last_attempt_cost = Usage()
+        self._billed = Usage()
         self.retries = 0
         self.rate_limited = 0
 
@@ -290,7 +309,12 @@ class ProviderAdapter:
                     # treat it as a failure, so the run ends saying why rather
                     # than waiting forever.
                 last = error
-                spent = spent + self._last_attempt_cost
+                # The cost this attempt actually incurred, which is nothing
+                # when the request never reached the provider. Reading it off
+                # the adapter charged this call whatever the last successful
+                # one was billed -- the same mis-attribution `_record` warns
+                # about, through a second piece of shared mutable state.
+                spent = spent + self._billed
                 # Counted only when another attempt will follow: three attempts
                 # is two retries, and reporting three implies a fourth call
                 # that was never made.
@@ -300,13 +324,20 @@ class ProviderAdapter:
                 # Repeating an identical prompt to a deterministic model
                 # repeats the identical failure, so the retry has to differ.
                 if ran_out_of_room(_summarise(error)):
-                    ceiling = _more_room(ceiling or self._max_tokens)
+                    ceiling = _more_room(
+                        ceiling or self._max_tokens, most_tokens_for(self._provider)
+                    )
                 attempt_prompt = prompt + correction_for(_summarise(error))
 
         assert last is not None  # the loop either returned or recorded an error
         raise last
 
     async def _attempt(self, prompt: str, schema: type[T], *, ceiling: int = 0) -> tuple[T, Usage]:
+        # Nothing has been billed for this attempt yet. A request that raises
+        # before the provider answers cost zero and has to say so, or it
+        # inherits the charge from whichever attempt last succeeded.
+        self._billed = Usage()
+
         # DeepSeek answers 400 to the schema-shaped response_format the others
         # accept, so it is asked for a JSON object and shown the schema in the
         # prompt instead. What comes back is validated identically either way.
@@ -325,6 +356,10 @@ class ProviderAdapter:
             extra_create_args=extra,
         )
         cost = self._record(response.usage)
+        # What *this* attempt was billed. Cleared when the attempt starts, so a
+        # request that raised before the provider answered adds nothing, and an
+        # answer that was billed and then rejected still adds what it cost.
+        self._billed = cost
 
         # The provider says why it stopped. A reasoning model spends the output
         # budget thinking before it answers, so an overflow arrives as empty
