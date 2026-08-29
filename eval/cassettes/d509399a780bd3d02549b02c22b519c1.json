@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "data"
+  ],
+  "reasoning": "Defines ORM persistence models and foreign‑key relationships, which are the data layer's responsibility."
+}
