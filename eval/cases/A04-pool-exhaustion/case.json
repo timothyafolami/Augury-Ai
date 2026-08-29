@@ -17,7 +17,8 @@
       ],
       "verification": "load",
       "expected_metric": "http_req_duration_p99",
-      "notes": "The service is otherwise correct. Nothing in the file is wrong on its own; the defect is the relationship between two numbers in two different files."
+      "notes": "The service is otherwise correct. Nothing in the file is wrong on its own; the defect is the relationship between two numbers in two different files.",
+      "unmeasurable_because": "Its metric is http_req_duration_p99, which no experiment in this suite settles: a wall-clock percentile cannot return the same number twice, and that is the bar every experiment here has to clear. A04 ships no experiments at all and its manifest already declares it non-discriminating; this records the reason rather than leaving it to the directory layout."
     }
   ],
   "notes": "Deliberately easy. Three files and one defect is a repository where reading everything is free, so it cannot distinguish an arm that chooses what to read from one that reads it all."
