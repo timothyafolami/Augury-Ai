@@ -42,6 +42,13 @@ class ModuleNode(BaseModel):
         "claim about the code; this distinguishes it from a gap in our table.",
     )
     fan_in: int = Field(default=0, ge=0, description="How many modules import this one")
+    depth: int | None = Field(
+        default=None,
+        ge=0,
+        description="Hops along the import graph from the nearest entrypoint. "
+        "0 is where a request arrives. None means nothing a request reaches "
+        "imports this, which is a claim about the module rather than a gap.",
+    )
     churn: int = Field(default=0, ge=0, description="Commits touching this file")
 
 
@@ -56,6 +63,12 @@ class RepoMap(BaseModel):
     skipped: dict[str, str] = Field(
         default_factory=dict,
         description="Files deliberately not read, mapped to why. Never silent.",
+    )
+    unreachable: tuple[str, ...] = Field(
+        default=(),
+        description="Modules no entrypoint reaches. Empty when the repository "
+        "declares no entrypoint at all, because then nothing is reachable and "
+        "calling everything unreachable would say nothing.",
     )
     context: dict[str, str] = Field(
         default_factory=dict,
