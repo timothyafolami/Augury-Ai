@@ -2,5 +2,5 @@
   "specialists": [
     "data"
   ],
-  "reasoning": "Defines the Order ORM model with columns, types, foreign keys, and indexes, which are relevant to data layer review."
+  "reasoning": "Defines the Order SQLAlchemy model with columns, foreign keys, and numeric fields, which are relevant to data handling."
 }
