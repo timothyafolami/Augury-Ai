@@ -14,8 +14,10 @@ FORECAST-02   app/serializers.py:11                                    high
   Proof    ran experiments/queries_per_request.py -> measured 51           MISS
 ```
 
-The `Proof` line is the product. It is also, so far, the only thing that
-distinguishes Augury from a single well-written prompt.
+The `Proof` line is the product. It is not what distinguishes the two arms --
+both are graded by the same experiments, which is the only way the comparison
+could be fair. It is what distinguishes either of them from a review nobody
+can check.
 
 ---
 
@@ -89,11 +91,24 @@ the case's own experiments. `openai/gpt-oss-120b` on Groq at temperature 0.
 | cost | $0.036 | $0.216 (6.0x) | |
 
 **The pipeline does not beat one well-written prompt.** Not on defects found,
-not on whether its numbers survive testing. It costs six times as much and
-produces more findings of the same quality.
+not on whether its numbers survive testing. It costs six times as much, and on
+hit rate its point estimate is nominally *lower* than the baseline's.
+
+It is also not shown to be worse. Ten seeded defects over three cases cannot
+resolve a difference this size in either direction, and saying so is the honest
+end of this experiment rather than a hedge before a claim. The verdict column
+above says "no detectable difference" and not "no difference" for that reason:
+a study too small to find one has not shown there is none.
 
 That is the result. It is not the one this was built to produce, and it is the
 one the evidence supports.
+
+A note on the case set. **A04 is pooled into these numbers and should not carry
+weight**: its own manifest calls it too easy to distinguish the arms, both
+score 1.000 on it, and it ships no experiments, so it pulls both arms toward
+parity. On B01 and C01 alone the picture is the same shape -- recall 0.730
+against 0.725, hit rates 0.893 and 0.757 unchanged, since A04 contributes no
+tested predictions at all.
 
 ### The finding is about measurement, not about agents
 
@@ -139,7 +154,7 @@ and against more than one remediation, because passing against one is how
 ```bash
 make install
 cp .env.example .env      # add GROQ_API_KEY
-make check                # lint, types, 388 tests
+make check                # lint, types, 422 tests
 ```
 
 Full instructions, including reproducing the published numbers with no API key,
