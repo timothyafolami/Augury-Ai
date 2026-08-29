@@ -13,13 +13,18 @@ forecast could not be checked.
 
 from __future__ import annotations
 
-import shutil
+import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from augury.core.proving.interpreter import interpreter_for
 from augury.core.survey.model import Survey
+
+# Long enough for a laptop daemon that is awake but busy; short enough that a
+# daemon which is starting up does not hold the review.
+PROBE_TIMEOUT = 5.0
 
 # Where the script is mounted inside the container. Outside the working
 # directory so it cannot collide with the repository's own files.
@@ -63,6 +68,34 @@ class Environment:
         return str(self.python)
 
 
+def docker_is_up(*, probe: Callable[[], tuple[int, str]] | None = None) -> bool:
+    """Whether a container would actually start.
+
+    A `docker` binary on PATH is not the question -- Docker Desktop being quit
+    is the common case on a laptop, and a compose run against a dead daemon
+    fails with a connection error rather than a measurement, which would mark
+    every finding BROKEN for a reason unrelated to the code under review.
+    """
+    ask = probe or _ask_the_daemon
+    try:
+        code, _ = ask()
+    except (OSError, subprocess.SubprocessError):
+        # No binary, or a daemon too slow to answer. Both mean: not here.
+        return False
+    return code == 0
+
+
+def _ask_the_daemon() -> tuple[int, str]:
+    """The cheapest question that requires the daemon to answer it."""
+    done = subprocess.run(
+        ["docker", "version", "--format", "{{.Server.Version}}"],
+        capture_output=True,
+        text=True,
+        timeout=PROBE_TIMEOUT,
+    )
+    return done.returncode, (done.stdout + done.stderr).strip()
+
+
 def choose_environment(
     *,
     root: Path,
@@ -76,7 +109,7 @@ def choose_environment(
     third-party imports still runs, and refusing would turn a measurable claim
     into an unmeasurable one for tidiness.
     """
-    available = shutil.which("docker") is not None if docker_available is None else docker_available
+    available = docker_is_up() if docker_available is None else docker_available
 
     service = _service_for(scope, survey)
     if service and available:
@@ -85,7 +118,7 @@ def choose_environment(
     python = interpreter_for(root / scope[0] if scope else root)
     if service and not available:
         why = (
-            f"docker is not available, so the {service} image could not be used and "
+            f"docker is not running, so the {service} image could not be used and "
             "the experiment ran on this machine, where the repository's "
             "dependencies may not be installed"
         )
