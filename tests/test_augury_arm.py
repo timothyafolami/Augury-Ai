@@ -139,9 +139,9 @@ async def test_the_budget_stops_the_review(tmp_path: Path) -> None:
     root = make_repo(tmp_path)
     stub = model()
 
-    report = await AuguryReviewer(
-        stub, budget=Budget(usd=0.0001, calls_per_module=3)
-    ).review(Cartographer(root).map(), root)
+    report = await AuguryReviewer(stub, budget=Budget(usd=0.0001, calls_per_module=3)).review(
+        Cartographer(root).map(), root
+    )
 
     assert stub.prompts == []
     assert report.coverage is not None
