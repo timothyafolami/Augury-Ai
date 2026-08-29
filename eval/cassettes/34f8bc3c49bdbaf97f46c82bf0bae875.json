@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 9,
+      "layer": "security",
+      "symbol": "DATABASE_URL",
+      "mechanism": "Hardcoded database credentials expose a secret in source code, violating the rule against secrets in source, logs, or URLs.",
+      "severity": "high",
+      "remediation": "Remove the default credential string; require DATABASE_URL to be provided via environment only, e.g., `DATABASE_URL = os.environ[\"DATABASE_URL\"]` and store credentials securely outside the codebase.",
+      "arithmetic": "The default value contains the password \"app\" in clear text; any attacker with code access can obtain valid DB credentials, leading to full database compromise.",
+      "prediction": null
+    }
+  ]
+}
