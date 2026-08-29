@@ -28,6 +28,7 @@ from augury.core.findings import Dropped, Report
 from augury.core.indexes import indexed_columns, withdraw_false_index_claims
 from augury.core.languages import brief_for
 from augury.core.layers import Layer
+from augury.core.memo import Memo
 from augury.core.metrics import describe, vocabulary
 from augury.core.priority import rank
 from augury.core.reachability import cap_severity
@@ -80,6 +81,7 @@ class AuguryReviewer:
         experiments: dict[str, str] | None = None,
         concurrency: int = DEFAULT_CONCURRENCY,
         watching: Callable[[Progress], None] | None = None,
+        memo: Memo | None = None,
     ) -> None:
         self._model = model
         self._trace = trajectory
@@ -96,6 +98,10 @@ class AuguryReviewer:
         # Called after every module. A review of a real backend runs for
         # minutes; silence for that long is indistinguishable from a hang.
         self._watching = watching
+        # Disabled unless a caller supplies one. A cache that turns itself on
+        # is a cache that can serve a stale answer to someone who did not ask
+        # for one.
+        self._memo = memo or Memo(Path("."), enabled=False)
 
     async def review(self, repo: RepoMap, root: Path) -> Report:
         # What this repository declares it depends on. Read once; the registry
@@ -258,7 +264,15 @@ class AuguryReviewer:
             metrics=vocabulary(),
             experiments=describe(self._experiments),
         )
+        # The rendered prompt is the question, so it is the key: a changed
+        # layer brief, language brief or version block correctly misses.
+        remembered = self._memo.recall(source, layer.name, language, prompt)
+        if remembered is not None:
+            return remembered
+
         completion = await self._model.call(prompt=prompt, schema=DraftReport)
+        draft = cast("DraftReport", completion.result)
+        self._memo.remember(source, layer.name, language, prompt, draft)
         if self._trace is not None:
             self._trace.record_call(
                 agent=f"analyst:{layer.name}",
@@ -267,7 +281,7 @@ class AuguryReviewer:
                 usage=completion.usage,
                 retries=completion.retries,
             )
-        return cast("DraftReport", completion.result)
+        return draft
 
     @staticmethod
     def _read(path: Path) -> str:
