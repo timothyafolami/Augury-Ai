@@ -81,7 +81,8 @@ def baseline_reviewer(model: ChatModel) -> Reviewer:
 
 def _baseline_reviewer(model: ChatModel) -> Reviewer:
     async def review(case: Case) -> Report:
-        return await BaselineReviewer(model).review(Cartographer(case.repo).map(), case.repo)
+        reviewer = BaselineReviewer(model, experiments=case.experiment_conditions())
+        return await reviewer.review(Cartographer(case.repo).map(), case.repo)
 
     return review
 
