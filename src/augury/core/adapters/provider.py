@@ -127,7 +127,14 @@ class ProviderAdapter:
         attempt_prompt = prompt
         spent = Usage()
 
-        for attempt in range(MAX_ATTEMPTS):
+        # A while loop, not `for attempt in range(MAX_ATTEMPTS)`. The previous
+        # version said in a comment that a rate limit does not count against
+        # the attempts and then used `continue`, which advances the counter --
+        # so three consecutive 429s exhausted the loop and killed a
+        # full-coverage run at module nine. The comment was right about what
+        # should happen and the code did the opposite.
+        attempt = 0
+        while attempt < MAX_ATTEMPTS:
             try:
                 result, cost = await self._attempt(attempt_prompt, schema)
                 # A rejected attempt still consumed tokens, so the cost of this
@@ -139,10 +146,11 @@ class ProviderAdapter:
                 # count against MAX_ATTEMPTS and the prompt is not "corrected"
                 # -- correcting a prompt that was never read is how a transient
                 # 429 turns into three wasted calls and then a lost run.
-                if RateLimited.looks_like(str(error)):
-                    waited = await self._wait_out(error)
-                    if waited:
-                        continue
+                if RateLimited.looks_like(str(error)) and await self._wait_out(error):
+                    continue  # `attempt` deliberately unchanged
+                    # Waited as long as this is willing to. Fall through and
+                    # treat it as a failure, so the run ends saying why rather
+                    # than waiting forever.
                 last = error
                 spent = spent + self._last_attempt_cost
                 # Counted only when another attempt will follow: three attempts
@@ -150,6 +158,7 @@ class ProviderAdapter:
                 # that was never made.
                 if attempt < MAX_ATTEMPTS - 1:
                     self.retries += 1
+                attempt += 1
                 # Repeating an identical prompt to a deterministic model
                 # repeats the identical failure, so the retry has to differ.
                 attempt_prompt = prompt + CORRECTION.format(error=_summarise(error))
