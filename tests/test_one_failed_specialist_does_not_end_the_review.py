@@ -76,38 +76,65 @@ async def test_a_module_that_fails_leaves_a_gap_in_place_not_a_shorter_list() ->
     module, so a module that could not be read comes back as a module with no
     findings -- which is what it is -- in the position it was asked about.
     """
-    from augury.agents.augury import gather_each
+    from augury.agents.augury import Reading, gather_each
 
-    async def ok() -> DraftReport:
-        return DraftReport(findings=[])
+    async def ok() -> Reading:
+        return Reading.of(DraftReport(findings=[]))
 
-    async def broken() -> DraftReport:
+    async def broken() -> Reading:
         raise ValueError("returned an empty response")
 
-    kept = await gather_each([ok(), broken(), ok()], instead=DraftReport(findings=[]))
+    kept = await gather_each([ok(), broken(), ok()], instead=Reading.unread("x", "gone"))
 
     assert len(kept) == 3, "one result per module asked about, in order"
 
 
 async def test_a_module_that_fails_is_still_counted_as_read() -> None:
     """Otherwise the scheduler offers it again and the run cannot end."""
-    from augury.agents.augury import gather_each
+    from augury.agents.augury import Reading, gather_each
 
-    async def broken() -> DraftReport:
+    async def broken() -> Reading:
         raise ValueError("nope")
 
-    kept = await gather_each([broken()], instead=DraftReport(findings=[]))
+    kept = await gather_each([broken()], instead=Reading.unread("x", "gone"))
 
-    assert kept[0].findings == []
+    assert kept[0].report.findings == []
+    assert not kept[0].read, "a module that raised was not read"
 
 
 async def test_cancellation_still_stops_a_batch() -> None:
     import asyncio
 
-    from augury.agents.augury import gather_each
+    from augury.agents.augury import Reading, gather_each
 
-    async def cancelled() -> DraftReport:
+    async def cancelled() -> Reading:
         raise asyncio.CancelledError
 
     with pytest.raises(asyncio.CancelledError):
-        await gather_each([cancelled()], instead=DraftReport(findings=[]))
+        await gather_each([cancelled()], instead=Reading.unread("x", "gone"))
+
+
+async def test_a_module_no_specialist_could_read_is_not_reported_as_clean() -> None:
+    """Absorbing the failure must not turn it into a clean bill of health.
+
+    When every specialist on a module fails, the module produced no findings
+    for the same reason an unread file produces none -- nobody looked. Reported
+    as analysed, the coverage line claims a module was reviewed that was not,
+    and the worse the provider behaves the cleaner the report looks.
+    """
+    from augury.agents.augury import Reading
+
+    unread = Reading.unread("app.py", "every specialist failed")
+
+    assert not unread.read
+    assert unread.report.findings == []
+    assert "specialist" in unread.why
+
+
+def test_a_module_that_was_read_says_so() -> None:
+    from augury.agents.augury import Reading
+
+    read = Reading.of(DraftReport(findings=[]))
+
+    assert read.read
+    assert read.why == ""
