@@ -61,7 +61,9 @@ def review(
     model = build_model(settings.spec, api_key=settings.api_key)
 
     async def run() -> Report:
-        result: Report = await reviewer(model).review(Cartographer(chosen.repo).map(), chosen.repo)
+        result: Report = await reviewer(model, experiments=chosen.experiment_conditions()).review(
+            Cartographer(chosen.repo).map(), chosen.repo
+        )
         return result
 
     report = asyncio.run(run())
