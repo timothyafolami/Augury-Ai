@@ -22,6 +22,7 @@ from rich.table import Table
 from augury.agents.augury import AuguryReviewer
 from augury.agents.baseline import BaselineReviewer
 from augury.cli import banner
+from augury.cli.quiet import quiet_dependency_noise
 from augury.cli.rendering import languages_read, service_table
 from augury.core.adapters.base import ChatModel
 from augury.core.adapters.provider import model_from
@@ -61,6 +62,11 @@ ARMS = {"baseline": BaselineReviewer, "augury": AuguryReviewer}
 
 # Typer prints local variables in tracebacks by default, and `api_key` is a
 # local at every call site that builds a model.
+# Before any command runs: one dependency warning would otherwise print nine
+# lines per model call, which on a real repository is several hundred lines of
+# traceback about a field this project never declared.
+quiet_dependency_noise()
+
 app = typer.Typer(
     help="Reads the code, makes a falsifiable claim, runs the experiment.",
     pretty_exceptions_show_locals=False,
