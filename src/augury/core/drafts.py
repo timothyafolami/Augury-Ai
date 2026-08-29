@@ -15,39 +15,44 @@ testable is withdrawn, and the reason is recorded.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from augury.core.findings import Dropped, Finding, Report, Severity
 from augury.core.schemas import Comparator, Prediction
 
 
 class DraftPrediction(BaseModel):
-    """A prediction as the model states it, before validation."""
+    """A prediction as the model states it, before validation.
+
+    Every field is required, because strict structured-output providers demand
+    that each declared property also appear in `required` and reject the whole
+    response otherwise. Optional means nullable here, never absent.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
-    metric: str = ""
-    comparator: Comparator = Comparator.AT_LEAST
-    value: float = 0.0
-    upper: float | None = None
-    unit: str = ""
-    condition: str = ""
+    metric: str
+    comparator: Comparator
+    value: float
+    upper: float | None
+    unit: str
+    condition: str
 
 
 class DraftFinding(BaseModel):
-    """A finding as the model states it."""
+    """A finding as the model states it. Every field required, null allowed."""
 
     model_config = ConfigDict(extra="ignore")
 
-    path: str = ""
-    line: int = 0
-    layer: str = "unknown"
-    symbol: str = "unknown"
-    mechanism: str = ""
-    severity: Severity = Severity.MEDIUM
-    remediation: str = ""
-    arithmetic: str = ""
-    prediction: DraftPrediction | None = None
+    path: str
+    line: int
+    layer: str
+    symbol: str
+    mechanism: str
+    severity: Severity
+    remediation: str
+    arithmetic: str
+    prediction: DraftPrediction | None
 
 
 class DraftReport(BaseModel):
@@ -55,7 +60,7 @@ class DraftReport(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    findings: list[DraftFinding] = Field(default_factory=list)
+    findings: list[DraftFinding]
 
 
 def to_report(
