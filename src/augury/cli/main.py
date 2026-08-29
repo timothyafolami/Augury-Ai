@@ -300,6 +300,9 @@ def report(
 
     reviewed = asyncio.run(run())
 
+    if prove:
+        reviewed = asyncio.run(_settle(reviewed, root=root, model=built_model, how_many=prove))
+
     # Where to read about each major gap. Optional and best-effort: search is
     # the first thing to fail offline, and its absence costs the report a
     # section rather than the run.
