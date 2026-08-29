@@ -30,7 +30,9 @@ def defect(**overrides: object) -> Defect:
     )
 
 
-def report(path: str, symbol: str, mechanism: str = "the pool is small") -> Report:
+def report(
+    path: str, symbol: str, mechanism: str = "the pool is smaller than the worker count"
+) -> Report:
     return Report(
         findings=(
             Finding(
