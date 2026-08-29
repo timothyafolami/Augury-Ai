@@ -8,3 +8,7 @@ __pycache__/
 .env
 eval/cassettes/*.tmp
 .DS_Store
+
+# SQLite files the case experiments create when they run. The schema lives
+# in the case's own store module; the file is a build artefact.
+*.db
