@@ -76,6 +76,9 @@ ALLOWED = {
     "test_provider_adapter.py",
     # This file, which calls it inside a fixture to prove the check works.
     "test_model_from_settings.py",
+    # Checks a provider can be constructed at all, which is what build_model
+    # does and what model_from would hide behind settings.
+    "test_deepseek_provider.py",
 }
 
 
