@@ -9,19 +9,35 @@ import pytest
 
 from augury.prompts import PromptError, available, render
 
+# Rendered against `triage`, which is wired to an agent. These once used
+# `refiner`, which is not sent to any model -- so the render machinery was
+# exercised entirely through a template nothing renders in production.
+TRIAGE_VARIABLES = {
+    "path": "app/db.py",
+    "language": "python",
+    "loc": "40",
+    "fan_in": "3",
+    "signals": "data",
+    "context": "compose.yaml",
+    "source": "engine = create_async_engine(url, pool_size=5)",
+    "specialists": "data, network",
+}
+
 
 def test_renders_a_prompt_with_its_variables() -> None:
-    text = render("refiner", finding="the pool is too small", evidence="pool_size=5")
+    text = render("triage", **TRIAGE_VARIABLES)
 
-    assert "the pool is too small" in text
+    assert "app/db.py" in text
     assert "pool_size=5" in text
 
 
 def test_a_missing_variable_is_an_error_not_a_literal_brace() -> None:
     """Shipping a prompt containing the characters `{module}` to a model is a
     silent quality failure that looks like a bad model rather than a bug."""
-    with pytest.raises(PromptError, match="finding"):
-        render("refiner", evidence="pool_size=5")
+    incomplete = {k: v for k, v in TRIAGE_VARIABLES.items() if k != "source"}
+
+    with pytest.raises(PromptError, match="source"):
+        render("triage", **incomplete)
 
 
 def test_an_unknown_prompt_names_what_is_available() -> None:
