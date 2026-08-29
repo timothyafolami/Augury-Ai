@@ -209,3 +209,88 @@ def test_no_docker_found_leaves_the_path_alone() -> None:
     compose = Environment(kind="compose", root=Path("/repo"), service="api")
 
     assert compose.path(docker_at=None) == BARE_PATH
+
+
+def _rooted() -> Survey:
+    """A compose file that says `build: .` -- the commonest single-service shape."""
+    return Survey(
+        services=(Service(name="app", source_root="", ports=("8000:8000",)),),
+        source_roots=("",),
+    )
+
+
+def test_a_service_built_from_the_repository_root_is_found() -> None:
+    """`build: .` normalises to an empty source root, which is falsy.
+
+    Filtering on truthiness dropped it before any comparison, so the commonest
+    compose layout there is fell back to this machine and reported that no
+    service builds from the reviewed directory -- for a repository where one
+    builds from all of it.
+    """
+    chosen = choose_environment(
+        root=Path("/repo"), scope=(), survey=_rooted(), docker_available=True
+    )
+
+    assert chosen.kind == "compose"
+    assert chosen.service == "app"
+
+
+def test_a_root_context_covers_a_narrowed_scope_too() -> None:
+    """Everything is inside `.`, including `backend/src`."""
+    chosen = choose_environment(
+        root=Path("/repo"), scope=("backend/src",), survey=_rooted(), docker_available=True
+    )
+
+    assert chosen.kind == "compose"
+
+
+def test_a_service_named_like_a_flag_is_refused() -> None:
+    """A compose file in a repository under review is untrusted input.
+
+    `docker compose run ... --dry-run python script.py` makes docker treat the
+    service name as its own flag and `python` as the service, so the experiment
+    never runs and every claim about that repository is reported unmeasured.
+    A reviewed repository must not be able to suppress its own proofs.
+    """
+    hostile = Survey(
+        services=(Service(name="--dry-run", source_root="backend", ports=("80:80",)),),
+        source_roots=("backend",),
+    )
+
+    chosen = choose_environment(
+        root=Path("/repo"), scope=("backend",), survey=hostile, docker_available=True
+    )
+
+    assert chosen.kind == "local"
+    assert "name" in chosen.why
+
+
+def test_a_service_name_that_is_merely_unusual_is_still_allowed() -> None:
+    """Compose permits letters, digits, dot, underscore and dash."""
+    fine = Survey(
+        services=(Service(name="api_v2.1-blue", source_root="backend", ports=("80:80",)),),
+        source_roots=("backend",),
+    )
+
+    chosen = choose_environment(
+        root=Path("/repo"), scope=("backend",), survey=fine, docker_available=True
+    )
+
+    assert chosen.service == "api_v2.1-blue"
+
+
+def test_a_flag_named_service_does_not_win_over_a_usable_one() -> None:
+    """Rejecting one hostile name must not cost the review a real service."""
+    mixed = Survey(
+        services=(
+            Service(name="-d", source_root="backend", ports=("80:80",)),
+            Service(name="api", source_root="backend", ports=("81:80",)),
+        ),
+        source_roots=("backend",),
+    )
+
+    chosen = choose_environment(
+        root=Path("/repo"), scope=("backend",), survey=mixed, docker_available=True
+    )
+
+    assert chosen.service == "api"
