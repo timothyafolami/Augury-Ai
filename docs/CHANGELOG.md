@@ -368,6 +368,77 @@ Separating them needs more cases, not more seeds.
 
 ---
 
+## Iteration 14 — the experiments were measuring the harness, again
+
+**Tried.** Publishing the C01 comparison.
+
+**Evidence.** Both arms scored a hit rate of **0.000 on C01 across seventeen
+tested predictions**, and they were right:
+
+> claim: `queries_per_request at least 101, reporting 100 shipments`
+> measured: 41, because the experiment reports 40
+
+Correct mechanism, correct direction, correct file, scored a Miss because the
+experiment ran a different scenario than the claim was about. A prediction
+carries a condition and the Prover ignored it.
+
+**Decided.** Each case publishes what scenario every experiment runs, to both
+arms identically. It reveals which metrics a case can measure; it reveals
+nothing about where the defects are or what the numbers should be, and a test
+asserts the conditions contain no word like "defect" or "should be". C01's hit
+rates went from 0.000 to 0.867 and 0.700 -- the reviewers had never been the
+problem.
+
+A second adversarial pass on C01 then found three more:
+
+- **`queue_depth` reported 121 for an unbounded queue and for one bounded at
+  512.** It discriminated only against `maxsize=32`, the bound the remediation
+  happened to use. It was measuring arithmetic on three harness constants.
+- **`active_connections` measured CPython's garbage collector.** One
+  `gc.collect()` made the leaking and the correct version identical; the same
+  code reported 6, 20 or 0 depending on GC configuration.
+- **Recall inverted.** The whole-word matcher rejected `leaks` for the symbol
+  `leak`, so a review describing all four defects in natural English scored
+  **0.000**, while four findings whose mechanism was a full stop scored
+  **1.000**.
+
+All fixed. Inflection counts and derivation does not; a finding must say what
+is wrong rather than only where; `queue_depth` offers more events than any
+bound and reports the queue's capacity; `active_connections` measures pool
+exhaustion, which cannot be collected away. A new test class checks every
+experiment against **more than one** remediation, because passing against one
+is exactly how `queue_depth` hid.
+
+---
+
+## Iteration 15 — the result
+
+**Three cases, ten seeded defects, five seeds per arm**, on a harness where
+every experiment is proven to discriminate and both arms are proven to receive
+the same information.
+
+| metric | baseline | augury | verdict |
+|---|---|---|---|
+| seeded recall | 0.760 | 0.760 | no difference (permutation p = 1.00) |
+| hit rate | 0.893 (25/28) | 0.757 (28/37) | no difference (Fisher p = 0.21) |
+| cost | $0.036 | $0.216 | 6.0x |
+
+**The pipeline does not beat one well-written prompt**, on either metric, at
+six times the cost. That is the finding.
+
+It is worth being precise about what was and was not shown. The pipeline is
+not worse: p = 0.21 on a hit rate favouring the baseline is not evidence
+either. Ten seeded defects over three cases cannot resolve a difference this
+size in either direction, and saying so is the honest end of this experiment
+rather than a hedge before a claim.
+
+What the project actually demonstrates is the harness: ten defects that read
+correctly line by line, eight experiments that provably distinguish working
+code from broken code, and an evaluation that caught its own author being
+wrong four times.
+
+---
+
 ## Removed
 
 Nothing yet. When something is removed, it stays listed here with what it cost
