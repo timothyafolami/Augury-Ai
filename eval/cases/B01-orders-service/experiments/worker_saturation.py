@@ -13,17 +13,28 @@ The last line printed is the measurement, as a share of workers from 0 to 1.
 """
 
 import asyncio
+import os
 import socket
 import sys
 import threading
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "repo"))
+# The repository under measurement. Overridable so the same experiment can be
+# run against a remediated copy: an experiment that reports the same number
+# either way is not measuring the defect, and tests/test_experiments_
+# discriminate.py proves each one does by pointing this at the fixed version.
+REPO = Path(os.environ.get("AUGURY_CASE_REPO", Path(__file__).resolve().parent.parent / "repo"))
+sys.path.insert(0, str(REPO))
 
 from app.clients import shipping  # noqa: E402
 
 WORKERS = 4
-DEADLINE_SECONDS = 3.0
+
+# Longer than any plausible client default. An earlier version used three
+# seconds, which is under httpx's own five-second default, so it reported every
+# worker held even for a client with a perfectly good timeout. The number was a
+# property of this constant rather than of the code under review.
+DEADLINE_SECONDS = 8.0
 
 _keep_open: list[socket.socket] = []
 
