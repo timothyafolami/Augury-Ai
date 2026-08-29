@@ -72,3 +72,48 @@ def test_an_answer_is_remembered_rather_than_asked_for_again() -> None:
     registry.facts_for_many(("redis",))
     registry.facts_for("redis")
     assert len(asked) == 1
+
+
+def test_a_truncated_response_is_a_missing_package_not_a_crash() -> None:
+    """`http.client.IncompleteRead` is neither URLError, OSError nor ValueError.
+
+    It escaped the "every failure is None" contract, propagated out of the
+    thread pool mid-batch, and aborted the command before the review began --
+    with a raw urllib traceback, because the dependency pass runs before the
+    guard that turns a provider failure into a sentence.
+    """
+    import http.client
+
+    def truncated(url: str) -> str | None:
+        raise http.client.IncompleteRead(b'{"info":')
+
+    assert Registry(fetch=truncated).facts_for("redis") is None
+
+
+def test_a_truncated_response_lands_in_the_audit_rather_than_the_traceback() -> None:
+    """The whole point of the Audit type: unreachable is reported, not raised."""
+    import http.client
+
+    from augury.core.reference.staleness import dependency_audit
+
+    def truncated(url: str) -> str | None:
+        raise http.client.IncompleteRead(b"")
+
+    audit = dependency_audit({"redis": "4.0.0"}, Registry(fetch=truncated))
+
+    assert audit.unreachable == ("redis",)
+
+
+def test_a_batch_survives_one_package_that_raises() -> None:
+    """One bad response must not take the other seven lookups with it."""
+    import http.client
+
+    def flaky(url: str) -> str | None:
+        if "redis" in url:
+            raise http.client.BadStatusLine("nonsense")
+        return _BODY
+
+    answers = Registry(fetch=flaky).facts_for_many(("redis", "pandas", "celery"))
+
+    assert answers["redis"] is None
+    assert answers["pandas"] is not None
