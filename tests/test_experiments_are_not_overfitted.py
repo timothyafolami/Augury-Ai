@@ -51,9 +51,7 @@ def patched(case: Path, tmp_path: Path, relative: str, old: str, new: str) -> Pa
 
 
 @pytest.mark.parametrize("bound", [32, 512, 4096])
-def test_queue_depth_detects_any_bound_not_one_particular_bound(
-    tmp_path: Path, bound: int
-) -> None:
+def test_queue_depth_detects_any_bound_not_one_particular_bound(tmp_path: Path, bound: int) -> None:
     case = CASES / "C01-notifications"
     seeded = measure(case, "queue_depth", case / "repo")
     repo = patched(
@@ -90,9 +88,7 @@ RELEASES = {
 
 
 @pytest.mark.parametrize("style", sorted(RELEASES))
-def test_the_leak_is_detected_however_the_session_is_released(
-    tmp_path: Path, style: str
-) -> None:
+def test_the_leak_is_detected_however_the_session_is_released(tmp_path: Path, style: str) -> None:
     case = CASES / "C01-notifications"
     seeded = measure(case, "active_connections", case / "repo")
     repo = patched(case, tmp_path, "app/store/session.py", LEAK, RELEASES[style])
