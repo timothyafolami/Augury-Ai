@@ -23,7 +23,7 @@ from augury.core.cartography.languages import EXTENSIONS
 from augury.core.drafts import DraftReport, to_report
 from augury.core.findings import Report
 from augury.core.layers import Layer
-from augury.core.metrics import vocabulary
+from augury.core.metrics import describe, vocabulary
 from augury.core.scheduling import Budget, Scheduler
 from augury.core.trajectory import Trajectory
 from augury.evaluation.reconcile import reconcile
@@ -47,9 +47,11 @@ class AuguryReviewer:
         *,
         budget: Budget | None = None,
         trajectory: Trajectory | None = None,
+        experiments: dict[str, str] | None = None,
     ) -> None:
         self._model = model
         self._trace = trajectory
+        self._experiments = experiments or {}
         self._triage = Triage(model, trajectory=trajectory)
         # One triage call plus a specialist call each. Declared so the budget
         # is a ceiling on what this arm actually spends, not on a fiction.
@@ -136,6 +138,7 @@ class AuguryReviewer:
             source=source,
             context=context,
             metrics=vocabulary(),
+            experiments=describe(self._experiments),
         )
         completion = await self._model.call(prompt=prompt, schema=DraftReport)
         if self._trace is not None:
