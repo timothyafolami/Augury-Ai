@@ -5,17 +5,17 @@
       "line": 24,
       "layer": "network",
       "symbol": "charge",
-      "mechanism": "Per‑request httpx.AsyncClient prevents connection reuse, so each call incurs a full TLS handshake and loses the benefits of a connection pool (reference: \"A connection pool is a queue with a hard capacity … usually two or three pools are stacked … the narrowest one sets the real concurrency\").",
+      "mechanism": "A new httpx.AsyncClient is instantiated on every call, creating a fresh connection pool of size 1. This eliminates connection reuse, forces a TLS handshake for each request and caps the effective outbound‑connection pool to one per request, matching the reference that a pool’s hard capacity limits concurrency.",
       "severity": "high",
-      "remediation": "Instantiate a single httpx.AsyncClient at module load time (or reuse a client pool) and reuse it for all charge calls.",
-      "arithmetic": "Typical TLS handshake ≈100 ms per new TCP/TLS connection. Because a new client (and thus a new connection) is created on every request, the 99th‑percentile request latency is increased by at least 100 ms regardless of load.",
+      "remediation": "Create a module‑level httpx.AsyncClient with appropriate Limits (e.g., httpx.AsyncClient(timeout=10.0, limits=httpx.Limits(max_keepalive_connections=20))) and reuse it across calls instead of constructing inside the function.",
+      "arithmetic": "TLS handshake ≈ 100 ms added latency. Without pooling request latency ≈ 200 ms, with per‑request client ≈ 300 ms. With 4 workers the concurrency ceiling = 4 workers × 1 pool = 4 concurrent outbound connections. Service can handle ≈ 4 / 0.3 s ≈ 13 rps. At 15 rps queue depth > 0.",
       "prediction": {
-        "metric": "http_req_duration_p99",
+        "metric": "queue_depth",
         "comparator": "at_least",
-        "value": 100.0,
+        "value": 1.0,
         "upper": null,
-        "unit": "ms",
-        "condition": "rate=100rps, workers=4"
+        "unit": "count",
+        "condition": "rate=15rps"
       }
     },
     {
@@ -23,17 +23,17 @@
       "line": 24,
       "layer": "network",
       "symbol": "charge",
-      "mechanism": "The client timeout of 10 s can block a worker for the full duration of a slow upstream response; with 4 uvicorn workers the maximum sustainable arrival rate is workers/timeout = 4/10 s = 0.4 rps. Higher arrival rates will cause requests to queue (reference: \"When demand exceeds capacity requests do not fail, they wait … the narrowest one sets the real concurrency\").",
-      "severity": "medium",
-      "remediation": "Set a client timeout that is shorter than the service’s overall deadline and align it with the expected upstream latency; optionally configure a connection‑pool limit that matches the worker count.",
-      "arithmetic": "Throughput = workers / timeout = 4 / 10 s = 0.4 rps. Any arrival rate >0.4 rps leads to worker saturation (worker_saturation → 1) and queue depth growth.",
+      "mechanism": "The client uses a fixed 10 s timeout while the surrounding service may have a shorter deadline. A slow upstream (≈ 9 s) combined with up to three retries can block a worker for up to 30 s, saturating workers as described in the reference about timeouts exceeding caller deadlines.",
+      "severity": "high",
+      "remediation": "Set the httpx timeout lower than the service’s own request deadline and limit retries (e.g., timeout=3 s, max_attempts=2) or implement a circuit‑breaker to fail fast.",
+      "arithmetic": "Each attempt can block up to 10 s; with 3 attempts total block ≤ 30 s. With 4 workers max throughput = 4 / 30 s ≈ 0.13 rps. Arrival of 0.2 rps exceeds capacity, causing all workers to be blocked (worker_saturation = 1).",
       "prediction": {
         "metric": "worker_saturation",
         "comparator": "at_least",
         "value": 1.0,
         "upper": null,
         "unit": "x",
-        "condition": "rate=0.5rps"
+        "condition": "upstream_latency=9s, rate=0.2rps"
       }
     }
   ]
