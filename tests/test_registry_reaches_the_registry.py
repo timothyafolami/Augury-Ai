@@ -1,0 +1,74 @@
+"""Asking PyPI about 34 packages one at a time loses nine of them.
+
+Each lookup takes about a second on its own and the timeout is four, so a
+batch run back to back queues behind itself until the tail times out. The
+survey reported "25 of 34 checked" -- the nine were real packages that the
+registry knows perfectly well.
+
+Two fixes, both tested here without touching the network: ask concurrently,
+and try a failed name once more before giving up on it.
+"""
+
+from __future__ import annotations
+
+import json
+
+from augury.core.reference.registry import Registry
+
+_BODY = json.dumps({"info": {"name": "redis", "version": "7.0.0", "summary": "x"}, "releases": {}})
+
+
+def test_a_lookup_that_fails_once_is_tried_again() -> None:
+    """A single transient failure must not become a permanent unknown."""
+    tries: list[str] = []
+
+    def flaky(url: str) -> str | None:
+        tries.append(url)
+        return None if len(tries) == 1 else _BODY
+
+    facts = Registry(fetch=flaky).facts_for("redis")
+    assert facts is not None
+    assert len(tries) == 2
+
+
+def test_a_name_that_always_fails_is_given_up_on_rather_than_retried_forever() -> None:
+    tries: list[str] = []
+
+    def dead(url: str) -> str | None:
+        tries.append(url)
+        return None
+
+    registry = Registry(fetch=dead)
+    assert registry.facts_for("redis") is None
+    assert len(tries) == 2, "one retry, not an unbounded loop"
+
+
+def test_asking_for_many_answers_for_every_name() -> None:
+    registry = Registry(fetch=lambda url: _BODY)
+    answers = registry.facts_for_many(("redis", "pandas", "celery"))
+    assert set(answers) == {"redis", "pandas", "celery"}
+
+
+def test_asking_for_many_does_not_ask_twice_for_one_name() -> None:
+    asked: list[str] = []
+
+    def counting(url: str) -> str | None:
+        asked.append(url)
+        return _BODY
+
+    registry = Registry(fetch=counting)
+    registry.facts_for_many(("redis", "redis", "pandas"))
+    assert len(asked) == 2
+
+
+def test_an_answer_is_remembered_rather_than_asked_for_again() -> None:
+    asked: list[str] = []
+
+    def counting(url: str) -> str | None:
+        asked.append(url)
+        return _BODY
+
+    registry = Registry(fetch=counting)
+    registry.facts_for_many(("redis",))
+    registry.facts_for("redis")
+    assert len(asked) == 1
