@@ -84,6 +84,29 @@ def test_an_experiment_reports_a_different_number_on_remediated_code(
     )
 
 
+@pytest.mark.parametrize(
+    ("case", "script"),
+    [(case, script) for case in CASES for script in experiments(case.repo.parent)],
+    ids=lambda value: value.stem if isinstance(value, Path) else value.id,
+)
+def test_an_experiment_gives_the_same_answer_twice(case: Case, script: Path) -> None:
+    """`assert seeded != fixed` on two noisy floats proves nothing: two draws
+    from two overlapping distributions differ with probability near one.
+
+    `retry_amplification` reported anywhere from 1.9 to 2.5 for identical code,
+    because the socket backlog dropped connections under the burst. The
+    documented guarantee that these numbers reproduce exactly is only worth
+    making if something checks it.
+    """
+    first = run(script, case.repo)
+    second = run(script, case.repo)
+
+    assert first == second, (
+        f"{script.name} reported {first} then {second} for identical code, so a "
+        "verdict from it is partly a draw rather than a measurement"
+    )
+
+
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_every_seeded_defect_has_an_experiment_that_can_settle_it(case: Case) -> None:
     """A defect whose metric has no experiment can never be proved, and its
