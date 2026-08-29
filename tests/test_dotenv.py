@@ -6,6 +6,9 @@ not work on my machine" for anyone reproducing a run.
 The file is Augury's own, located by installation rather than by working
 directory, because the working directory is frequently a repository under
 review. Tests point AUGURY_ENV_FILE at a fixture rather than chdir-ing.
+
+Each test names groq explicitly. These are about how a dotenv line is parsed,
+not about which provider is default, and the default is DeepSeek.
 """
 
 from pathlib import Path
@@ -19,6 +22,7 @@ def test_reads_a_key_from_a_dotenv_file(tmp_path: Path, monkeypatch: pytest.Monk
     env_file = tmp_path / ".env"
     env_file.write_text("GROQ_API_KEY=gsk-from-file\n")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("AUGURY_PROVIDER", "groq")
     monkeypatch.setenv("AUGURY_ENV_FILE", str(env_file))
 
     assert load_settings().api_key == "gsk-from-file"
@@ -31,6 +35,7 @@ def test_a_real_environment_variable_wins_over_the_file(
     env_file = tmp_path / ".env"
     env_file.write_text("GROQ_API_KEY=gsk-from-file\n")
     monkeypatch.setenv("GROQ_API_KEY", "gsk-from-environment")
+    monkeypatch.setenv("AUGURY_PROVIDER", "groq")
     monkeypatch.setenv("AUGURY_ENV_FILE", str(env_file))
 
     assert load_settings().api_key == "gsk-from-environment"
@@ -71,6 +76,7 @@ def test_parses_the_dotenv_forms_that_silently_misconfigured_a_run(
     env_file = tmp_path / ".env"
     env_file.write_text(line + "\n")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setenv("AUGURY_PROVIDER", "groq")
     monkeypatch.setenv("AUGURY_ENV_FILE", str(env_file))
 
     assert load_settings().api_key == expected
@@ -85,6 +91,7 @@ def test_a_variable_outside_the_allowlist_is_ignored(
     env_file = tmp_path / ".env"
     env_file.write_text("GROQ_API_KEY=gsk-x\nLD_PRELOAD=/tmp/evil.so\n")
     monkeypatch.delenv("LD_PRELOAD", raising=False)
+    monkeypatch.setenv("AUGURY_PROVIDER", "groq")
     monkeypatch.setenv("AUGURY_ENV_FILE", str(env_file))
 
     load_settings()
