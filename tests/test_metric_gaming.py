@@ -156,10 +156,15 @@ def test_prediction_coverage_is_reported_so_a_tiny_sample_cannot_hide() -> None:
 def test_one_experiment_answering_twenty_findings_counts_once() -> None:
     """A specialist that enumerates twenty call sites of one mechanism gets
     one k6 run. Reporting n=20 would inflate the denominator that makes the
-    hit rate credible by the reviewer's own verbosity."""
+    hit rate credible by the reviewer's own verbosity.
+
+    The rate is now over experiments, so the twenty findings are visible in
+    `tested_findings` and the denominator that matters is 1.
+    """
     same = [finding(pred=prediction(), measurement=Measurement(value=1200.0)) for _ in range(20)]
 
     result = score(Report(findings=tuple(same)), case="c1", arm="test")
 
     assert result.experiments == 1
-    assert result.tested == 20
+    assert result.tested_findings == 20
+    assert result.tested == 1, "the denominator is the run, not the reviewer's verbosity"
