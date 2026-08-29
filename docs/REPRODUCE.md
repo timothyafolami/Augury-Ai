@@ -42,7 +42,7 @@ make check
 ```
 
 Runs ruff, ruff format, mypy strict over `src` and `tests`, and the full test
-suite. Expect **311 passed, 2 skipped**, in about 8 seconds. Nothing here
+suite. Expect **388 passed, 2 skipped**, in about 30 seconds. Nothing here
 reaches the network.
 
 This is the same command CI runs and the same command the pre-commit hook runs.
@@ -123,8 +123,8 @@ If they do not, that is a real difference in your environment and worth
 reporting.
 
 The **reviews are not**. Both arms were observed changing their answer between
-runs at temperature 0: the baseline scored 5/5, then 4/5, then 5/5 on the same
-case with nothing changed. Expect your recall to land inside the published
+runs at temperature 0: over eight seeds the baseline returned three different
+answers on the same case with nothing changed. Expect your recall to land inside the published
 range rather than on the published mean, and expect the hit-rate numbers, which
 rest on single-digit denominators, to move more than that.
 
