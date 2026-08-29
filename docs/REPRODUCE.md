@@ -42,7 +42,7 @@ make check
 ```
 
 Runs ruff, ruff format, mypy strict over `src` and `tests`, and the full test
-suite. Expect **422 passed, 3 skipped**, in about 35 seconds. Nothing here
+suite. Expect **495 passed, 3 skipped**, in about a minute. Nothing here
 reaches the network.
 
 This is the same command CI runs and the same command the pre-commit hook runs.
@@ -63,7 +63,8 @@ done
 ```
 
 Expected, a few seconds each. "Correct" is what the same experiment reports
-against the remediated code shipped in each case's `fixed/` directory:
+against the remediated code shipped in the `fixed/` directory that B01 and C01 ship (A04 has none: it seeds one
+defect, declares itself non-discriminating, and ships no experiments):
 
 | case | experiment | correct | seeded | what it means |
 |---|---|---|---|---|
@@ -133,7 +134,9 @@ Augury, on case B01.
 make evaluate           # both arms, five repeats each, with proving
 ```
 
-About 4 minutes and $0.09 total. Prints the table in the README, with the
+Between $0.09 and $0.15, and between 4 and 12 minutes, depending on how much
+the provider retries; both ends have been observed. Prints the table in the
+README, with the
 per-repeat spread beside every mean.
 
 ### Or without an API key at all
