@@ -137,44 +137,58 @@ Two of the tests that were supposed to catch this were instead enforcing it:
 one asserted the vacuity rule for the analyst *by name*, and one accepted a
 `nested` schema argument and never used it.
 
-### The result after fixing it
+### The result, on four cases
 
 A sweep was recorded call by call and the recordings committed, so this is
-reproducible exactly, with no API key: `make eval-replay` prints these numbers; the table below adds the hand-audited
-recall row and omits the range, broken and seconds rows the command also prints.
+reproducible exactly, with no API key: `make eval-replay` prints these numbers.
 
 | metric | baseline | augury |
 |---|---|---|
-| seeded recall (matcher) | 0.800 | 0.800 |
-| seeded recall (hand-audited) | 0.700 | 0.800 |
-| falsifiable precision | **0.909** | 0.667 |
-| hit rate | 0.833 (5/6) | 1.000 (5/5) |
-| experiments run | 6 | 5 |
-| prediction coverage | 0.600 | 0.429 |
-| cost | $0.00 replayed | $0.00 replayed |
+| seeded recall | **0.769** | 0.692 |
+| falsifiable precision | **0.750** | 0.650 |
+| hit rate | **1.000** (8/8) | 0.600 (3/5) |
+| experiments run | 8 | 5 |
+| prediction coverage | **0.889** | 0.385 |
+| cost | $0.0116 | $0.0446 (3.9x) |
 
 ```
 hit rate  repeats not independent: p = n/a  not measured
 recall    repeats not independent: inconclusive
 ```
 
-**The harness cannot separate the two arms on any metric, and now says so on
-every row.**
+**The baseline is ahead on every metric.** One well-written prompt containing
+the whole repository finds more of the seeded defects, states a higher share of
+testable claims, gets more of them measured, and is right about more of them,
+at a quarter of the cost.
 
-Recall is identical. Falsifiable precision favours the baseline: the pipeline
-states more claims and a smaller share survive validation. The hit rate favours
-the pipeline by **one experiment** — five of five against five of six — which is
-not a result, and the significance test refuses to dignify it with a p-value
-because the repeats are not independent.
+#### The fourth case erased the pipeline's only lead
 
-The unit there is the experiment, not the finding. Two of the pipeline's
-findings both predict `queries_per_request` and are both settled by the single
-run `B01/queries_per_request`; counting them separately let one measurement move
-two units on one arm and one on the other. An experiment counts as a hit only
-when every claim it settled held, so an arm cannot buy one by pairing a correct
-prediction with a wrong one the same run decides.
+On three cases the pipeline led on hit rate, 5/5 against 5/6. This document
+said, in the section below and in the changelog's open questions:
 
-#### Recall, audited by hand
+> The margin is one experiment. A single measurement moving would erase or
+> double it. It needs a fourth case, not a sixth repeat.
+
+So a fourth case was built -- D01, a search-index service, chosen partly
+because its first defect is the only one in the suite that measures
+`memory_bytes`, a metric the published vocabulary had carried since the start
+and no case had ever settled. On four cases the hit rate is 1.000 against
+0.600, and the lead is not merely gone but reversed.
+
+That is the result this project ends on, and the prediction that preceded it is
+the part worth keeping: the margin was named as too small to survive more data,
+before the data existed, and it did not survive it.
+
+**Read `prediction coverage` beside the hit rate.** The pipeline had 38.5% of
+its falsifiable claims graded against the baseline's 88.9%. It writes more
+claims, aimed at metrics and files the cases do not measure, so most of them
+are never settled either way -- and the ones that were settled it got wrong
+more often.
+
+#### Recall, audited by hand (the three-case run)
+
+The audit below was done on the three-case sweep that preceded D01. It is kept
+because what it shows about the matcher does not depend on the case count.
 
 Recall is matched by prose against a manifest, and prose matching cannot tell a
 correct diagnosis from a wrong one that mentions the right word. So all sixteen
@@ -237,10 +251,12 @@ Both were found by an adversarial review of the harness, by mutation rather
 than by reading. Of 36 mutations applied to the scoring and significance code,
 33 were killed by the suite. The three that survived are how these shipped.
 
-**The pipeline does not beat one well-written prompt.** It finds the same
-seeded defects, states more claims of which fewer survive validation, is graded
-on a smaller share of them, and costs five times as much. Its one nominal lead
-is a single prediction on a run whose repeats carry no independent information.
+**The pipeline does not beat one well-written prompt.** On four cases it is
+behind on every published metric: it finds fewer of the seeded defects, states a
+lower share of testable claims, gets far fewer of them measured, is right about
+fewer of the ones that are measured, and costs four times as much.
+
+It held one nominal lead on three cases. Building a fourth case removed it.
 
 It is also not shown to be worse. Ten seeded defects over three cases cannot
 resolve a difference this size in either direction, and saying so is the honest
