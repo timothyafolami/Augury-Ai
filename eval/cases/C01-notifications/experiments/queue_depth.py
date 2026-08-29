@@ -1,12 +1,19 @@
-"""How far the inbox backs up when arrivals outrun the worker.
+"""How far the inbox will back up when nothing is draining it.
 
-Offers the case repository's own queue two hundred events while a single
-worker drains them at a fixed rate, and reports the backlog after a fixed
-window. A queue that pushes back stops accepting and the depth stays at its
-bound. An unbounded one absorbs everything, and the backlog is the difference
-between what arrived and what was served.
+Offers the case repository's own queue far more events than any sensible bound
+and reports what it holds. A bounded queue stops at its bound, whatever that
+bound is. An unbounded one holds everything offered.
 
-The last line printed is the measurement, as items waiting.
+An earlier version ran a worker against a fixed arrival count in a fixed
+window, and reported the arithmetic on those three constants: a queue bounded
+at 512 measured exactly the same as an unbounded one, because 512 was above the
+backlog the constants produced. It discriminated only against the particular
+bound the remediation happened to use, which is overfitting to one's own answer.
+
+Offering more than any bound removes the constants from the result. The number
+is the queue's capacity, or the offered count if it has none.
+
+The last line printed is the measurement, as items held.
 """
 
 import asyncio
@@ -19,34 +26,24 @@ sys.path.insert(0, str(REPO))
 
 from app.queue import inbox  # noqa: E402
 
-ARRIVALS = 200
-SERVICE_SECONDS = 0.002
-WINDOW_SECONDS = 0.2
+OFFERED = 5000
 
 
 async def main() -> None:
-    print(f"{ARRIVALS} events arriving, one worker at {SERVICE_SECONDS:g}s each")
-
-    async def worker() -> None:
-        while True:
-            await inbox.take()
-            await asyncio.sleep(SERVICE_SECONDS)
-
-    draining = asyncio.create_task(worker())
+    print(f"offering {OFFERED} events with nothing draining them")
 
     accepted = 0
-    for index in range(ARRIVALS):
+    for index in range(OFFERED):
         try:
-            await asyncio.wait_for(inbox.accept({"id": index}), timeout=0.01)
-            accepted += 1
-        except (asyncio.TimeoutError, Exception):
-            # A queue that pushes back refuses the event, which is the point.
+            await asyncio.wait_for(inbox.accept({"id": index}), timeout=0.05)
+        except Exception:
+            # Any refusal is the queue pushing back, which is the behaviour
+            # being looked for. What kind of refusal is not this experiment's
+            # business.
             break
+        accepted += 1
 
-    await asyncio.sleep(WINDOW_SECONDS)
-    draining.cancel()
-
-    print(f"{accepted} accepted, backlog after {WINDOW_SECONDS:g}s:")
+    print(f"{accepted} accepted before the queue pushed back; it now holds:")
     print(inbox.depth())
 
 
