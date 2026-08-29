@@ -90,7 +90,6 @@ class ProviderAdapter:
         self._last_attempt_cost = Usage()
         self.retries = 0
         self.rate_limited = 0
-        self._rate_limit_waits = 0
 
     @property
     def model_id(self) -> str:
@@ -106,15 +105,20 @@ class ProviderAdapter:
         completion = await self.call(prompt=prompt, schema=schema)
         return cast("T", completion.result)
 
-    async def _wait_out(self, error: Exception) -> bool:
-        """Sleep off a rate limit. False when we have waited long enough."""
-        if self._rate_limit_waits >= MAX_RATE_LIMIT_WAITS:
+    async def _wait_out(self, error: Exception, waited: int) -> bool:
+        """Sleep off a rate limit. False once this call has waited enough.
+
+        `waited` is the count for *this call*, not for the adapter. One adapter
+        serves a whole review, so a lifetime budget is spent within the first
+        few modules and every 429 after that is fatal -- which is exactly how a
+        full-coverage run died at module eight with this logic in place.
+        """
+        if waited >= MAX_RATE_LIMIT_WAITS:
             return False
         asked = retry_after(str(error))
-        delay = asked if asked is not None else min(2.0**self._rate_limit_waits, MAX_DELAY_SECONDS)
-        self._rate_limit_waits += 1
+        delay = asked if asked is not None else min(2.0**waited, MAX_DELAY_SECONDS)
         self.rate_limited += 1
-        await asyncio.sleep(delay + JITTER_SECONDS * self._rate_limit_waits)
+        await asyncio.sleep(delay + JITTER_SECONDS * (waited + 1))
         return True
 
     async def call(self, *, prompt: str, schema: type[T]) -> Completion:
@@ -134,6 +138,7 @@ class ProviderAdapter:
         # full-coverage run at module nine. The comment was right about what
         # should happen and the code did the opposite.
         attempt = 0
+        waited = 0
         while attempt < MAX_ATTEMPTS:
             try:
                 result, cost = await self._attempt(attempt_prompt, schema)
@@ -146,7 +151,8 @@ class ProviderAdapter:
                 # count against MAX_ATTEMPTS and the prompt is not "corrected"
                 # -- correcting a prompt that was never read is how a transient
                 # 429 turns into three wasted calls and then a lost run.
-                if RateLimited.looks_like(str(error)) and await self._wait_out(error):
+                if RateLimited.looks_like(str(error)) and await self._wait_out(error, waited):
+                    waited += 1
                     continue  # `attempt` deliberately unchanged
                     # Waited as long as this is willing to. Fall through and
                     # treat it as a failure, so the run ends saying why rather
