@@ -110,6 +110,14 @@ def test_a_dropped_entry_with_no_finding_still_counts() -> None:
 
 
 def test_aggregate_agrees_with_the_single_score() -> None:
-    report = to_report(DraftReport(findings=[_draft(VACUOUS)]))
+    """With a good prediction present, so the two denominators can differ.
+
+    The first version used a report with no falsifiable findings, where 0/1 and
+    0/2 are both 0.0 -- so it passed while `aggregate` still used the old
+    expression, and the published number comes from `aggregate`, not `score`.
+    """
+    report = to_report(DraftReport(findings=[_draft(GOOD), _draft(VACUOUS)]))
     single = score(report, case="B01", arm="a", seed=0, seeded=1, found=0, failed=False)
-    assert aggregate([single]).falsifiable_precision == 0.0
+
+    assert single.falsifiable_precision == 0.5
+    assert aggregate([single]).falsifiable_precision == 0.5
