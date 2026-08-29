@@ -30,6 +30,10 @@ PROBE_TIMEOUT = 5.0
 # directory so it cannot collide with the repository's own files.
 MOUNT_POINT = "/tmp/augury-experiment.py"
 
+# What an experiment's own process gets. Deliberately bare: a generated script
+# should inherit nothing it was not handed.
+BARE_PATH = "/usr/bin:/bin"
+
 
 @dataclass(frozen=True)
 class Environment:
@@ -60,6 +64,22 @@ class Environment:
                 MOUNT_POINT,
             ]
         return [str(self.python), str(script)]
+
+    def path(self, *, docker_at: Path | None = None) -> str:
+        """The PATH the launching process needs.
+
+        The bare path is for the experiment, and it is right: a generated
+        script should inherit nothing. But `docker compose run` is the command
+        that starts the container, and Docker Desktop installs to
+        /usr/local/bin, which is not on it -- so a machine with docker running,
+        already probed successfully, failed with "No such file or directory".
+        """
+        if self.kind != "compose" or docker_at is None:
+            return BARE_PATH
+        holding = str(docker_at.parent)
+        if holding in BARE_PATH.split(":"):
+            return BARE_PATH
+        return f"{holding}:{BARE_PATH}"
 
     @property
     def describes(self) -> str:
