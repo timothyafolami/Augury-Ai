@@ -26,6 +26,22 @@ class Service(BaseModel):
     environment: dict[str, str] = Field(default_factory=dict)
 
     @property
+    def entrypoints(self) -> tuple[str, ...]:
+        """Modules this service starts, as repo-relative path stems.
+
+        A command names its module relative to the build context, not to the
+        repository: `celery -A src.tasks.celery_app` inside a service built
+        from `./backend` is `backend/src/tasks/celery_app`. Joining them here
+        is the whole reason the survey reads both.
+        """
+        from augury.core.survey.surveyor import entrypoint_refs
+
+        refs = entrypoint_refs(self.command)
+        if not self.source_root:
+            return refs
+        return tuple(f"{self.source_root}/{ref}" for ref in refs)
+
+    @property
     def is_entrypoint(self) -> bool:
         """Whether traffic arrives here, as opposed to work being handed to it."""
         return bool(self.ports)
