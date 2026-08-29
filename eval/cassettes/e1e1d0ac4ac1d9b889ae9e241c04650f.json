@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "network"
+  ],
+  "reasoning": "Data specialist should review the SQLAlchemy session usage and Order model queries; network specialist should review the FastAPI endpoint definitions and HTTP behavior."
+}
