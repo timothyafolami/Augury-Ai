@@ -18,7 +18,7 @@ from augury.core.adapters.base import ChatModel
 from augury.core.cartography import RepoMap
 from augury.core.drafts import DraftReport, to_report
 from augury.core.findings import Report
-from augury.core.metrics import vocabulary
+from augury.core.metrics import describe, vocabulary
 from augury.core.scheduling import Coverage
 from augury.prompts import render
 
@@ -33,9 +33,16 @@ _BLOCK_OVERHEAD = 16
 class BaselineReviewer:
     """Reviews a repository in a single model call."""
 
-    def __init__(self, model: ChatModel, *, char_budget: int = DEFAULT_CHAR_BUDGET) -> None:
+    def __init__(
+        self,
+        model: ChatModel,
+        *,
+        char_budget: int = DEFAULT_CHAR_BUDGET,
+        experiments: dict[str, str] | None = None,
+    ) -> None:
         self._model = model
         self._budget = char_budget
+        self._experiments = experiments or {}
 
     async def review(self, repo: RepoMap, root: Path) -> Report:
         included, skipped = self._select(repo, root)
@@ -49,6 +56,7 @@ class BaselineReviewer:
                 "baseline",
                 repository="\n\n".join(included),
                 metrics=vocabulary(),
+                experiments=describe(self._experiments),
             ),
             schema=DraftReport,
         )
