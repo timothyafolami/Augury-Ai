@@ -28,7 +28,8 @@ def write(root: Path, rel: str, source: str) -> None:
     [
         ("a.py", Language.PYTHON),
         ("a.ts", Language.TYPESCRIPT),
-        ("a.tsx", Language.TYPESCRIPT),
+        # `.tsx` is TypeScript with JSX and needs the tsx grammar, not typescript.
+        ("a.tsx", Language.TSX),
         ("a.js", Language.JAVASCRIPT),
         ("a.go", Language.GO),
         ("a.rs", Language.RUST),
