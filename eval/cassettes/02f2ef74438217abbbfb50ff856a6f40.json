@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 9,
+      "layer": "security",
+      "symbol": "DATABASE_URL",
+      "mechanism": "Hardcoded database credentials expose a secret in source code, violating secret management best practices.",
+      "severity": "high",
+      "remediation": "Remove the hardcoded credentials; require DATABASE_URL to be provided via environment without a default containing password.",
+      "arithmetic": "N/A",
+      "prediction": null
+    }
+  ]
+}
