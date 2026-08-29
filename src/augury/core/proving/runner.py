@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import re
-import sys
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from tempfile import mkdtemp
 
 from augury.core.findings import Finding
+from augury.core.proving.interpreter import interpreter_for
 from augury.core.proving.model import Experiment, Proof
 from augury.core.schemas import Outcome
 
@@ -49,8 +49,12 @@ async def prove_finding(
     script = directory / f"{finding.symbol or 'experiment'}.py"
     script.write_text(experiment.source, encoding="utf-8")
 
+    # The repository's own interpreter, so the experiment can import the code
+    # it measures. Ours has none of the dependencies under review.
+    python = interpreter_for(root)
+
     started = time.monotonic()
-    code, stdout, stderr = await _run(script, root, timeout)
+    code, stdout, stderr = await _run(script, root, timeout, python)
     elapsed = time.monotonic() - started
 
     if code is None:
@@ -65,7 +69,7 @@ async def prove_finding(
         return Proof(
             measured=None,
             outcome=Outcome.BROKEN,
-            detail=f"exited {code}: {_tail(stderr)}",
+            detail=f"exited {code} under {python.name}: {_tail(stderr)}",
             script_path=str(script),
             seconds=elapsed,
         )
@@ -77,7 +81,7 @@ async def prove_finding(
         return Proof(
             measured=None,
             outcome=Outcome.BROKEN,
-            detail="printed no number, so nothing was measured",
+            detail=(f"printed no number under {python}, so nothing was measured"),
             script_path=str(script),
             seconds=elapsed,
         )
@@ -91,10 +95,12 @@ async def prove_finding(
     )
 
 
-async def _run(script: Path, root: Path, timeout: float) -> tuple[int | None, str, str]:
+async def _run(
+    script: Path, root: Path, timeout: float, python: Path
+) -> tuple[int | None, str, str]:
     """Execute in a subprocess, with the repository importable and a deadline."""
     process = await asyncio.create_subprocess_exec(
-        sys.executable,
+        str(python),
         str(script),
         cwd=str(script.parent),
         env={
