@@ -26,13 +26,17 @@ _ADAPTERS: dict[Language, LanguageAdapter] = {
     Language.JAVASCRIPT: TreeSitterAdapter(
         Language.JAVASCRIPT, "javascript", specs.TYPESCRIPT_SIGNALS
     ),
+    # `.tsx` is TypeScript with JSX and the typescript grammar rejects it. Sent
+    # there, 178 of one real frontend's files failed to parse and were reported
+    # as unreadable rather than as unsupported.
+    Language.TSX: TreeSitterAdapter(Language.TSX, "tsx", specs.TYPESCRIPT_SIGNALS),
 }
 
 # Extension to language. The one place a new file type is registered.
 EXTENSIONS: dict[str, Language] = {
     ".py": Language.PYTHON,
     ".ts": Language.TYPESCRIPT,
-    ".tsx": Language.TYPESCRIPT,
+    ".tsx": Language.TSX,
     ".js": Language.JAVASCRIPT,
     ".jsx": Language.JAVASCRIPT,
     ".mjs": Language.JAVASCRIPT,
