@@ -84,25 +84,32 @@ traced to a lab topic, each reading correctly line by line, plus a loud
 
 Model `openai/gpt-oss-120b` on Groq, temperature 0.
 
+Three seeds per arm, every prediction put to the case's own experiments.
+
 | metric | baseline | augury |
 |---|---|---|
-| seeded defect recall | 1.000 | 1.000 |
-| falsifiable precision | 0.833 | 0.875 |
-| **hit rate** | **0.000** | **0.750** |
-| cost | $0.004 | $0.027 |
+| seeded recall, mean | 0.867 | **1.000** |
+| seeded recall, range | **0.600 - 1.000** | **1.000 - 1.000** |
+| hit rate | 0.571 (7 tested) | 0.500 (10 tested) |
+| prediction coverage | 0.64 | 0.42 |
+| cost, three seeds | $0.008 | $0.079 (10.5x) |
 
 The baseline is a single strong prompt containing the whole repository, asked
-for exactly the same thing including a prediction. It is not a strawman: it
-finds the defects, and it produces claims that look falsifiable.
+for exactly the same thing including a prediction. It is not a strawman, and
+it is not beaten on either headline rate.
 
-**Its numbers do not survive the experiment.** That is the entire result, and
-it is the only axis on which the two arms are distinguishable.
+**What separates them is consistency, not average quality.** Across three
+seeds the baseline found 5 of 5, 5 of 5, then 3 of 5. Augury found 5 of 5
+every time. A reviewer that occasionally misses two fifths of what is there is
+materially worse than one that does not, even when their means are close, and
+the mean is what a single run would have shown you.
 
-Recall, measured across three seeds, is **inconclusive** — 0.933 for the
-baseline against 0.867 for Augury, identical ranges. Reported as inconclusive
-rather than argued for; `SweepResult.compare` returns that verdict
-automatically whenever ranges overlap, so an unsupported win cannot be
-published by accident.
+On hit rate the two are **not distinguishable**: 0.571 against 0.500 over seven
+and ten tested predictions. Neither denominator supports a claim.
+
+Recall is formally **inconclusive** too, because the ranges touch at 1.000.
+`SweepResult.compare` returns that verdict automatically whenever ranges
+overlap, so an unsupported win cannot be published by accident.
 
 See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for how each of these numbers
 moved, and what failed to produce it.
@@ -124,15 +131,26 @@ are in [`docs/REPRODUCE.md`](docs/REPRODUCE.md).
 
 ## The main failure mode
 
-Everything expensive in this system is a purchase, and the honest accounting is
-that most of them have not yet paid for themselves. Routing to specialists
-costs six and a half times a single prompt and finds no more seeded defects.
-The Scheduler's whole reason to exist is repositories too large to read at
-once, and seventeen modules is not that.
+**A metric measured at low coverage is not measuring what you think.**
 
-Either the crossover is at a size not yet tested, or the architecture does not
-pay for itself and the hit-rate gain is the entire return. The evaluation
-cannot presently separate those, and saying so is more useful than picking one.
+An earlier run of this same comparison reported hit rates of 0.000 for the
+baseline and 0.750 for Augury, and that number was in this README. It was an
+artefact: only three experiments existed, so only a third of each arm's
+predictions could be tested, and which third happened to be testable decided
+the result. Adding two more experiments moved coverage from 0.37 to 0.53 and
+reversed the ordering.
+
+Nothing was wrong with the scoring code. The denominator was simply too small
+to mean anything, and it was reported anyway. That is the failure mode this
+project exists to catch, found in the project itself, and it is why the harness
+now refuses to print a rate under five measurements.
+
+The second failure mode is cheaper to state: routing to specialists costs ten
+times a single prompt for no distinguishable gain in either headline rate. The
+Scheduler exists for repositories too large to read at once, and seventeen
+modules is not that. Either the crossover is at a size not yet tested, or the
+architecture does not pay for itself. The evaluation cannot presently separate
+those, and saying so is more useful than picking one.
 
 ## Hot take
 
