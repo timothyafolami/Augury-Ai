@@ -22,6 +22,7 @@ from rich.table import Table
 from augury.agents.augury import AuguryReviewer
 from augury.agents.baseline import BaselineReviewer
 from augury.cli import banner
+from augury.cli.banner import counted
 from augury.cli.quiet import quiet_dependency_noise
 from augury.cli.rendering import languages_read, service_table
 from augury.core.adapters.base import ChatModel
@@ -129,7 +130,8 @@ def survey(
 
     reached = [m for m in repo.modules if m.depth is not None]
     console.print(
-        f"\n{len(repo.modules)} modules, {sum(m.loc for m in repo.modules):,} lines"
+        f"\n{counted(len(repo.modules), 'module')}, "
+        f"{counted(sum(m.loc for m in repo.modules), 'line')}"
         f"{' — ' + languages_read(languages) if languages else ''}"
     )
     console.print(
@@ -246,8 +248,9 @@ def report(
     entrypoints = tuple({e for service in found.services for e in service.entrypoints})
     banner.note(
         console,
-        f"{len(found.services)} services, {len(found.backing)} backing services, "
-        f"{len(entrypoints)} entrypoints declared by their commands",
+        f"{counted(len(found.services), 'service')}, "
+        f"{counted(len(found.backing), 'backing service')}, "
+        f"{counted(len(entrypoints), 'entrypoint')} declared by their commands",
     )
 
     banner.stage(console, 2, 5, "Cartographer", "six languages, imports, request path")
@@ -260,8 +263,8 @@ def report(
     reached = len(repo.modules) - len(repo.unreachable)
     banner.note(
         console,
-        f"{len(repo.modules)} modules, {reached} reachable from an entrypoint, "
-        f"{len(repo.unreachable)} not",
+        f"{counted(len(repo.modules), 'module')}, {reached} reachable from an "
+        f"entrypoint, {len(repo.unreachable)} not",
     )
 
     bases = [root / part for part in limits] or [root]
@@ -273,7 +276,8 @@ def report(
     )
     banner.note(
         console,
-        f"{len(schema)} schema findings, {len(dependencies)} dependency findings, "
+        f"{counted(len(schema), 'schema finding')}, "
+        f"{counted(len(dependencies), 'dependency finding')}, "
         "all deterministic and free",
     )
 
@@ -337,6 +341,7 @@ def report(
         if notes:
             reading[package] = tuple(note.url for note in notes[:3])
 
+    banner.stage(console, 5, 5, "Report", "five deterministic passes, then the document")
     document = write_report(
         name=root.name,
         survey=found,
