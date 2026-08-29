@@ -33,7 +33,9 @@ asyncio_mode = "auto"
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = ["docs", ".venv"]
+# Case repositories and test fixtures are inputs, not code we own. They
+# contain deliberately seeded defects; linting them would fight the seeding.
+extend-exclude = ["docs", ".venv", "eval/cases", "tests/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
@@ -42,3 +44,5 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 strict = true
 mypy_path = "src"
 python_version = "3.12"
+# Same reason as ruff's exclusion: these are inputs under review, not our code.
+exclude = ["^eval/cases/", "^tests/fixtures/"]
