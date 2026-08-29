@@ -35,6 +35,19 @@ class Score(BaseModel):
     )
 
     total_findings: int
+    observations: int
+    """The falsifiable-precision denominator for this run, computed once.
+
+    Required, with no default. A default of 0 silently produces a `None`
+    precision, which reads as "not enough data" rather than as "the caller
+    forgot a field" -- the same shape as the `run_arm` reviewer default that
+    once published one arm's results under the other arm's label.
+
+    Carried on the Score rather than recomputed downstream, because it was
+    recomputed downstream: `score` deduplicated a Dropped against the finding
+    it belongs to and `aggregate` did not, so the published number kept the
+    pre-fix arithmetic while the fix and its test both passed.
+    """
     falsifiable: int
     tested: int
     experiments: int
@@ -90,6 +103,7 @@ def score(
         found=found,
         failed=failed,
         total_findings=len(findings),
+        observations=observations,
         falsifiable=len(falsifiable),
         tested=len(tested),
         experiments=_distinct_experiments(tested),
@@ -184,7 +198,10 @@ def aggregate(scores: list[Score]) -> ArmScore:
     if len(arms) > 1:
         raise ValueError(f"cannot aggregate more than one arm: {sorted(arms)}")
 
-    observations = sum(s.total_findings + s.dropped for s in scores)
+    # Summed from what each run already computed. Re-deriving it here from
+    # total_findings and dropped is how this metric came to have two different
+    # definitions, one of which was published.
+    observations = sum(s.observations for s in scores)
     falsifiable = sum(s.falsifiable for s in scores)
     tested = sum(s.tested for s in scores)
     hits = sum(s.hits for s in scores)
