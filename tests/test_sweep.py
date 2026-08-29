@@ -36,17 +36,13 @@ def score(*, arm: str, seed: int, found: int, seeded: int = 5) -> Score:
 
 
 def test_reports_the_mean_across_seeds() -> None:
-    result = summarise(
-        [score(arm="a", seed=s, found=f) for s, f in enumerate([5, 4, 3])]
-    )
+    result = summarise([score(arm="a", seed=s, found=f) for s, f in enumerate([5, 4, 3])])
 
     assert result.recall_mean == pytest.approx(0.8)
 
 
 def test_reports_the_spread_so_a_single_run_cannot_pass_as_a_result() -> None:
-    result = summarise(
-        [score(arm="a", seed=s, found=f) for s, f in enumerate([5, 4, 3])]
-    )
+    result = summarise([score(arm="a", seed=s, found=f) for s, f in enumerate([5, 4, 3])])
 
     assert result.recall_low == pytest.approx(0.6)
     assert result.recall_high == pytest.approx(1.0)
