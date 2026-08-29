@@ -1,7 +1,13 @@
 # Agent trajectories
 
 A recording of what each agent did, produced by the run rather than written
-about it afterwards. Line-delimited JSON, one step per line, so it can be
+about it afterwards.
+
+**These were recorded before the arm-parity fixes of iteration 20**, so the
+prompts they show are not the prompts in `src/augury/prompts/` today. They are
+kept because a trajectory is a record of one run and re-recording it to match
+the current prompt would make it a reconstruction. The step counts cited in
+`docs/ARCHITECTURE.md` are the counts in these files. Line-delimited JSON, one step per line, so it can be
 grepped and so a file from an interrupted run is readable up to where it
 stopped.
 
