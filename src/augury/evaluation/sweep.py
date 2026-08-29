@@ -10,6 +10,7 @@ inconclusive rather than argued for.
 from __future__ import annotations
 
 from statistics import fmean
+from typing import cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -24,6 +25,15 @@ class SweepResult(BaseModel):
     arm: str
     seeds: int
     failed: int
+
+    independent: bool = True
+    """Whether the repeats were independent observations.
+
+    False under replay, where every repeat is served from the same recording
+    and the arm was therefore observed exactly once however many times it was
+    asked. A range built from non-independent repeats has zero width for a
+    reason that has nothing to do with the arm being reliable.
+    """
 
     recall_mean: float | None
     recall_low: float | None
@@ -53,23 +63,41 @@ class SweepResult(BaseModel):
 
         Ranges that overlap mean the arms were not distinguished. Calling that
         a win is how a submission ends up defending a number it cannot support.
+
+        **Repeats that were not independent cannot separate anything at all.**
+        Replay serves every repeat from one recording, so five repeats collapse
+        to a single observation and both arms report a range like 0.700-0.700.
+        Those do not overlap, and this method called it "better" -- the pipeline
+        beating the baseline on recall, concluded from one observation each.
+
+        Note what is *not* disqualifying: a zero-width range from genuinely
+        independent repeats. Three live runs that all returned 1/5 against three
+        that all returned 5/5 is real evidence, and refusing it would throw away
+        the comparison this method exists to make. The defect is the repeats
+        being the same observation, not the numbers agreeing.
         """
-        if (
-            left.recall_low is None
-            or left.recall_high is None
-            or right.recall_low is None
-            or right.recall_high is None
-        ):
+        if not (left.independent and right.independent):
             return "inconclusive"
-        if left.recall_low > right.recall_high:
+
+        bounds = (left.recall_low, left.recall_high, right.recall_low, right.recall_high)
+        if any(bound is None for bound in bounds):
+            return "inconclusive"
+        low_l, high_l, low_r, high_r = cast("tuple[float, float, float, float]", bounds)
+
+        if low_l > high_r:
             return "better"
-        if left.recall_high < right.recall_low:
+        if high_l < low_r:
             return "worse"
         return "inconclusive"
 
 
-def summarise(scores: list[Score]) -> SweepResult:
-    """Combine repeated runs of one arm into a result with its spread."""
+def summarise(scores: list[Score], *, independent: bool = True) -> SweepResult:
+    """Combine repeated runs of one arm into a result with its spread.
+
+    `independent` is False under replay, where the repeats are one recording
+    served several times and the spread between them is therefore not a
+    measurement of anything.
+    """
     if not scores:
         raise ValueError("no scores to summarise")
 
@@ -98,6 +126,7 @@ def summarise(scores: list[Score]) -> SweepResult:
     return SweepResult(
         arm=arms.pop(),
         seeds=len(by_seed),
+        independent=independent,
         failed=failures,
         hits=pooled.hits,
         tested=pooled.tested,
