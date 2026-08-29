@@ -45,3 +45,14 @@ def stage(console: Console, number: int, of: int, name: str, detail: str) -> Non
 
 def note(console: Console, text: str) -> None:
     console.print(f"      [dim]{text}[/dim]")
+
+
+def counted(how_many: int, thing: str, *, plural: str | None = None) -> str:
+    """A count and its noun, agreeing, with thousands grouped.
+
+    It printed "1 entrypoints" in the first twenty lines of a recorded run.
+    Small, and the reader is deciding in those twenty lines whether the thing
+    reading their code is careful.
+    """
+    word = thing if how_many == 1 else (plural or f"{thing}s")
+    return f"{how_many:,} {word}"
