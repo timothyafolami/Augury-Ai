@@ -36,6 +36,11 @@ class Defect(BaseModel):
     symbols: tuple[str, ...] = Field(min_length=1, description="Names that identify it")
     verification: str = Field(min_length=1, description="load, differential or probe")
     expected_metric: str = ""
+    unmeasurable_because: str = Field(
+        default="",
+        description="Why no experiment settles this defect. Non-empty means the "
+        "omission is a stated decision rather than an oversight.",
+    )
     notes: str = ""
 
     def found_in(self, report: Report) -> bool:
