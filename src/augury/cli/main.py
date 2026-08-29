@@ -141,6 +141,31 @@ async def _one_run(
 # -- helpers ---------------------------------------------------------------
 
 
+@app.command()
+def mcp(
+    root: str = typer.Option(".", help="The only directory this server will read"),
+) -> None:
+    """Serve Augury over the Model Context Protocol on stdio.
+
+    The root is fixed here rather than chosen per call: the client driving this
+    is a language model, and a model that can name any path can read any file
+    on the machine.
+    """
+    from augury.mcp import Server
+    from augury.mcp.server import serve
+
+    boundary = Path(root).expanduser().resolve()
+    if not boundary.is_dir():
+        _fail(f"--root must be a directory: {boundary}")
+    # Mapping and explaining work without a key; only review needs one, and it
+    # says so in its own result rather than refusing to start the server.
+    try:
+        key: str | None = load_settings().api_key or None
+    except SettingsError:
+        key = None
+    serve(Server(api_key=key, allowed_root=boundary))
+
+
 def _settings() -> Settings:
     try:
         return load_settings()
