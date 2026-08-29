@@ -1,0 +1,8 @@
+{
+  "specialists": [
+    "data",
+    "observability",
+    "craft"
+  ],
+  "reasoning": "data: contains SQLAlchemy queries for loading and listing orders; observability: includes logging and exception handling; craft: async function definitions, type hints, and overall code quality."
+}
