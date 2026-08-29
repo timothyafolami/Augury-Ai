@@ -33,7 +33,7 @@ from augury.core.memo import Memo
 from augury.core.proving.environment import Environment, choose_environment
 from augury.core.reference import Registry, requirements_of
 from augury.core.reference.changelog import changelog_notes
-from augury.core.reference.staleness import dependency_findings
+from augury.core.reference.staleness import dependency_audit, dependency_findings
 from augury.core.report import write_report
 from augury.core.scheduling import Budget
 from augury.core.schema import read_migrations, schema_findings
@@ -152,11 +152,16 @@ def _print_dependencies(root: Path, limits: tuple[str, ...]) -> None:
         pinned = requirements_of(base)
         if not pinned:
             continue
-        findings = dependency_findings(pinned, registry)
-        if not findings:
+        audit = dependency_audit(pinned, registry)
+        findings = audit.findings
+        if not findings and audit.complete:
             continue
         plural = "finding" if len(findings) == 1 else "findings"
         console.print(f"\n[bold]dependencies[/bold] — {len(findings)} {plural}")
+        # Without this line the count silently depends on network luck: three
+        # runs against one repository printed 2, 6 and 5.
+        if not audit.complete:
+            console.print(f"  [dim]{audit.coverage()}[/dim]")
         for finding in findings:
             console.print(f"  {finding.rule}", markup=False)
             console.print(f"     {finding.detail}", markup=False)
