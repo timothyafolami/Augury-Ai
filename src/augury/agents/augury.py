@@ -69,6 +69,30 @@ MAX_SOURCE_CHARS = 40_000
 TYPICAL_CALLS_PER_MODULE = 3
 
 
+@dataclass(frozen=True)
+class Reading:
+    """What came back from trying to read one module.
+
+    A module whose specialists all failed produces no findings for the same
+    reason an unread file produces none: nobody looked. Returning a bare
+    DraftReport made the two indistinguishable, so the review reported a module
+    as analysed that no specialist had successfully read -- and the worse the
+    provider behaved, the cleaner the report looked.
+    """
+
+    report: DraftReport
+    read: bool = True
+    why: str = ""
+
+    @classmethod
+    def of(cls, report: DraftReport) -> Reading:
+        return cls(report=report)
+
+    @classmethod
+    def unread(cls, path: str, why: str) -> Reading:
+        return cls(report=DraftReport(findings=[]), read=False, why=why)
+
+
 async def gather_survivors(
     work: Sequence[Awaitable[DraftReport]],
     *,
@@ -96,11 +120,11 @@ async def gather_survivors(
 
 
 async def gather_each(
-    work: Sequence[Awaitable[DraftReport]],
+    work: Sequence[Awaitable[Reading]],
     *,
-    instead: DraftReport,
+    instead: Reading,
     note: Callable[[int, Exception], None] | None = None,
-) -> list[DraftReport]:
+) -> list[Reading]:
     """Run these concurrently, one result per item, in order.
 
     Unlike gather_survivors this keeps position: the batch's cost is
@@ -110,7 +134,7 @@ async def gather_each(
     and is counted as read so the scheduler does not offer it again forever.
     """
     done = await asyncio.gather(*work, return_exceptions=True)
-    kept: list[DraftReport] = []
+    kept: list[Reading] = []
     for index, outcome in enumerate(done):
         if isinstance(outcome, BaseException):
             if isinstance(outcome, asyncio.CancelledError):
@@ -199,7 +223,7 @@ class AuguryReviewer:
             # the batch is apportioned by zipping these with `batch`.
             results = await gather_each(
                 [self._review_module(module, root, context) for module in batch],
-                instead=DraftReport(findings=[]),
+                instead=Reading.unread("", "the module could not be read at all"),
                 note=lambda index, error: self._record(
                     "module",
                     "failed",
@@ -209,21 +233,23 @@ class AuguryReviewer:
             batch_usd = (self._model.usage - before).usd
 
             for module, found in zip(batch, results, strict=True):
-                drafts.append(found)
+                drafts.append(found.report)
                 # The batch's cost, apportioned. Per-module attribution would
                 # need per-call accounting through the gather, and the
                 # scheduler only needs the total to know when to stop.
                 plan.record(
                     module,
-                    findings=len(found.findings),
+                    findings=len(found.report.findings),
                     spent_usd=batch_usd / len(batch),
+                    read=found.read,
+                    why=found.why,
                 )
                 if self._watching is not None:
                     self._watching(
                         Progress(
                             path=module.path,
                             depth=module.depth,
-                            findings=len(found.findings),
+                            findings=len(found.report.findings),
                             read=len(plan.coverage_analysed),
                             total=len(repo.modules),
                             usd=(self._model.usage - opening).usd,
@@ -280,13 +306,15 @@ class AuguryReviewer:
             }
         )
 
-    async def _review_module(self, module: ModuleNode, root: Path, context: str) -> DraftReport:
+    async def _review_module(self, module: ModuleNode, root: Path, context: str) -> Reading:
         source = self._read(root / module.path)
         language = EXTENSIONS[Path(module.path).suffix.lower()].value
 
         chosen = await self._triage.route(module, source, language, context)
         if not chosen:
-            return DraftReport(findings=[])
+            # No specialist's concern appears in this file. That is a reading,
+            # and a cheap one: it was looked at and there was nothing to ask.
+            return Reading.of(DraftReport(findings=[]))
 
         # Specialists are independent by construction: each reads for its own
         # concern only. Running them concurrently costs the same and takes the
@@ -303,9 +331,24 @@ class AuguryReviewer:
                 {"path": module.path, "why": str(error)[:200]},
             ),
         )
+        if not results:
+            # Every specialist failed. No findings, for the same reason an
+            # unread file has none, and the difference has to survive.
+            return Reading.unread(
+                module.path,
+                f"all {len(chosen)} specialists failed, so it was charged but never read",
+            )
+
         # Specialists collide: pool exhaustion is a network, a data and a
         # failure concern at once, and each will raise it honestly.
-        return reconcile(DraftReport(findings=[f for result in results for f in result.findings]))
+        merged = reconcile(DraftReport(findings=[f for r in results for f in r.findings]))
+        if len(results) < len(chosen):
+            return Reading(
+                report=merged,
+                read=True,
+                why=f"{len(chosen) - len(results)} of {len(chosen)} specialists failed",
+            )
+        return Reading.of(merged)
 
     def _record(self, agent: str, action: str, detail: dict[str, object]) -> None:
         if self._trace is not None:
