@@ -7,7 +7,7 @@ table on a technicality, and a sample of one must not read like a trend.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from augury.core.findings import Finding, Report
 from augury.core.schemas import Outcome
@@ -28,6 +28,13 @@ class Score(BaseModel):
     seed: int
     model_id: str
 
+    detected: bool = Field(
+        default=False, description="Whether the seeded defect for this case was found"
+    )
+    failed: bool = Field(
+        default=False, description="The review did not complete. Recorded, never dropped."
+    )
+
     total_findings: int
     falsifiable: int
     tested: int
@@ -44,7 +51,15 @@ class Score(BaseModel):
     seconds: float
 
 
-def score(report: Report, *, case: str, arm: str, seed: int = 0) -> Score:
+def score(
+    report: Report,
+    *,
+    case: str,
+    arm: str,
+    seed: int = 0,
+    detected: bool = False,
+    failed: bool = False,
+) -> Score:
     """Measure one report. No rate is invented where there is nothing to divide."""
     findings = report.findings
     falsifiable = [f for f in findings if f.is_falsifiable]
@@ -62,6 +77,8 @@ def score(report: Report, *, case: str, arm: str, seed: int = 0) -> Score:
         arm=arm,
         seed=seed,
         model_id=report.model_id,
+        detected=detected,
+        failed=failed,
         total_findings=len(findings),
         falsifiable=len(falsifiable),
         tested=len(tested),
@@ -114,6 +131,10 @@ class ArmScore(BaseModel):
     cases: int
     model_ids: tuple[str, ...]
 
+    detected: int
+    failed: int
+    detection_rate: float | None
+
     total_findings: int
     falsifiable: int
     tested: int
@@ -152,6 +173,11 @@ def aggregate(scores: list[Score]) -> ArmScore:
         arm=arms.pop(),
         cases=len(scores),
         model_ids=tuple(sorted({s.model_id for s in scores})),
+        detected=sum(1 for s in scores if s.detected),
+        failed=sum(1 for s in scores if s.failed),
+        # Over every case, including the ones that failed. A run that crashed
+        # did not find the defect, and excluding it would reward crashing.
+        detection_rate=_ratio(sum(1 for s in scores if s.detected), len(scores)),
         total_findings=sum(s.total_findings for s in scores),
         falsifiable=falsifiable,
         tested=tested,
