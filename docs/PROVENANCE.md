@@ -23,7 +23,7 @@ each message says what changed in that file.
 | `src/augury/prompts/` | Every prompt, including the eight layer briefs |
 | `src/augury/cli/` | The command line |
 | `eval/cases/` | Three case repositories, ten seeded defects, nine experiments, and the remediated version of every file broken in B01 and C01 |
-| `tests/` | 495 tests |
+| `tests/` | 519 tests |
 
 ---
 
