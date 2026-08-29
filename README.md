@@ -126,37 +126,97 @@ one asserted the vacuity rule for the analyst *by name*, and one accepted a
 A sweep was recorded call by call and the recordings committed, so this is
 reproducible exactly, with no API key: `make eval-replay` prints it verbatim.
 
-| metric | baseline | augury | verdict |
-|---|---|---|---|
-| seeded recall | 0.800 | 0.800 | **tied** |
-| falsifiable precision | **0.909** | 0.583 | baseline, by a wide margin |
-| hit rate | 0.833 (25/30) | **1.000** (30/30) | **suggestive, not significant** (Fisher p = 0.052) |
-| cost | $0.00 replayed | $0.00 replayed | $0.0017 / $0.0083 recorded (5.0x) |
+| metric | baseline | augury |
+|---|---|---|
+| seeded recall (matcher) | 0.800 | 0.800 |
+| seeded recall (hand-audited) | 0.700 | 0.800 |
+| falsifiable precision | **0.909** | 0.667 |
+| hit rate | 0.833 (5/6) | 1.000 (6/6) |
+| experiments run | 6 | 5 |
+| prediction coverage | 0.600 | 0.429 |
+| cost | $0.00 replayed | $0.00 replayed |
 
-**The falsifiable-precision result reversed.** It was 0.778 baseline against
-0.833 augury when only one arm knew the validator's rules. Told the same rules,
-the baseline goes to 0.909 and the pipeline drops to 0.583. The pipeline's
-apparent advantage on that metric was the coaching, not the architecture, and
-it is now clearly behind: it makes more claims and a smaller share of them
-survive validation.
+```
+hit rate  repeats not independent: p = n/a  not measured
+recall    repeats not independent: inconclusive
+```
 
-**The hit rate moved the other way.** Every prediction the pipeline made and
-had tested came back a hit, 30 out of 30, against 25 of 30. At these
-denominators that is p = 0.052 -- which the harness reports as *suggestive, not
-significant*, and which is the correct thing to say about a one-sweep result
-sitting on the wrong side of every conventional threshold. It is the first
-signal in this project's history that has pointed at the pipeline and survived
-a fair comparison, and one sweep is not enough to believe it.
+**The harness cannot separate the two arms on any metric, and now says so on
+every row.**
 
-Read the two together and they say something coherent rather than
-contradictory: **the pipeline states fewer testable claims, and the ones it
-does state are more often right.** Whether that trade is worth five times the
-cost is not a question this evaluation can answer.
+Recall is identical. Falsifiable precision favours the baseline: the pipeline
+states more claims and a smaller share survive validation. The hit rate favours
+the pipeline by **one prediction** — six of six against five of six — which is
+not a result, and the significance test refuses to dignify it with a p-value
+because the repeats are not independent.
 
-**The pipeline still does not beat one well-written prompt on the headline
-question.** Recall is tied: it finds the same seeded defects. On falsifiable
-precision it is clearly worse. It costs five times as much. The one metric
-where it leads is under-powered and unreplicated.
+#### Recall, audited by hand
+
+Recall is matched by prose against a manifest, and prose matching cannot tell a
+correct diagnosis from a wrong one that mentions the right word. So all twenty
+matches in the run above were read by hand. One is wrong:
+
+**C01-3** is a session leaked when the body raises. The baseline was credited
+with it for this finding:
+
+> `engine`: SQLAlchemy engine is configured with `pool_size=10` and
+> `max_overflow=0` ... 40 concurrent `with_session` calls will exceed this
+
+That is a different defect, and its remediation -- raise the pool size -- does
+not close the leak. It scores because the sentence contains `with_session`.
+The pipeline's match on the same defect is genuine: *"When `work` raises an
+exception the session is never closed."*
+
+| | matcher | audited |
+|---|---|---|
+| baseline | 0.800 | **0.700** |
+| augury | 0.800 | **0.800** |
+
+Which is a difference in the pipeline's favour, and it is worth exactly as
+little as the differences that ran the other way: **one observation, ten
+defects, no significance test possible.** It is reported because the sentence
+"recall is tied" was not supported by the underlying matches, not because 0.700
+against 0.800 is a result.
+
+[`tests/test_the_recall_matcher_is_not_sound.py`](tests/test_the_recall_matcher_is_not_sound.py)
+pins five ways the matcher is wrong, including this one and including a review
+that asserts the code is **correct** in five sentences and scores a perfect
+1.000. Those tests assert the flaws rather than the fix, because there is no
+fix: a matcher cannot read intent.
+
+The `prediction coverage` row is the one to read next to the hit rate. An
+untested prediction costs nothing: it is not a miss, it is not Broken, it is
+excluded. The pipeline had **43%** of its falsifiable claims graded against the
+baseline's 60%, so its perfect hit rate is a perfect score on its best-aimed
+claims. That row is printed for exactly this reason — it was computed and
+withheld from the table until a review pointed out that the hit rate cannot be
+read honestly without it.
+
+#### This table said something else an hour ago
+
+It read `hit rate 0.833 (25/30) vs 1.000 (30/30), Fisher p = 0.052,
+suggestive`. Every one of those numbers was an artefact.
+
+Replay serves all five repeats from one recording, so the observation is 5/6
+and 6/6 — and pooling counted it five times. `compare` and the permutation test
+were both guarded against exactly this after iteration 18. **`fisher_exact` was
+not**, and it was the one being fed the pooled counts. p = 1.0000 was published
+as p = 0.052.
+
+At the same time, falsifiable precision read 0.583 instead of 0.667, because
+the commit that fixed the double-counted denominator changed `score()` and the
+published figure comes from `aggregate()`. The test written to catch that used
+a report with zero falsifiable findings, where 0/1 and 0/2 are both 0.0 — so
+the fix, and its test, both passed without the fix reaching the number.
+
+Both were found by an adversarial review of the harness, by mutation rather
+than by reading. Of 36 mutations applied to the scoring and significance code,
+33 were killed by the suite. The three that survived are how these shipped.
+
+**The pipeline does not beat one well-written prompt.** It finds the same
+seeded defects, states more claims of which fewer survive validation, is graded
+on a smaller share of them, and costs five times as much. Its one nominal lead
+is a single prediction on a run whose repeats carry no independent information.
 
 It is also not shown to be worse. Ten seeded defects over three cases cannot
 resolve a difference this size in either direction, and saying so is the honest
@@ -218,7 +278,7 @@ and against more than one remediation, because passing against one is how
 ```bash
 make install
 cp .env.example .env      # add GROQ_API_KEY
-make check                # lint, types, 495 tests
+make check                # lint, types, 519 tests
 ```
 
 Full instructions, including reproducing the published numbers with no API key,
