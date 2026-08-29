@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "network"
+  ],
+  "reasoning": "Data: the ready endpoint uses a database session and executes a query; Network: the file defines HTTP health and readiness endpoints."
+}
