@@ -39,14 +39,30 @@ def test_permutation_finds_no_difference_between_similar_samples() -> None:
     baseline = [1.0, 1.0, 0.8, 1.0, 0.8, 0.8, 0.6, 0.8]
     augury = [0.8] * 8
 
-    assert permutation_p(augury, baseline) > 0.5
+    probability = permutation_p(augury, baseline)
+
+    assert probability is not None
+    assert probability > 0.5
 
 
 def test_permutation_finds_a_real_separation() -> None:
-    assert permutation_p([1.0] * 6, [0.2] * 6) < 0.01
+    probability = permutation_p([1.0] * 6, [0.2] * 6)
+
+    assert probability is not None
+    assert probability < 0.01
 
 
 def test_permutation_refuses_a_sample_too_small_to_say_anything() -> None:
     """Three against three cannot reach 0.05 whatever the result, so the
     number would be theatre."""
-    assert permutation_p([1.0, 1.0, 1.0], [0.2, 0.2, 0.2]) > 0.05
+    probability = permutation_p([1.0, 1.0, 1.0], [0.2, 0.2, 0.2])
+
+    assert probability is not None
+    assert probability > 0.05
+
+
+def test_an_empty_arm_yields_no_verdict_from_the_permutation_test_either() -> None:
+    """An arm that lost every run to provider errors is missing data.
+    Returning a probability for it would be a positive claim of equivalence
+    drawn from nothing, and fisher_exact already abstains."""
+    assert permutation_p([], [1.0, 0.8]) is None
