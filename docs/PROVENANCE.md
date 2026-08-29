@@ -22,8 +22,8 @@ each message says what changed in that file.
 | `src/augury/evaluation/` | Cases, runner, prover, reconciler, sweep |
 | `src/augury/prompts/` | Every prompt, including the eight layer briefs |
 | `src/augury/cli/` | The command line |
-| `eval/cases/` | Three case repositories, ten seeded defects, nine experiments, and the remediated version of every file broken |
-| `tests/` | 422 tests |
+| `eval/cases/` | Three case repositories, ten seeded defects, nine experiments, and the remediated version of every file broken in B01 and C01 |
+| `tests/` | 495 tests |
 
 ---
 
@@ -38,7 +38,7 @@ specialists have any authority.
 **What was taken:** the *arguments*. The eight layer briefs in
 `src/augury/prompts/layers/` were written for this submission, but they say
 what the corresponding lab layer teaches. The defect taxonomy in
-`docs/DEFECT_TAXONOMY.md` traces every seeded defect to the lab topic that
+[`docs/planning/DEFECT_TAXONOMY.md`](planning/DEFECT_TAXONOMY.md) traces every seeded defect to the lab topic that
 defines it.
 
 **What was not taken:** no lab file is copied into this repository. The
