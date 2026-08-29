@@ -171,3 +171,20 @@ def test_a_trajectory_can_be_produced_by_a_documented_command() -> None:
     from augury.cli.main import review
 
     assert "trajectory" in inspect.signature(review).parameters
+
+
+def test_the_evaluate_path_gives_both_arms_the_experiment_conditions() -> None:
+    """The fix credited with the largest metric movement in this project --
+    C01's hit rate going from 0.000 to 0.867 -- patched the `review` command
+    and not this one. So the documented command for reproducing the published
+    table told both arms the repository ships no experiments, and then graded
+    their claims against nine of them.
+
+    No test covered the construction, which is why one commit could claim to
+    fix both paths and fix one.
+    """
+    import inspect
+
+    from augury.cli.main import _one_run
+
+    assert "experiment_conditions()" in inspect.getsource(_one_run)
