@@ -127,6 +127,21 @@ def choose_environment(
     return Environment(kind="local", root=root, python=python, why=why)
 
 
+def _covers(source_root: str, wanted: set[str]) -> bool:
+    """Whether this service is built from a directory containing the scope.
+
+    Narrowing to a subdirectory is the normal way to run a review, and
+    `--scope backend/src/services` is still the image built from `backend`.
+    Comparing for equality reported that no service builds from the reviewed
+    directory, for a repository where one plainly does.
+
+    Compared segment by segment, so `backend-tools` is not inside `backend`
+    however the two strings sort.
+    """
+    root = source_root.strip("/").split("/")
+    return any(part.split("/")[: len(root)] == root for part in wanted)
+
+
 def _service_for(scope: tuple[str, ...], survey: Survey) -> str:
     """The service built from the directory under review.
 
@@ -134,11 +149,11 @@ def _service_for(scope: tuple[str, ...], survey: Survey) -> str:
     the one taking traffic is preferred: it is the likeliest to have the
     dependencies a request path touches.
     """
-    wanted = {part.strip("/") for part in scope} or {""}
+    wanted = {part.strip("/") for part in scope}
     candidates = [
         service
         for service in survey.services
-        if not wanted or service.source_root in wanted or (not scope and service.source_root)
+        if service.source_root and (not wanted or _covers(service.source_root, wanted))
     ]
     if not candidates:
         return ""
