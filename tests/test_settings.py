@@ -5,15 +5,49 @@ capability the result actually depends on, both need this to be an environment
 variable rather than an edit.
 """
 
+from pathlib import Path
+
 import pytest
 
 from augury.core.settings import SettingsError, load_settings
 
 
-def test_defaults_to_gpt_oss_120b_on_groq(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.fixture(autouse=True)
+def _no_developer_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Point .env somewhere empty for every test in this file.
+
+    Without this these tests read whichever .env the developer happens to
+    have, so "what does it default to" is answered by a gitignored file and
+    the suite passes or fails depending on who runs it. That is exactly how
+    this fixture came to be written.
+    """
+    monkeypatch.setattr("augury.core.settings._dotenv_path", lambda: tmp_path / ".env")
+
+
+def test_defaults_to_deepseek_flash(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cheapest capable model, so an unconfigured run is an affordable one."""
     monkeypatch.delenv("AUGURY_PROVIDER", raising=False)
     monkeypatch.delenv("AUGURY_MODEL", raising=False)
-    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+
+    settings = load_settings()
+
+    assert settings.spec.provider == "deepseek"
+    assert settings.spec.model == "deepseek-v4-flash"
+
+
+def test_a_dotenv_supplies_what_the_environment_does_not(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The path a user takes: fill in .env, run the command, no exports."""
+    monkeypatch.delenv("AUGURY_PROVIDER", raising=False)
+    monkeypatch.delenv("AUGURY_MODEL", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    written = tmp_path / ".env"
+    written.write_text(
+        "AUGURY_PROVIDER=groq\nAUGURY_MODEL=openai/gpt-oss-120b\nGROQ_API_KEY=gsk-x\n"
+    )
+    monkeypatch.setattr("augury.core.settings._dotenv_path", lambda: written)
 
     settings = load_settings()
 
