@@ -117,6 +117,14 @@ def _ratio(numerator: int, denominator: int) -> float | None:
     return numerator / denominator if denominator else None
 
 
+# A ratio over fewer measurements than this is not a rate, and printing it
+# beside a ratio over fifty invites exactly the wrong comparison. Measured on
+# B01, one baseline seed produced a hit rate of 1.000 from a single tested
+# prediction. The counts are always reported, so withholding the ratio hides
+# nothing: a reader can still see one of one and judge it themselves.
+MIN_TESTED_FOR_A_RATE = 5
+
+
 class ArmScore(BaseModel):
     """One arm's result across a case set.
 
@@ -190,7 +198,7 @@ def aggregate(scores: list[Score]) -> ArmScore:
         broken=sum(s.broken for s in scores),
         dropped=sum(s.dropped for s in scores),
         falsifiable_precision=_ratio(falsifiable, observations),
-        hit_rate=_ratio(hits, tested),
+        hit_rate=_ratio(hits, tested) if tested >= MIN_TESTED_FOR_A_RATE else None,
         prediction_coverage=_ratio(tested, falsifiable),
         per_case_low=min(per_case) if per_case else None,
         per_case_high=max(per_case) if per_case else None,
