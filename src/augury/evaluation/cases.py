@@ -144,9 +144,7 @@ def _pattern(symbol: str) -> re.Pattern[str]:
         # retry / retries, apply / applied. A y-stem inflects by replacing it.
         forms.append(re.escape(symbol[:-1]) + "(?:ies|ied)")
 
-    return re.compile(
-        rf"(?<![\w-])(?:{'|'.join(forms)})(?![\w-])", re.IGNORECASE
-    )
+    return re.compile(rf"(?<![\w-])(?:{'|'.join(forms)})(?![\w-])", re.IGNORECASE)
 
 
 # A mechanism shorter than this is a label rather than an explanation. Set by
