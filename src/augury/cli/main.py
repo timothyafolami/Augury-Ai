@@ -22,6 +22,8 @@ from augury.core.adapters.provider import model_from
 from augury.core.cartography import Cartographer
 from augury.core.cartography.languages import EXTENSIONS
 from augury.core.findings import Report
+from augury.core.reference import Registry, requirements_of
+from augury.core.reference.staleness import dependency_findings
 from augury.core.scheduling import Budget
 from augury.core.schema import read_migrations, schema_findings
 from augury.core.scoring import Score
@@ -121,6 +123,31 @@ def survey(
             console.print(f"  {unreached}")
 
     _print_schema(root, limits)
+    _print_dependencies(root, limits)
+
+
+def _print_dependencies(root: Path, limits: tuple[str, ...]) -> None:
+    """What the dependency list says, asked of the registry rather than recalled.
+
+    A model asked which version of a library is current answers from its
+    training cutoff, confidently. The registry is free, needs no key, and is
+    the authority -- and every failure here is silence, because a review has to
+    work offline.
+    """
+    registry = Registry()
+    for base in [root / part for part in limits] or [root]:
+        pinned = requirements_of(base)
+        if not pinned:
+            continue
+        findings = dependency_findings(pinned, registry)
+        if not findings:
+            continue
+        plural = "finding" if len(findings) == 1 else "findings"
+        console.print(f"\n[bold]dependencies[/bold] — {len(findings)} {plural}")
+        for finding in findings:
+            console.print(f"  {finding.rule}", markup=False)
+            console.print(f"     {finding.detail}", markup=False)
+            console.print(f"     fix: {finding.remediation}", markup=False)
 
 
 def _print_schema(root: Path, limits: tuple[str, ...]) -> None:
