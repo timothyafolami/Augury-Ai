@@ -15,6 +15,7 @@ harness that cannot run quietly depress a rival arm.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -80,6 +81,9 @@ class Prover:
             cwd=str(self._case.repo),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            # Named explicitly so the experiment measures the repository this
+            # case points at, rather than whichever one sits beside it.
+            env={**os.environ, "AUGURY_CASE_REPO": str(self._case.repo)},
         )
         try:
             out, err = await process.communicate()
