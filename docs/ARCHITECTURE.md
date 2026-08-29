@@ -92,7 +92,7 @@ called cannot find anything, and nothing downstream recovers the miss.
 ## What one real review actually did
 
 From [`trajectories/augury-B01.jsonl`](trajectories/augury-B01.jsonl), a
-seventeen-module repository:
+twenty-three-module repository:
 
 | | |
 |---|---|
@@ -105,8 +105,8 @@ seventeen-module repository:
 
 Specialists actually invoked: `data` 13, `network` 6, `observability` 3,
 `security` 1, `craft` 1, `concurrency` 1. Two of the eight were never called,
-which is the routing working: fanning out to all eight would have cost three
-times as much and produced confident opinions from reviewers with nothing to
+which is the routing working: fanning out to all eight would have cost about
+five times as much (8 over 1.6) and produced confident opinions from reviewers with nothing to
 look at.
 
 Roughly 1.6 specialists per module, not 8.
