@@ -26,6 +26,7 @@ DOTENV_ALLOWED = frozenset(
         "AUGURY_PROVIDER",
         "AUGURY_MODEL",
         "AUGURY_TEMPERATURE",
+        "AUGURY_MAX_TOKENS",
         "AUGURY_REPLAY_ONLY",
         "GROQ_API_KEY",
         "OPENAI_API_KEY",
