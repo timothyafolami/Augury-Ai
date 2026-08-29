@@ -26,6 +26,7 @@ def test_help_lists_both_commands() -> None:
 def test_listing_cases_needs_no_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """A judge should be able to see what is here before spending anything."""
     monkeypatch.setenv("AUGURY_ENV_FILE", "/nonexistent/.env")
+    monkeypatch.setenv("AUGURY_PROVIDER", "groq")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
 
     result = runner.invoke(app, ["cases"])
@@ -54,8 +55,8 @@ def test_a_missing_key_names_the_variable_rather_than_stack_tracing(
     """A traceback here would also print the key when one is set, because
     typer shows locals by default."""
     monkeypatch.setenv("AUGURY_ENV_FILE", "/nonexistent/.env")
+    monkeypatch.setenv("AUGURY_PROVIDER", "groq")
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    monkeypatch.delenv("AUGURY_PROVIDER", raising=False)
 
     result = runner.invoke(app, ["review", "--case", "B01", "--arm", "baseline"])
 
