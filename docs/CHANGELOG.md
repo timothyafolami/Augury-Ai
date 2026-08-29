@@ -789,6 +789,60 @@ shipped with tests that passed without the fix working.
 
 ---
 
+## 23. A fourth case, and the lead did not survive it
+
+**What prompted it.** This file's own open questions, verbatim: *"The margin is
+one experiment. A single measurement moving would erase or double it. It needs
+a fourth case, not a sixth repeat."*
+
+**What was built.** D01, a search-index service: eleven modules, three seeded
+defects. Chosen partly for its first defect, which is the only one in the suite
+that measures `memory_bytes` -- a metric the published vocabulary has carried
+since P0 and no case had ever settled.
+
+**What the evidence said.**
+
+| metric | three cases | four cases |
+|---|---|---|
+| seeded recall | 0.800 / 0.800 | **0.769** / 0.692 |
+| falsifiable precision | **0.909** / 0.667 | **0.750** / 0.650 |
+| hit rate | 0.833 (5/6) / **1.000** (5/5) | **1.000** (8/8) / 0.600 (3/5) |
+| prediction coverage | 0.600 / 0.429 | **0.889** / 0.385 |
+
+The pipeline's single lead reversed. On four cases the baseline is ahead on
+every metric.
+
+**What was decided.** Publish it as the result. The prediction that preceded it
+is the part worth keeping: the margin was named as too small to survive more
+data, in writing, before the data existed, and it did not survive it. That is
+the only kind of confirmation an underpowered study can honestly give.
+
+**What building it taught.** Two things, both about the harness rather than the
+arms.
+
+An experiment written for D01's third defect worked and was deleted. Its metric
+is `http_req_duration_p99`, and this project requires every experiment to
+return the same number twice. A wall-clock percentile cannot. It measured 33.9
+ms seeded against 0.001 ms remediated -- four orders of magnitude -- and
+shipping it would have meant weakening the determinism guarantee for one
+measurement. So `http_req_duration_p99` stays in the vocabulary, is predicted
+against by four of the eight layer briefs, and is settled by nothing.
+
+Writing it also surfaced a defect in itself first: at a hundred samples the
+nearest-rank p99 *is* the maximum, so the remediation -- which pays its cost
+exactly once -- measured no better than the defect, because that one warm-up
+request was the p99.
+
+**And it exposed an exemption nobody had written down.** A04's only defect
+expects that same unmeasurable metric, and the test requiring every defect to
+have an experiment had been filtering to cases that ship an experiments
+directory. A04 has none, so it was excluded from the check entirely: the
+exemption was a property of the directory layout rather than a decision. Every
+case is now checked, and a defect without an experiment must say why in at
+least eight words.
+
+---
+
 ## Still open
 
 - The pipeline costs five times the baseline. It finds the same defects, states
