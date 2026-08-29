@@ -20,3 +20,16 @@ test:
 fmt:
 	uv run ruff check --fix src tests
 	uv run ruff format src tests
+
+# -- reviews and evaluation (need an API key; see docs/REPRODUCE.md) --------
+
+.PHONY: review-baseline review-augury evaluate
+
+review-baseline:
+	uv run python -m augury.cli review --arm baseline --case B01
+
+review-augury:
+	uv run python -m augury.cli review --arm augury --case B01
+
+evaluate:
+	uv run python -m augury.cli evaluate --seeds 3 --prove
