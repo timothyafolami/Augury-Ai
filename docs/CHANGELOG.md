@@ -585,6 +585,59 @@ notice from a suspiciously tidy table.
 
 ---
 
+## 19. Two review agents, and what they found in a day-old codebase
+
+**What prompted it.** The MCP server, the replay wiring and the symbol locator
+were all written in one sitting, all with tests written first, all green. Two
+agents were pointed at them: one told to break the code, one told to check
+every documented claim against the code by running it.
+
+**What the evidence said.** Twenty-four defects between them. The ones worth
+recording here are the ones a passing test suite actively concealed.
+
+*The seal that was not sealed.* Replay's guarantee is that a missing recording
+stops the run rather than falling through to a provider. The reviewer replaced
+`SealedModel`'s two methods with ones returning empty objects and ran the
+suite: **465 passed.** No test constructed the class. Replay could have
+fabricated answers at $0.00 and been indistinguishable from a correct free
+reproduction -- the mock-that-lies shape again, at the exact point this project
+has already been burned by it, in code written the same day as a document
+describing that risk.
+
+*The enforcement that enforced nothing.* `test_no_module_outside_the_provider_
+calls_build_model_directly` matched only a bare `build_model(...)`. The reviewer
+added a module calling `provider.build_model(...)` -- the mistake as anyone
+would actually write it -- and the test passed.
+
+*The locator made lines worse.* It was added because findings named the right
+function and the wrong line. On a shadowed name it returned the first match, so
+a correctly-named line 47 became line 2 with the authority of "the parser
+confirmed it". Seven of its nineteen declared node types could never match at
+all, and its one-case-per-language suite reported full six-language coverage.
+
+*The cost bug, again.* `CassetteModel` bracketed the inner adapter's cumulative
+usage counter -- exactly what `provider.py`'s docstring says not to do, three
+files away, in the comment explaining why `Completion` exists. Two concurrent
+$1.00 calls reported $3.00. Record mode is the only mode that reports a
+non-zero cost and it was the one inflating it, which means the recorded cost
+figures published before this were wrong and the cassettes were re-recorded.
+
+*A batch killed the server.* A JSON-RPC batch is a top-level array; several MCP
+clients send one. `handle` did `request.get("id")` and the AttributeError
+escaped the stdio loop, ending the session. The only transport test sent four
+well-formed objects.
+
+**What was decided.** All twenty-four fixed, each with a test that fails
+against the old behaviour. The pattern across them is one thing: **every defect
+lived in the gap between what a docstring promised and what a test checked.**
+The docstrings were accurate about the danger and no test held anyone to them.
+
+**What it cost to learn.** Two agents, about half an hour of wall clock. That
+is cheaper than the four withdrawn claims in this file, each of which took a
+full evaluation run to discover.
+
+---
+
 ## Still open
 
 - The pipeline costs six times the baseline for a result not distinguishable
