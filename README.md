@@ -120,14 +120,24 @@ reaches no network, spends nothing, and prints this, exactly:
 
 | metric | baseline | augury | verdict |
 |---|---|---|---|
-| seeded recall | 0.700 | 0.800 | **inconclusive**, ranges overlap |
-| falsifiable precision | 0.900 | 0.810 | |
-| hit rate | 0.750 (15/20) | 0.700 (35/50) | **no detectable difference** (Fisher p = 0.78) |
-| cost | $0.00 replayed | $0.00 replayed | $0.001 / $0.011 when recorded |
+| seeded recall | 0.800 | 0.900 | **inconclusive**, repeats not independent |
+| falsifiable precision | 0.778 | 0.833 | |
+| hit rate | 0.833 (25/30) | 0.889 (40/45) | **no detectable difference** (Fisher p = 0.51) |
+| cost | $0.00 replayed | $0.00 replayed | $0.0015 / $0.0083 when recorded (5.4x) |
 
-Three sweeps now: recall favouring augury twice and tied once, hit rate
-favouring the baseline all three times, and **the same verdict every time**.
-The point estimates are noise at this sample size; the verdict is not.
+Note the recall row. The ranges are `0.800-0.800` and `0.900-0.900`, which do
+not overlap, and an earlier version of the comparator called that a **win for
+the pipeline**. It is not one: replay serves every repeat from the same
+recording, so five repeats are one observation and the zero width says only
+that a recording is deterministic. The comparator now refuses a verdict when
+the repeats were not independent, and withholds the permutation p-value for the
+same reason -- on this data it would read p = 0.0079, a confident finding
+computed from one observation per arm.
+
+Four sweeps now. Recall favours augury in three and ties in one. Hit rate
+favours the baseline in three and augury in this one. **Every sweep returns the
+same verdict.** The point estimates are noise at this sample size; the verdict
+is not, and the direction of the noise is not evidence of anything.
 
 **The pipeline does not beat one well-written prompt.** Not on defects found,
 not on whether its numbers survive testing. It costs five times as much in the
