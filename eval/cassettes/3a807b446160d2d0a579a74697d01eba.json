@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/reports.py",
+      "line": 10,
+      "layer": "data",
+      "symbol": "shipments_by_courier",
+      "mechanism": "N+1 query pattern: a per‑shipment call to `name_for` issues a separate database query inside a loop, causing the number of queries to grow with the number of shipments (see reference material on query counts per request).",
+      "severity": "medium",
+      "remediation": "Fetch courier names in the same query (e.g., join Shipment with Courier) or batch‑load them before the loop, removing the per‑shipment `await name_for` call.",
+      "arithmetic": "total_queries = 1 (initial SELECT Shipment) + N (one name_for query per shipment). For N=40 shipments, total_queries = 1 + 40 = 41.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 41.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "40 shipments, 2 couriers"
+      }
+    }
+  ]
+}
