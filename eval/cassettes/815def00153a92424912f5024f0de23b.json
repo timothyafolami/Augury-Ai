@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "data"
+  ],
+  "reasoning": "Defines the SQLAlchemy DeclarativeBase used by ORM models, which is relevant to the data specialist."
+}
