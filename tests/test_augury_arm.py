@@ -74,7 +74,7 @@ def model(**overrides: dict[str, Any]) -> RoutingModel:
 
 
 def make_repo(tmp_path: Path) -> Path:
-    (tmp_path / "app").mkdir()
+    (tmp_path / "app").mkdir(parents=True)
     (tmp_path / "app" / "db.py").write_text("import sqlalchemy\n\npool_size = 5\n")
     (tmp_path / "app" / "notes.py").write_text("VERSION = '1.0'\n")
     return tmp_path
