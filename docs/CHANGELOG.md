@@ -439,6 +439,24 @@ wrong four times.
 
 ---
 
+## A fourth time, caught before publishing
+
+Running `make evaluate` at its default three seeds printed falsifiable
+precision of **0.377 for the baseline and 0.852 for the pipeline** -- a gap
+more than twice the size of anything else measured here, on the metric closest
+to the project's own thesis.
+
+At five seeds it is **0.727 against 0.779, Fisher p = 0.55**. There is nothing
+there.
+
+Nothing was fixed in response to this, because nothing was broken. It is
+recorded because it is the fourth time a striking number in this project turned
+out to be a small sample, and because it took no effort at all to want it to be
+real. The only reason it is not in the README is that the habit of running the
+test before writing the sentence is now in place.
+
+---
+
 ## Removed
 
 Nothing yet. When something is removed, it stays listed here with what it cost
