@@ -177,7 +177,11 @@ def _print_schema(root: Path, limits: tuple[str, ...]) -> None:
 def report(
     path: str = typer.Option(..., help="Repository to review"),
     scope: str = typer.Option("", help="Comma-separated directories to limit the review to"),
-    budget: float = typer.Option(0.25, min=0.0, help="Ceiling on what this review may spend"),
+    budget: float = typer.Option(
+        0.0,
+        min=0.0,
+        help="Ceiling on spend. 0 reads every module worth reading and reports what it cost",
+    ),
     out: str = typer.Option("augury-report.md", help="Where to write the document"),
 ) -> None:
     """Review a repository and write a document a team can act on.
@@ -211,7 +215,11 @@ def report(
     model = model_from(settings)
 
     async def run() -> Report:
-        built = AuguryReviewer(model, budget=Budget(usd=budget))
+        built = AuguryReviewer(
+            model,
+            budget=Budget(usd=budget) if budget else Budget(),
+            watching=_watcher(),
+        )
         result: Report = await built.review(repo, root)
         return result
 
@@ -253,7 +261,11 @@ def review(
     case: str = typer.Option("", help="Case id, e.g. B01"),
     path: str = typer.Option("", help="Any repository to review, instead of a case"),
     scope: str = typer.Option("", help="Comma-separated directories to limit the review to"),
-    budget: float = typer.Option(0.25, min=0.0, help="Ceiling on what this review may spend"),
+    budget: float = typer.Option(
+        0.0,
+        min=0.0,
+        help="Ceiling on spend. 0 reads every module worth reading and reports what it cost",
+    ),
     arm: str = typer.Option("augury", help="baseline or augury"),
     prove: bool = typer.Option(False, help="Run the case's experiments against the claims"),
     trajectory: str = typer.Option("", help="Write every step to this JSONL file"),
@@ -325,7 +337,12 @@ def _review_repository(path: str, scope: str, budget_usd: float, arm: str, traje
         # repository in one call and drops whatever does not fit. Handing it a
         # dollar budget would imply a knob it does not have.
         built = (
-            AuguryReviewer(model, budget=Budget(usd=budget_usd), trajectory=recording)
+            AuguryReviewer(
+                model,
+                budget=Budget(usd=budget_usd) if budget_usd else Budget(),
+                trajectory=recording,
+                watching=_watcher(),
+            )
             if reviewer is AuguryReviewer
             else BaselineReviewer(model, trajectory=recording)
         )
@@ -478,6 +495,29 @@ def _fail(message: str) -> NoReturn:
 # sitting. They arrive ordered by evidence, so showing the head of the list is
 # showing the part worth reading first; the rest is in the trajectory.
 SHOWN_BY_DEFAULT = 25
+
+
+def _watcher() -> Callable[[object], None]:
+    """Narrate a review while it runs.
+
+    A review of a real backend runs for minutes. Silence for that long is
+    indistinguishable from a hang, and it hides the thing worth watching:
+    which module is being read, how far it is from a request, and what the
+    budget has actually bought so far.
+    """
+
+    def watch(progress: object) -> None:
+        found = progress.findings  # type: ignore[attr-defined]
+        depth = progress.depth  # type: ignore[attr-defined]
+        where = "unreached" if depth is None else f"depth {depth}"
+        mark = f"[bold]{found} found[/bold]" if found else "[dim]clean[/dim]"
+        console.print(
+            f"[dim]{progress.read:>4}/{progress.total}[/dim] "  # type: ignore[attr-defined]
+            f"[dim]${progress.usd:6.4f}[/dim]  "  # type: ignore[attr-defined]
+            f"{where:<10} {progress.path}  {mark}"  # type: ignore[attr-defined]
+        )
+
+    return watch
 
 
 def _print_findings(report: Report, *, limit: int = SHOWN_BY_DEFAULT) -> None:
