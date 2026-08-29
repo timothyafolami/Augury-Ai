@@ -65,14 +65,34 @@ class Defect(BaseModel):
 class Case(BaseModel):
     """One repository and everything we seeded in it."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     repo_description: str = ""
     defects: tuple[Defect, ...] = Field(min_length=1)
     notes: str = ""
+    experiment_conditions_by_metric: dict[str, str] = Field(
+        default_factory=dict,
+        alias="experiment_conditions",
+        description="What scenario each experiment runs, published to every arm",
+    )
     repo: Path = Path()
+
+    def experiment_conditions(self) -> dict[str, str]:
+        """The scenario each of this case's experiments runs.
+
+        Published to both arms. A reviewer cannot guess a harness's
+        parameters, and a prediction about a scenario that was never run is
+        scored on something other than its own correctness: on case C01 every
+        tested prediction from both arms was a correct diagnosis of a different
+        load than the one measured.
+
+        This reveals which metrics a case can measure. It does not reveal where
+        the defects are, what the numbers should be, or whether anything is
+        wrong at all.
+        """
+        return dict(self.experiment_conditions_by_metric)
 
     def found_by(self, report: Report) -> tuple[str, ...]:
         """The ids of the seeded defects this report found, each counted once."""
