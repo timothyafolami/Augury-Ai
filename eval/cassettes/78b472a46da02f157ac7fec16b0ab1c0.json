@@ -1,0 +1,87 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 7,
+      "layer": "concurrency",
+      "symbol": "engine",
+      "mechanism": "Total DB connections across workers can exceed DB max connections, causing connection exhaustion under load.",
+      "severity": "high",
+      "remediation": "Set pool_size and max_overflow per worker to lower values or configure DB max connections accordingly; e.g., pool_size=5, max_overflow=5.",
+      "arithmetic": "4 uvicorn workers * (pool_size 20 + max_overflow 10) = 120 total connections.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 120.0,
+        "upper": null,
+        "unit": "connections",
+        "condition": "4 uvicorn workers each with pool_size=20 and max_overflow=10"
+      }
+    },
+    {
+      "path": "app/clients/payments.py",
+      "line": 8,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "Retries up to 3 times without backoff cause up to 3x load on the payment gateway during failures.",
+      "severity": "high",
+      "remediation": "Implement exponential backoff with jitter and limit total attempts; e.g., max_attempts=3, backoff=2**attempt seconds.",
+      "arithmetic": "MAX_ATTEMPTS=3 => up to 3 requests per original request.",
+      "prediction": {
+        "metric": "retry_amplification",
+        "comparator": "at_least",
+        "value": 3.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "gateway returns 503 for each request"
+      }
+    },
+    {
+      "path": "app/clients/shipping.py",
+      "line": 8,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "httpx client with timeout=None can block a worker indefinitely, leading to worker saturation.",
+      "severity": "high",
+      "remediation": "Set a reasonable timeout (e.g., 5 seconds) on the AsyncClient request.",
+      "arithmetic": "One blocked request occupies 1 of 4 workers => saturation = 1/4 = 0.25.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 0.25,
+        "upper": null,
+        "unit": "x",
+        "condition": "shipping.quote called and provider does not respond"
+      }
+    },
+    {
+      "path": "app/services/wallet.py",
+      "line": 12,
+      "layer": "data",
+      "symbol": "debit",
+      "mechanism": "Concurrent debits read balance before update without locking, allowing overdraft.",
+      "severity": "high",
+      "remediation": "Perform balance check and update in a single atomic UPDATE with WHERE balance >= amount, or use SELECT FOR UPDATE.",
+      "arithmetic": "Initial balance 15, two concurrent debits of 10 each => total deducted 20, final balance -5.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_most",
+        "value": -5.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "2 concurrent debits of 10 each on wallet balance 15"
+      }
+    },
+    {
+      "path": "app/repositories/orders.py",
+      "line": 13,
+      "layer": "failure",
+      "symbol": "list_for_customer",
+      "mechanism": "Catches all exceptions and returns empty list, hiding DB errors and causing silent data loss.",
+      "severity": "medium",
+      "remediation": "Let exceptions propagate or translate to HTTP 500; remove broad except, log and re‑raise.",
+      "arithmetic": "No quantitative threshold can be derived from the blanket exception handling.",
+      "prediction": null
+    }
+  ]
+}
