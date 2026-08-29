@@ -17,7 +17,7 @@ repository. Nothing in them should be read as a description of this codebase.
 
 | | |
 |---|---|
-| [`../CHANGELOG.md`](../CHANGELOG.md) | Sixteen iterations, each with the run that caused it |
+| [`../CHANGELOG.md`](../CHANGELOG.md) | Twenty-two iterations, each with the run that caused it |
 | [`../../README.md`](../../README.md) | What was built and what it measured |
 | `eval/cases/*/case.json` | The real defect taxonomy: every seeded defect, its lab topic, its locations and the experiment that settles it |
 
