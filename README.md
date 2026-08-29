@@ -74,7 +74,10 @@ collide on one construct. A **Prover** runs the case's own experiment and
 records what it measured.
 
 Knowing which parts must not be a language model is the engineering claim this
-project makes.
+project makes. Four of the six stages consult no model.
+
+The full architecture, written from the code and one recorded run, is in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
