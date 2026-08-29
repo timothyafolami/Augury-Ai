@@ -105,3 +105,6 @@ For each finding:
   A threshold of zero is not a prediction, because every measurement of a
   magnitude is at least zero. Neither is a range spanning more than about a
   hundredfold. Both will be rejected.
+
+  A range is honest when the mechanism is uncertain: "8 to 27 times" is a real
+  prediction. "Slower" is not.
