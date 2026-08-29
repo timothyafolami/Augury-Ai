@@ -1,0 +1,15 @@
+{
+  "id": "RC01",
+  "name": "runner-fixture",
+  "repo_description": "A minimal repository used only by the runner tests.",
+  "defects": [
+    {
+      "id": "RC01-1",
+      "lab_topic": "02-network/02",
+      "defect": "the pool is smaller than the worker count",
+      "locations": ["app/db.py"],
+      "symbols": ["pool_size", "engine"],
+      "verification": "load"
+    }
+  ]
+}
