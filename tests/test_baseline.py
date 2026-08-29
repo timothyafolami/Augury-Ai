@@ -128,9 +128,7 @@ async def test_a_repository_too_large_for_one_prompt_is_truncated_and_says_so(
         (root / "app" / f"m{index}.py").write_text("import sqlalchemy\n" + "x = 1\n" * 400)
 
     model = ScriptedModel({"findings": []})
-    report = await BaselineReviewer(model, char_budget=2_000).review(
-        Cartographer(root).map(), root
-    )
+    report = await BaselineReviewer(model, char_budget=2_000).review(Cartographer(root).map(), root)
 
     assert len(model.prompts[0]) < 20_000
     assert report.coverage is not None
