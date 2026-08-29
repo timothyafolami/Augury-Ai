@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "security"
+  ],
+  "reasoning": "data: defines the async engine and session handling for database access; security: builds the database URL from an environment variable and manages connection configuration, which may have credential implications."
+}
