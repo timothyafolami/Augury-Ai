@@ -8,6 +8,8 @@ teaches the user to skim the report.
 
 from __future__ import annotations
 
+from typing import cast
+
 from pydantic import BaseModel, ConfigDict
 
 from augury.core.adapters.base import ChatModel
@@ -59,15 +61,15 @@ class Triage:
             context=context or "(none found)",
             specialists="\n".join(f"- {layer.name}: {layer.lab_layer}" for layer in allowed),
         )
-        before = self._model.usage
-        decision = await self._model.structured(prompt=prompt, schema=TriageDecision)
+        completion = await self._model.call(prompt=prompt, schema=TriageDecision)
+        decision = cast("TriageDecision", completion.result)
         if self._trace is not None:
             self._trace.record_call(
                 agent=f"triage:{module.path}",
                 prompt=prompt,
                 response=decision.model_dump(),
-                usage=self._model.usage - before,
-                retries=getattr(self._model, "retries", 0),
+                usage=completion.usage,
+                retries=completion.retries,
             )
 
         chosen = {name.strip().lower() for name in decision.specialists}
