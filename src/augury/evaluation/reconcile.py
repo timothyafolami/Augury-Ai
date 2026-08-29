@@ -14,9 +14,11 @@ problem and not this one.
 
 from __future__ import annotations
 
+from pydantic import ValidationError
+
 from augury.core.drafts import DraftFinding, DraftPrediction, DraftReport
 from augury.core.findings import Severity
-from augury.core.schemas import Comparator
+from augury.core.schemas import Comparator, Prediction
 
 _SEVERITY_ORDER = {Severity.LOW: 0, Severity.MEDIUM: 1, Severity.HIGH: 2}
 
@@ -107,8 +109,26 @@ def _strictest(group: list[DraftFinding]) -> DraftPrediction | None:
     if not predictions:
         return None
 
+    # Rank only among predictions the validator will accept. The rejected
+    # BETWEEN shapes -- an upper bound at or below the lower, or none at all --
+    # have width zero or less, so they ranked as the narrowest band and were
+    # selected over a valid sibling, which was then discarded with them. This
+    # runs on the draft, before validation, so nothing downstream caught it.
+    valid = [p for p in predictions if _validates(p)]
+    if valid:
+        predictions = valid
+
     if predictions[0].comparator is Comparator.AT_MOST:
         return min(predictions, key=lambda p: p.value)
     if predictions[0].comparator is Comparator.BETWEEN:
         return min(predictions, key=lambda p: (p.upper or p.value) - p.value)
     return max(predictions, key=lambda p: p.value)
+
+
+def _validates(draft: DraftPrediction) -> bool:
+    """Whether `Prediction` will accept this shape, asked without raising."""
+    try:
+        Prediction(**draft.model_dump())
+    except ValidationError:
+        return False
+    return True
