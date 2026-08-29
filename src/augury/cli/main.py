@@ -26,8 +26,13 @@ from augury.core.settings import Settings, SettingsError, load_settings
 from augury.core.trajectory import Trajectory
 from augury.evaluation.cases import Case, load_cases
 from augury.evaluation.runner import run_arm
-from augury.evaluation.significance import fisher_exact, verdict
-from augury.evaluation.sweep import SweepResult, recall_permutation_p, summarise
+from augury.evaluation.significance import verdict
+from augury.evaluation.sweep import (
+    SweepResult,
+    hit_rate_fisher_p,
+    recall_permutation_p,
+    summarise,
+)
 
 ARMS = {"baseline": BaselineReviewer, "augury": AuguryReviewer}
 
@@ -249,6 +254,11 @@ def _print_comparison(results: dict[str, SweepResult]) -> None:
         "hit rate": lambda r: _number(r.hit_rate),
         "  hits / tested": lambda r: f"{r.hits} / {r.tested}",
         "  experiments": lambda r: str(r.experiments),
+        # Printed because the hit rate cannot be read honestly without it: an
+        # untested prediction costs nothing, so an arm graded on fewer of its
+        # own claims is graded on its best-aimed ones.
+        "  prediction coverage": lambda r: _number(r.coverage_mean),
+        "  broken": lambda r: str(r.broken),
         "cost usd": lambda r: f"{r.usd_mean:.5f}",
         "seconds": lambda r: f"{r.seconds_mean:.1f}",
     }
@@ -267,10 +277,9 @@ def _print_significance(left: SweepResult, right: SweepResult) -> None:
     a pair of means. Printing the test beside the numbers is what stops a
     third.
     """
-    hit = fisher_exact(
-        hits_a=left.hits, tested_a=left.tested, hits_b=right.hits, tested_b=right.tested
-    )
-    console.print(f"\nhit rate  p = {_probability(hit)}  [bold]{verdict(hit)}[/bold]")
+    hit = hit_rate_fisher_p(left, right)
+    reason = "" if (left.independent and right.independent) else "repeats not independent: "
+    console.print(f"\nhit rate  {reason}p = {_probability(hit)}  [bold]{verdict(hit)}[/bold]")
     console.print(f"recall    {_why(left, right)}: [bold]{SweepResult.compare(left, right)}[/bold]")
     # The permutation test the hot take reports. Computed here so no published
     # statistic is one that no shipped command produces.
