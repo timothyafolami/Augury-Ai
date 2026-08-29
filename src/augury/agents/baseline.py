@@ -23,6 +23,7 @@ from augury.core.findings import Report
 from augury.core.metrics import describe, vocabulary
 from augury.core.scheduling import Coverage
 from augury.core.trajectory import Trajectory
+from augury.evaluation.reconcile import reconcile
 from augury.prompts import render
 
 # What one prompt can hold. The limit is the defining constraint of this arm,
@@ -79,8 +80,13 @@ class BaselineReviewer:
                 retries=completion.retries,
             )
 
+        # Reconciled like the other arm. The merge is deterministic and costs
+        # no model call, and applying it to one arm only removed observations
+        # from that arm's falsifiable-precision denominator while this one kept
+        # every duplicate -- a difference in the harness, scored as a
+        # difference in the reviewer.
         report = to_report(
-            draft,
+            reconcile(draft),
             model_id=self._model.model_id,
             usd=spent.usd,
             seconds=time.monotonic() - started,
@@ -111,8 +117,12 @@ class BaselineReviewer:
         prompt uses about a seventh of what it is allowed.
         """
         ordered = sorted(repo.modules, key=lambda m: (-m.fan_in, -len(m.signals), m.path))
+        # Labelled, not just present. The other arm gets these under a heading
+        # that says what they are and why they matter; handing this arm the
+        # same bytes shaped exactly like a source module told it nothing.
         included: list[str] = [
-            f"### {name}\n```\n{text}\n```" for name, text in repo.context.items()
+            f"### {name}  (deployment configuration, not source)\n```\n{text}\n```"
+            for name, text in repo.context.items()
         ]
         skipped: dict[str, str] = {
             **{path: "unparsed" for path in repo.unparsed},
