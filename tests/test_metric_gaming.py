@@ -82,7 +82,7 @@ def test_dropped_findings_stay_in_the_precision_denominator() -> None:
         ),
     )
 
-    assert score(report).falsifiable_precision == pytest.approx(1 / 18)
+    assert score(report, case="c1", arm="test").falsifiable_precision == pytest.approx(1 / 18)
 
 
 # -- ADV-03: the reviewer must not grade its own homework -----------------
@@ -144,7 +144,7 @@ def test_prediction_coverage_is_reported_so_a_tiny_sample_cannot_hide() -> None:
         )
     )
 
-    result = score(report)
+    result = score(report, case="c1", arm="test")
 
     assert result.hit_rate == 1.0
     assert result.prediction_coverage == pytest.approx(0.01)
@@ -159,7 +159,7 @@ def test_one_experiment_answering_twenty_findings_counts_once() -> None:
     hit rate credible by the reviewer's own verbosity."""
     same = [finding(pred=prediction(), measurement=Measurement(value=1200.0)) for _ in range(20)]
 
-    result = score(Report(findings=tuple(same)))
+    result = score(Report(findings=tuple(same)), case="c1", arm="test")
 
     assert result.experiments == 1
     assert result.tested == 20
