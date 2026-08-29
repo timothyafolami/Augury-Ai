@@ -13,7 +13,9 @@
       ],
       "symbols": [
         "debit",
-        "balance"
+        "wallet.balance",
+        "lost update",
+        "SELECT FOR UPDATE"
       ],
       "verification": "differential",
       "expected_metric": "final_balance",
@@ -30,7 +32,7 @@
       "symbols": [
         "serialize_order",
         "list_orders",
-        "n+1"
+        "N+1"
       ],
       "verification": "differential",
       "expected_metric": "queries_per_request",
@@ -44,9 +46,10 @@
         "app/clients/payments.py"
       ],
       "symbols": [
-        "charge",
         "MAX_ATTEMPTS",
-        "sleep"
+        "asyncio.sleep",
+        "backoff",
+        "jitter"
       ],
       "verification": "load",
       "expected_metric": "retry_amplification"
@@ -60,7 +63,8 @@
       ],
       "symbols": [
         "list_for_customer",
-        "except"
+        "except Exception",
+        "swallow"
       ],
       "verification": "probe",
       "expected_metric": "http_status"
@@ -73,7 +77,7 @@
         "app/clients/shipping.py"
       ],
       "symbols": [
-        "quote",
+        "shipping.quote",
         "AsyncClient",
         "timeout"
       ],
