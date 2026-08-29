@@ -2,5 +2,5 @@
   "specialists": [
     "data"
   ],
-  "reasoning": "Defines database engine, session maker, and async session generator, which are core data layer concerns."
+  "reasoning": "Defines the async SQLAlchemy engine, session maker, and session provider, which are core data-layer concerns."
 }
