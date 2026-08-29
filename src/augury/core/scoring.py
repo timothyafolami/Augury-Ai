@@ -28,9 +28,8 @@ class Score(BaseModel):
     seed: int
     model_id: str
 
-    detected: bool = Field(
-        default=False, description="Whether the seeded defect for this case was found"
-    )
+    seeded: int = Field(default=0, description="How many defects this case seeds")
+    found: int = Field(default=0, description="How many of them this review found")
     failed: bool = Field(
         default=False, description="The review did not complete. Recorded, never dropped."
     )
@@ -57,7 +56,8 @@ def score(
     case: str,
     arm: str,
     seed: int = 0,
-    detected: bool = False,
+    seeded: int = 0,
+    found: int = 0,
     failed: bool = False,
 ) -> Score:
     """Measure one report. No rate is invented where there is nothing to divide."""
@@ -77,7 +77,8 @@ def score(
         arm=arm,
         seed=seed,
         model_id=report.model_id,
-        detected=detected,
+        seeded=seeded,
+        found=found,
         failed=failed,
         total_findings=len(findings),
         falsifiable=len(falsifiable),
@@ -131,7 +132,8 @@ class ArmScore(BaseModel):
     cases: int
     model_ids: tuple[str, ...]
 
-    detected: int
+    seeded: int
+    found: int
     failed: int
     detection_rate: float | None
 
@@ -173,11 +175,13 @@ def aggregate(scores: list[Score]) -> ArmScore:
         arm=arms.pop(),
         cases=len(scores),
         model_ids=tuple(sorted({s.model_id for s in scores})),
-        detected=sum(1 for s in scores if s.detected),
+        seeded=sum(s.seeded for s in scores),
+        found=sum(s.found for s in scores),
         failed=sum(1 for s in scores if s.failed),
-        # Over every case, including the ones that failed. A run that crashed
-        # did not find the defect, and excluding it would reward crashing.
-        detection_rate=_ratio(sum(1 for s in scores if s.detected), len(scores)),
+        # Pooled over every seeded defect, including those in cases that
+        # failed. A run that crashed found nothing, and excluding it would
+        # reward crashing.
+        detection_rate=_ratio(sum(s.found for s in scores), sum(s.seeded for s in scores)),
         total_findings=sum(s.total_findings for s in scores),
         falsifiable=falsifiable,
         tested=tested,
