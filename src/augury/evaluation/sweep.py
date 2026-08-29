@@ -15,7 +15,7 @@ from typing import cast
 from pydantic import BaseModel, ConfigDict
 
 from augury.core.scoring import Score, aggregate
-from augury.evaluation.significance import permutation_p
+from augury.evaluation.significance import fisher_exact, permutation_p
 
 
 class SweepResult(BaseModel):
@@ -56,6 +56,14 @@ class SweepResult(BaseModel):
     hit_rate: float | None
 
     precision_mean: float | None
+    coverage_mean: float | None = None
+    """Share of falsifiable claims that any experiment could grade.
+
+    Printed beside the hit rate because the hit rate is a rate over the claims
+    that reached a measurement, and an arm aiming at metrics no case measures
+    is scored only on its best-aimed claims at no cost for the rest.
+    """
+    broken: int = 0
     usd_mean: float
     seconds_mean: float
 
@@ -122,7 +130,13 @@ def summarise(scores: list[Score], *, independent: bool = True) -> SweepResult:
         run.falsifiable_precision for run in per_seed if run.falsifiable_precision is not None
     ]
 
-    pooled = aggregate(scores)
+    # Pooling assumes each repeat is a new observation. Under replay -- and
+    # under record, where repeats two onward hit the cassette written by the
+    # first -- they are one observation served again, so pooling multiplied
+    # every count by the repeat number and gave `25 / 30` for `5 / 6`. That
+    # inflation is what turned a Fisher p of 1.0000 into a published 0.052.
+    counted = scores if independent else next(iter(by_seed.values()))
+    pooled = aggregate(counted)
 
     failures = sum(1 for entry in scores if entry.failed)
     # A run in which every review crashed has no recall. Reporting 0.000 for it
@@ -144,8 +158,14 @@ def summarise(scores: list[Score], *, independent: bool = True) -> SweepResult:
         recall_low=min(recalls) if recalls and completed else None,
         recall_high=max(recalls) if recalls and completed else None,
         precision_mean=fmean(precisions) if precisions else None,
-        usd_mean=fmean(run.usd for run in per_seed),
-        seconds_mean=fmean(run.seconds for run in per_seed),
+        coverage_mean=pooled.prediction_coverage,
+        broken=pooled.broken,
+        # Recording pays for the first repeat and replays the rest, so the mean
+        # over repeats is a fifth of what one sweep actually costs.
+        usd_mean=fmean(run.usd for run in per_seed) if independent else per_seed[0].usd,
+        seconds_mean=(
+            fmean(run.seconds for run in per_seed) if independent else per_seed[0].seconds
+        ),
     )
 
 
@@ -160,3 +180,18 @@ def recall_permutation_p(left: SweepResult, right: SweepResult) -> float | None:
     if not (left.independent and right.independent):
         return None
     return permutation_p(list(left.recalls), list(right.recalls))
+
+
+def hit_rate_fisher_p(left: SweepResult, right: SweepResult) -> float | None:
+    """Fisher's exact test on the hit rates, or None when it would mislead.
+
+    Guarded exactly as `compare` and `recall_permutation_p` are. This one was
+    not, and it was the one that mattered: it was handed pooled counts from
+    five replayed repeats and reported p = 0.052 for an observation whose
+    honest p is 1.0000.
+    """
+    if not (left.independent and right.independent):
+        return None
+    return fisher_exact(
+        hits_a=left.hits, tested_a=left.tested, hits_b=right.hits, tested_b=right.tested
+    )
