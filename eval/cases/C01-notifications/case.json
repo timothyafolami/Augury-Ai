@@ -14,7 +14,8 @@
       "symbols": [
         "record_delivery",
         "delivery_count",
-        "idempoten"
+        "delivery_id",
+        "redelivering"
       ],
       "verification": "differential",
       "expected_metric": "duplicate_side_effects",
@@ -31,7 +32,7 @@
         "_pending",
         "asyncio.Queue",
         "unbounded",
-        "backpressure"
+        "backlog"
       ],
       "verification": "differential",
       "expected_metric": "queue_depth",
@@ -47,7 +48,8 @@
       "symbols": [
         "with_session",
         "session.close",
-        "leak"
+        "exception",
+        "success path"
       ],
       "verification": "differential",
       "expected_metric": "active_connections",
@@ -64,7 +66,8 @@
       "symbols": [
         "shipments_by_courier",
         "name_for",
-        "N+1"
+        "per shipment",
+        "scales with"
       ],
       "verification": "differential",
       "expected_metric": "queries_per_request",
