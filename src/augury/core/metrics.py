@@ -41,3 +41,15 @@ METRICS: MappingProxyType[str, str] = MappingProxyType(
 def vocabulary() -> str:
     """The metric list, formatted for a prompt."""
     return "\n".join(f"- `{name}`: {meaning}" for name, meaning in METRICS.items())
+
+
+def describe(conditions: dict[str, str]) -> str:
+    """The experiments a case can run, and the scenario each one runs.
+
+    Published to every arm. A reviewer cannot guess a harness's parameters,
+    and a prediction about a scenario that was never run is scored on
+    something other than its own correctness.
+    """
+    if not conditions:
+        return "(this repository ships no experiments, so no claim about it can be settled)"
+    return "\n".join(f"- `{metric}`: {scenario}" for metric, scenario in sorted(conditions.items()))
