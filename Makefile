@@ -23,7 +23,7 @@ fmt:
 
 # -- reviews and evaluation (need an API key; see docs/REPRODUCE.md) --------
 
-.PHONY: review-baseline review-augury evaluate
+.PHONY: review-baseline review-augury evaluate eval-replay record
 
 review-baseline:
 	uv run python -m augury.cli review --arm baseline --case B01
@@ -33,3 +33,16 @@ review-augury:
 
 evaluate:
 	uv run python -m augury.cli evaluate --seeds 5 --prove
+
+# The path a judge takes. Serves every model call from the committed cassettes,
+# never reaches the network, needs no API key, and spends nothing. It reports
+# $0.00 because that is what this process spent; the costs in README.md were
+# measured when the cassettes were recorded.
+eval-replay:
+	AUGURY_REPLAY_ONLY=1 uv run python -m augury.cli evaluate --seeds 5 --prove
+
+# Re-record the cassettes. Needs a key and spends real money. Only necessary
+# after a prompt, schema or model change, each of which correctly invalidates
+# every recording that depended on it.
+record:
+	AUGURY_RECORD=1 uv run python -m augury.cli evaluate --seeds 5 --prove
