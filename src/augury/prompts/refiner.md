@@ -1,62 +1,73 @@
-You are the gate between a reviewer's prose and a claim that can be tested.
+# The falsifiability gate
 
-Everything downstream of you assumes a finding is falsifiable. The Prover will
-try to run an experiment against whatever you pass, and the report will present
-it as something the reader can check. So a finding that cannot be measured must
-not get past you, however plausible it sounds.
+**This is not a prompt. Nothing sends it to a model.**
 
-This is the single most important judgement in the system. Most AI code review
-output is fluent and unfalsifiable, and that is precisely what makes it useless
-at three in the morning.
+It was written as one — a Refiner agent that would read each finding and decide
+whether it could be made testable. It is kept, rewritten, as the specification
+of what replaced it: every rule below is enforced by a pydantic validator on
+`Prediction` in `src/augury/core/schemas.py`, and by `_validate` in
+`src/augury/core/drafts.py`.
 
-## The finding
+The reason it is a validator and not an agent is worth stating, because it is
+the whole architectural argument of this project in one example: **a rule that
+can be written down does not need a model to apply it, and a model applying it
+can be talked out of it.** A gate that costs a model call per finding, varies
+between runs, and can be argued with is worse than one that cannot.
 
-{finding}
+An earlier version of this file described a gate that does not exist. It is
+recorded in `docs/CHANGELOG.md` because a document that confidently describes
+the wrong rule is exactly the failure this project is about.
 
-## The evidence the reviewer cited
+## What a prediction must have
 
-{evidence}
+All four, all present, or it does not validate:
 
-## Your decision
-
-Convert it into a prediction, or drop it. There is no third option, and
-dropping is not failure: a correctly dropped finding is more valuable than a
-number you invented to satisfy the schema.
-
-A prediction needs four things, all of them present:
-
-- a **metric** that something can actually measure: `http_req_duration_p99`,
-  `queries_per_request`, `final_balance`, `active_connections`
-- a **comparator**: at least, at most, or between
-- a **value with a unit**: `1000 ms`, `51 queries`, `8 to 27 x`. A range is
-  honest when you are uncertain. A wide range is a confession that you do not
-  have the mechanism yet, which is useful information and still a prediction.
+- a **metric** from the published vocabulary in `src/augury/core/metrics.py`.
+  Nothing else can be measured, because the metric names the experiment.
+- a **comparator**: `at_least`, `at_most`, or `between`
+- a **value with a unit**: `1000 ms`, `51 queries`, `8 to 27 x`
 - a **condition** it holds under: `rate=250rps`, `50 rows`, `two concurrent
   writers`
 
-"Slower" is not a prediction. "3 to 8 times slower" is.
+## What is rejected, exactly
 
-## Drop it when
+A prediction has to exclude some part of the outcome space. These do not:
 
-- The claim is about style, naming or structure with no runtime consequence.
-- The number would have to be invented rather than derived. Do not derive a
-  threshold from the desire to have one.
-- The mechanism is not actually established by the evidence given.
-- It restates a language or framework default without saying what that default
-  costs here, in this file, at this scale.
+| shape | why it is refused |
+|---|---|
+| `at_least` with value ≤ 0 | every measurement of a magnitude is at least zero |
+| `at_most` with value ≥ 1e9 | no realisable measurement exceeds it |
+| `between` with a lower bound ≤ 0 | a band starting at zero excludes nothing |
+| `between` spanning more than 100x | a band that wide admits almost every outcome |
+| `between` with no upper bound, or an upper below the lower | nothing could Hit |
 
-## Respond with
+The first version of this validator rejected the never-hit shape — an inverted
+band — and accepted the always-hit shape. That asymmetry was fatal: a reviewer
+emitting only `p99 >= 0ms` scored a perfect hit rate while saying nothing, and
+beat an honest reviewer on both headline metrics.
 
-Either:
+Note the tension in the fourth row against the advice both arms are given, that
+a wide range is honest when the mechanism is uncertain. Both are true, and 100x
+is where this project draws the line between the two. It is a judgement, not a
+derivation.
 
-- `prediction`: metric, comparator, value, upper (for ranges), unit, condition
-- `verification`: `load`, `differential` or `probe` -- which kind of experiment
-  would settle it
-- `rationale`: how the number follows from the mechanism
+## What happens to a rejected prediction
 
-Or:
+**The finding is kept and the claim is withdrawn.** This is the part an agent
+would have got wrong: dropping the finding as well would let a reviewer
+improve its own precision by discarding whatever it could not quantify.
 
-- `dropped_because`: the specific reason, in one sentence
-- `would_need`: what evidence would have made this falsifiable
+So a rejected prediction produces a `Dropped` record naming the symbol, the
+path and the reason, and the finding survives without a prediction. Both are
+reported. `falsifiable_precision` counts that finding once — it is one
+observation that produced nothing testable, which is exactly what a finding
+with no prediction at all is worth.
 
-The second form is reported to the user, not discarded. Write it for them.
+## What is deliberately not enforced here
+
+A validator can see the shape of a claim and not its truth. It cannot tell that
+a number was invented, that a mechanism was not established by the evidence, or
+that a finding restates a framework default. `docs/FIELD_RUN.md` records a
+prediction that passed every rule above and was completely false.
+
+**The gate makes a claim checkable. Only the Prover makes it true.**
