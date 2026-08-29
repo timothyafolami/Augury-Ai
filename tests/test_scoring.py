@@ -6,6 +6,8 @@ the share of findings that do is the number that has to be measured honestly --
 including when it is bad.
 """
 
+import itertools
+
 import pytest
 
 from augury.core.findings import Dropped, Finding, Measurement, Report, Severity
@@ -29,7 +31,20 @@ def prediction() -> Prediction:
 OBSERVED = {Outcome.HIT: 1200.0, Outcome.MISS: 400.0, Outcome.BROKEN: None}
 
 
-def finding(*, falsifiable: bool, verdict: Outcome | None = None) -> Finding:
+_EXPERIMENTS = itertools.count()
+
+
+def finding(
+    *, falsifiable: bool, verdict: Outcome | None = None, experiment: str | None = None
+) -> Finding:
+    """One finding, settled by its own experiment unless one is named.
+
+    The hit rate is a rate over experiments, so a fixture that leaves the
+    experiment blank puts every finding in one group -- and then a HIT and a
+    MISS in the same fixture describe one run reporting two different numbers,
+    which cannot happen. Distinct by default; shared only when a test says so.
+    """
+    run = experiment if experiment is not None else f"run-{next(_EXPERIMENTS)}"
     return Finding(
         path="app/db.py",
         line=31,
@@ -39,7 +54,9 @@ def finding(*, falsifiable: bool, verdict: Outcome | None = None) -> Finding:
         severity=Severity.HIGH,
         remediation="raise pool_size to 20",
         prediction=prediction() if falsifiable else None,
-        measurement=(Measurement(value=OBSERVED[verdict]) if verdict is not None else None),
+        measurement=(
+            Measurement(value=OBSERVED[verdict], experiment=run) if verdict is not None else None
+        ),
     )
 
 
