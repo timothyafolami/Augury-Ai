@@ -68,9 +68,18 @@ def score(
     broken = [f for f in falsifiable if f.verdict is Outcome.BROKEN]
 
     # Everything the reviewer produced, including what it could not quantify.
-    # Dividing by the survivors alone would score any pipeline with a Refiner
-    # at 1.0 by construction: drop what is hard, then divide by what is left.
-    observations = len(findings) + len(report.dropped)
+    # Dividing by the survivors alone would score any pipeline that discards
+    # its hard cases at 1.0 by construction: drop what is difficult, then
+    # divide by what is left.
+    #
+    # A Dropped whose finding was kept is the same observation twice, and
+    # `to_report` keeps them all. Counting both made a malformed prediction
+    # cost two observations while an absent one cost one -- penalising the
+    # model harder for trying and failing than for not trying, and doing it
+    # unevenly, since only the analyst prompt was taught the validator's rules.
+    kept = {(f.path, f.symbol) for f in findings}
+    discarded = [d for d in report.dropped if (d.path, d.symbol) not in kept]
+    observations = len(findings) + len(discarded)
 
     return Score(
         case=case,
