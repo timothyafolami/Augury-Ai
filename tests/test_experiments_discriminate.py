@@ -89,7 +89,9 @@ def test_an_experiment_reports_a_different_number_on_remediated_code(
     [(case, script) for case in CASES for script in experiments(case.repo.parent)],
     ids=lambda value: value.stem if isinstance(value, Path) else value.id,
 )
-def test_an_experiment_gives_the_same_answer_twice(case: Case, script: Path) -> None:
+def test_an_experiment_gives_the_same_answer_twice(
+    case: Case, script: Path, tmp_path: Path
+) -> None:
     """`assert seeded != fixed` on two noisy floats proves nothing: two draws
     from two overlapping distributions differ with probability near one.
 
@@ -97,14 +99,42 @@ def test_an_experiment_gives_the_same_answer_twice(case: Case, script: Path) -> 
     because the socket backlog dropped connections under the burst. The
     documented guarantee that these numbers reproduce exactly is only worth
     making if something checks it.
+
+    An experiment that measures a race is exempt from the exact number and not
+    from the guarantee: what has to reproduce is the verdict. See RACING.
     """
     first = run(script, case.repo)
     second = run(script, case.repo)
+
+    if script.stem in RACING:
+        fixed = run(script, remediated(case.repo.parent, tmp_path))
+        assert fixed is not None, f"{script.name} could not run against the fixed repository"
+        assert first is not None and second is not None
+        assert (first != fixed) == (second != fixed), (
+            f"{script.name} reported {first} then {second} against a fixed value of "
+            f"{fixed}: the defect was detected on one run and not the other, so the "
+            "verdict is a coin flip even though the experiment is allowed to vary"
+        )
+        return
 
     assert first == second, (
         f"{script.name} reported {first} then {second} for identical code, so a "
         "verdict from it is partly a draw rather than a measurement"
     )
+
+
+# Experiments whose number cannot repeat exactly, with the reason. A lost
+# update depends on how the concurrent writers interleave, so the amount of
+# money that goes missing is genuinely variable -- 80.00 and 90.00 are both
+# correct observations of the same defect. What must not vary is whether the
+# defect was observed at all, which is what the exemption above still checks.
+#
+# An entry here is a claim someone had to write down. Adding one to quiet a
+# flaky experiment, rather than because it races, is how this suite stops
+# meaning anything.
+RACING = {
+    "final_balance": "concurrent debits interleave differently on each run",
+}
 
 
 # Every case, not only the ones shipping experiments. The old filter excluded a
