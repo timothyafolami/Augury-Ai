@@ -42,7 +42,7 @@ make check
 ```
 
 Runs ruff, ruff format, mypy strict over `src` and `tests`, and the full test
-suite. Expect **388 passed, 2 skipped**, in about 30 seconds. Nothing here
+suite. Expect **422 passed, 3 skipped**, in about 35 seconds. Nothing here
 reaches the network.
 
 This is the same command CI runs and the same command the pre-commit hook runs.
@@ -57,18 +57,25 @@ and measure what it does, and they are the part a reviewer's claims are checked
 against, so they are worth running first and reading.
 
 ```bash
-.venv/bin/python eval/cases/B01-orders-service/experiments/queries_per_request.py
-.venv/bin/python eval/cases/B01-orders-service/experiments/final_balance.py
-.venv/bin/python eval/cases/B01-orders-service/experiments/http_status.py
+for f in eval/cases/*/experiments/*.py; do
+  echo "$f -> $(.venv/bin/python "$f" 2>/dev/null | tail -1)"
+done
 ```
 
-Expected, in about two seconds each:
+Expected, a few seconds each. "Correct" is what the same experiment reports
+against the remediated code shipped in each case's `fixed/` directory:
 
-| experiment | correct | what you should see | what it means |
-|---|---|---|---|
-| `queries_per_request` | 2 | **51** | one query per order plus the listing: the N+1 |
-| `final_balance` | 0.00 | **90.0** | nine of ten concurrent debits silently lost |
-| `http_status` | 500 | **200** | a broken database returning a successful empty list |
+| case | experiment | correct | seeded | what it means |
+|---|---|---|---|---|
+| B01 | `queries_per_request` | 2 | **51** | one query per order plus the listing |
+| B01 | `final_balance` | 0.00 | **90.0** | nine of ten concurrent debits silently lost |
+| B01 | `http_status` | 500 | **200** | a broken database returning a successful empty list |
+| B01 | `retry_amplification` | 0.75 | **1.9** | one client request reaching the gateway twice over |
+| B01 | `worker_saturation` | 0.0 | **1.0** | every worker held by one silent provider |
+| C01 | `duplicate_side_effects` | 1 | **3** | one parcel counted three times |
+| C01 | `queue_depth` | 32 | **5000** | a queue that holds everything offered |
+| C01 | `active_connections` | 40 | **36** | the pool ran out before the work did |
+| C01 | `queries_per_request` | 2 | **41** | a name resolved once per row |
 
 The last line each prints is the measurement. Everything above it is the
 experiment narrating what it did.
@@ -76,6 +83,18 @@ experiment narrating what it did.
 Read `eval/cases/B01-orders-service/experiments/final_balance.py` if you read
 only one file in this repository. It imports the service's own `debit` and
 supplies nothing but concurrency.
+
+**Then check that they measure anything at all:**
+
+```bash
+.venv/bin/pytest tests/test_experiments_discriminate.py tests/test_experiments_are_not_overfitted.py -v
+```
+
+Each experiment is run against the seeded code and against the remediated code
+and must report a different number, and against more than one remediation. Both
+tests exist because experiments here have twice reported a number without
+measuring the defect, and both times the number was published. See
+`docs/CHANGELOG.md`, iterations 11 and 14.
 
 ---
 
@@ -94,7 +113,14 @@ question.
 ```bash
 make review-baseline    # one prompt over the whole repository
 make review-augury      # schedule, triage, specialise, reconcile
+
+# any case, either arm, with the claims put to the experiments,
+# recording every step the agents took
+.venv/bin/python -m augury.cli review --case C01 --arm augury --prove \
+    --trajectory /tmp/run.jsonl
 ```
+
+`augury cases` lists what is available and needs no key.
 
 Roughly 10 seconds and $0.004 for the baseline; 45 seconds and $0.027 for
 Augury, on case B01.
@@ -135,13 +161,13 @@ the counts and declines to publish the ratio.
 
 ## Costs
 
-| run | calls | approximate cost |
+| run | calls | measured cost |
 |---|---|---|
 | `make check` | 0 | free |
-| the three experiments | 0 | free |
-| `make review-baseline` | 1 | $0.004 |
-| `make review-augury` | ~40 | $0.027 |
-| `make evaluate` | ~130 | $0.09 |
+| every experiment | 0 | free |
+| `make review-baseline` | 1 | $0.0036, 9s |
+| `make review-augury` | ~40 | $0.0274, 43s |
+| `make evaluate` | ~250 | $0.15, about 12 minutes |
 
 Costs are measured from provider token counts against the table in
 `src/augury/core/adapters/pricing.py`, never estimated. A model with no entry
