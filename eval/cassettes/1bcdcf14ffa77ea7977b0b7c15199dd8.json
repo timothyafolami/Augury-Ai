@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/serializers.py",
+      "line": 9,
+      "layer": "data",
+      "symbol": "serialize_order",
+      "mechanism": "N+1 query pattern: each order serialization issues a separate SELECT for line items, causing query count to scale with number of orders",
+      "severity": "medium",
+      "remediation": "Replace per‑order SELECT with eager loading (e.g., selectinload) or batch fetch line items for all orders in a single query",
+      "arithmetic": "50 orders × 1 line‑item SELECT each = 50 queries + 1 order‑list query = 51 total queries per request",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 51.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "GET /orders for a customer with 50 orders of 3 line items each"
+      }
+    }
+  ]
+}
