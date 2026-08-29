@@ -1,7 +1,7 @@
 {
   "id": "B01",
   "name": "orders-service",
-  "repo_description": "A FastAPI orders service over Postgres: checkout, wallet, payments and shipping clients, seventeen modules.",
+  "repo_description": "A FastAPI orders service over Postgres: checkout, wallet, payments and shipping clients, twenty-three modules.",
   "notes": "Built to be a fair test rather than an easy one. Every defect reads correctly line by line and would pass review; each is only wrong in relation to something else. app/services/pricing.py carries a loud FIXME about being slow and is in fact fine, to see whether a reviewer follows the loudest signal rather than the causal one.",
   "defects": [
     {
