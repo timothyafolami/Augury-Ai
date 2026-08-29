@@ -57,9 +57,7 @@ def test_the_right_file_but_an_unrelated_symbol_does_not_count() -> None:
 
 
 def test_the_name_may_appear_in_the_prose_instead_of_the_symbol_field() -> None:
-    assert defect().found_in(
-        report("app/db.py", "engine", "pool_size is 5 against 8 workers")
-    )
+    assert defect().found_in(report("app/db.py", "engine", "pool_size is 5 against 8 workers"))
 
 
 def test_an_empty_report_finds_nothing() -> None:
