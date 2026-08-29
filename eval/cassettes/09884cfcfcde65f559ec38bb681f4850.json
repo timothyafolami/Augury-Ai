@@ -1,22 +1,3 @@
 {
-  "findings": [
-    {
-      "path": "app/db.py",
-      "line": 12,
-      "layer": "data",
-      "symbol": "engine",
-      "mechanism": "Pool size (20) plus overflow (10) yields a maximum of 30 DB connections, which is below the concurrency ceiling implied by 4 uvicorn workers each capable of handling ~10 async requests. This violates the \"Pool size against the real concurrency ceiling\" rule from the reference material, leading to active_connections exceeding the pool and worker saturation.",
-      "severity": "high",
-      "remediation": "Increase pool_size to at least 40 (workers * expected concurrent requests per worker) and optionally raise max_overflow, e.g., set pool_size=40, max_overflow=10.",
-      "arithmetic": "workers=4; assume each worker can handle 10 concurrent async requests => needed_connections=4*10=40. Configured pool_size+max_overflow=20+10=30. Shortfall=40-30=10. Therefore active_connections will reach 30, and 10 requests will wait, giving worker_saturation=30/40=0.75.",
-      "prediction": {
-        "metric": "active_connections",
-        "comparator": "at_least",
-        "value": 30.0,
-        "upper": null,
-        "unit": "count",
-        "condition": "40 concurrent requests"
-      }
-    }
-  ]
+  "findings": []
 }
