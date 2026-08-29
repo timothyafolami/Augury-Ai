@@ -15,6 +15,8 @@ testable is withdrawn, and the reason is recorded.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from augury.core.findings import Dropped, Finding, Report, Severity
@@ -69,8 +71,20 @@ def to_report(
     model_id: str = "",
     usd: float = 0.0,
     seconds: float = 0.0,
+    locator: Callable[[str, str], int | None] | None = None,
 ) -> Report:
-    """Validate every draft finding, keeping what cannot be proved but saying so."""
+    """Validate every draft finding, keeping what cannot be proved but saying so.
+
+    `locator` maps (path, symbol) to the line the parser found the definition
+    on. A model names the right function and frequently the wrong line -- the
+    field run measured one 140 lines out -- so where a parser can confirm the
+    location, it wins. Returning None leaves the model's line alone: replacing
+    a guess with a different guess is not an improvement.
+
+    Both arms get the same locator, because a correction given to one arm and
+    withheld from the other would be a difference in the harness reported as a
+    difference in the reviewer.
+    """
     findings: list[Finding] = []
     dropped: list[Dropped] = []
 
@@ -85,12 +99,16 @@ def to_report(
                 )
             )
 
+        path = item.path or "unknown"
+        symbol = item.symbol or "unknown"
+        located = locator(path, symbol) if locator else None
+
         findings.append(
             Finding(
-                path=item.path or "unknown",
-                line=max(item.line, 0),
+                path=path,
+                line=located if located is not None else max(item.line, 0),
                 layer=item.layer or "unknown",
-                symbol=item.symbol or "unknown",
+                symbol=symbol,
                 mechanism=item.mechanism or "not stated",
                 severity=item.severity,
                 remediation=item.remediation or "not stated",
