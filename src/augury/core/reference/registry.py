@@ -10,7 +10,8 @@ Every failure is None. A review must work on a train.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 PYPI = "https://pypi.org/pypi/{name}/json"
@@ -18,6 +19,13 @@ PYPI = "https://pypi.org/pypi/{name}/json"
 # A registry that has not answered in this long is not going to. A reviewer
 # waiting on a package index is a reviewer nobody runs twice.
 TIMEOUT_SECONDS = 4.0
+
+# Small enough to be a polite client of a free service, large enough that a
+# thirty-package requirements file resolves in seconds rather than a minute.
+POOL_SIZE = 8
+
+# One retry. A second failure is a real answer; a first one usually is not.
+ATTEMPTS = 2
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,10 @@ def _fetch(url: str) -> str | None:
         return None
 
 
+def _canonical(name: str) -> str:
+    return name.lower().replace("_", "-")
+
+
 class Registry:
     """PyPI, asked once per package and remembered."""
 
@@ -58,17 +70,47 @@ class Registry:
         self._seen: dict[str, PackageFacts | None] = {}
 
     def facts_for(self, name: str) -> PackageFacts | None:
-        key = name.lower().replace("_", "-")
+        key = _canonical(name)
         if key not in self._seen:
             self._seen[key] = self._ask(key)
         return self._seen[key]
 
+    def facts_for_many(self, names: Sequence[str]) -> dict[str, PackageFacts | None]:
+        """Ask about several packages at once.
+
+        Sequentially, 34 lookups queue behind each other until the tail
+        exceeds the timeout, and nine real packages came back unknown. The
+        requests are independent and the work is all waiting, so a small pool
+        of threads turns a minute of queueing into a few seconds.
+        """
+        wanted = [
+            key for key in dict.fromkeys(_canonical(n) for n in names) if key not in self._seen
+        ]
+        if wanted:
+            with ThreadPoolExecutor(max_workers=min(POOL_SIZE, len(wanted))) as pool:
+                for key, facts in zip(wanted, pool.map(self._ask, wanted), strict=True):
+                    self._seen[key] = facts
+        return {_canonical(n): self._seen.get(_canonical(n)) for n in names}
+
+    def _get(self, url: str) -> str | None:
+        """One GET, retried once.
+
+        A lookup that fails under load and is never retried becomes a
+        permanent "unknown" for a package the registry knows perfectly well,
+        and unknown reads to a reader like a package with nothing wrong.
+        """
+        for _ in range(ATTEMPTS):
+            try:
+                body = self._fetch(url)
+            except OSError:
+                # Offline is a normal state, not an error worth surfacing.
+                return None
+            if body:
+                return body
+        return None
+
     def _ask(self, name: str) -> PackageFacts | None:
-        try:
-            body = self._fetch(PYPI.format(name=name))
-        except OSError:
-            # Offline is a normal state, not an error worth surfacing.
-            return None
+        body = self._get(PYPI.format(name=name))
         if not body:
             return None
         try:
