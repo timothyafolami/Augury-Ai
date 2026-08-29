@@ -90,8 +90,11 @@ class Scheduler:
         # Money is counted in integers. Ten one-cent reads sum to less than a
         # dime in binary floating point, which buys an eleventh read.
         self._spent_micros = 0
-        # Observed dollars per 1000 lines, one entry per module read.
+        # Observed dollars per module read, one entry each. Per module rather
+        # than per line: the cost is mostly a fixed prompt.
         self._costs: list[float] = []
+        # Issued, charged, and came back unread, with why.
+        self._failed: dict[str, str] = {}
         self._budget_micros = round(self._budget.usd * MICRO_USD)
         self._seen: set[str] = set()
         # Handed out but not yet reported on, with the estimate charged for
@@ -119,6 +122,9 @@ class Scheduler:
                 **{path: "unparsed" for path in self._repo.unparsed},
                 **dict(self._repo.skipped),
                 **{module.path: self._why_skipped(module) for module in self._unread()},
+                # Last, because "every specialist failed" is a more specific
+                # fact about a module than any reason derived from its shape.
+                **self._failed,
             },
             stopped_because=self._stopped_because,
         )
@@ -188,10 +194,29 @@ class Scheduler:
         self._reserved[module.path] = self._estimate_micros(module)
         self._spent_micros += self._reserved[module.path]
 
-    def record(self, module: ModuleNode, *, findings: int, spent_usd: float) -> None:
+    @property
+    def spent_usd(self) -> float:
+        """What this review has been charged so far."""
+        return self._spent_micros / MICRO_USD
+
+    def record(
+        self,
+        module: ModuleNode,
+        *,
+        findings: int,
+        spent_usd: float,
+        read: bool = True,
+        why: str = "",
+    ) -> None:
         """Report the outcome of reading a module, which steers what comes next.
 
         Idempotent per module: a caller that records twice does not pay twice.
+
+        `read=False` is a module that was issued and came back unread -- every
+        specialist on it failed, or its source could not be opened. It still
+        costs what it cost, and it is not coverage: reported as analysed, the
+        review claims to have looked at a file nobody looked at, and the worse
+        the provider behaves the cleaner the report gets.
         """
         if module.path in self._recorded:
             return
@@ -201,10 +226,19 @@ class Scheduler:
         # replace it with what it actually cost rather than charging twice.
         self._spent_micros -= self._reserved.pop(module.path, 0)
         self._spent_micros += round(spent_usd * MICRO_USD)
+        if not read:
+            self._failed[module.path] = why or "no specialist could read it"
+            return
+
         # What this module actually cost per 1000 lines, so the estimate for
         # the next one is a measurement rather than the guess it started with.
-        if module.loc > 0 and self._budget.calls_per_module > 0:
-            self._costs.append(spent_usd / (module.loc / 1000) / self._budget.calls_per_module)
+        #
+        # A module that cost nothing measured nothing: a cassette replay is
+        # free by construction, and three free reads satisfied the count that
+        # stands the probe batch down, so the first live batch went out at full
+        # width against a rate nobody had checked.
+        if spent_usd > 0 and self._budget.calls_per_module > 0:
+            self._costs.append(spent_usd / self._budget.calls_per_module)
         self.coverage_analysed.append(module.path)
         if findings > 0:
             self._suspect[module.path] = findings
@@ -227,24 +261,32 @@ class Scheduler:
         return self._estimate_micros(module) / MICRO_USD
 
     def _estimate_micros(self, module: ModuleNode) -> int:
-        per_read = module.loc / 1000 * self._rate()
-        return round(per_read * self._budget.calls_per_module * MICRO_USD)
+        """What reading this module is expected to cost.
 
-    def _rate(self) -> float:
-        """Dollars per 1000 lines: the configured rate, or the measured one.
+        The configured rate is per 1000 lines, which is the wrong shape for
+        what actually happens: a call's cost is dominated by a fixed prompt --
+        the layer brief, the language brief, the version block, the schema --
+        and only weakly by the file's length. Measured per line, a six-line
+        module priced the repository at 250 times the configured rate, nothing
+        fitted, and the deadlock could not correct itself, because the estimate
+        only moves when a module is read.
 
-        The configured rate is a guess made before anything ran, and a review
-        against a reasoning model cost about ten times it -- so a ceiling of
-        $0.15 was passed on the way to $0.80. The run measures the real rate
-        within a few modules; nothing was reading it.
+        So the measurement is per module, and the configured per-line rate is
+        kept as the floor it always was.
+        """
+        by_size = module.loc / 1000 * self._budget.usd_per_1k_loc
+        expected = max(by_size, self._observed())
+        return round(expected * self._budget.calls_per_module * MICRO_USD)
 
-        Never below the configured rate. Underestimating is what overspends;
-        overestimating only reads less, and a review that stops early says so.
+    def _observed(self) -> float:
+        """Dollars a module has actually cost, or zero before it is known.
+
+        Zero rather than a guess: the configured rate is already the floor, so
+        an unmeasured run behaves exactly as it did before any of this.
         """
         if len(self._costs) < ENOUGH_TO_TRUST:
-            return self._budget.usd_per_1k_loc
-        measured = sum(self._costs) / len(self._costs)
-        return max(self._budget.usd_per_1k_loc, measured)
+            return 0.0
+        return sum(self._costs) / len(self._costs)
 
     def _value(self, module: ModuleNode) -> float:
         blast_radius = 1.0 + module.fan_in
