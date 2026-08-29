@@ -13,6 +13,7 @@ forecast could not be checked.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -131,12 +132,18 @@ def choose_environment(
     """
     available = docker_is_up() if docker_available is None else docker_available
 
-    service = _service_for(scope, survey)
+    service, refused = _service_for(scope, survey)
     if service and available:
         return Environment(kind="compose", root=root, service=service)
 
     python = interpreter_for(root / scope[0] if scope else root)
-    if service and not available:
+    if refused:
+        why = (
+            f"the service built from the reviewed directory is named {refused!r}, which "
+            "docker would read as one of its own flags rather than as a service, so the "
+            "experiment ran on this machine instead"
+        )
+    elif service and not available:
         why = (
             f"docker is not running, so the {service} image could not be used and "
             "the experiment ran on this machine, where the repository's "
@@ -145,6 +152,17 @@ def choose_environment(
     else:
         why = "no service in the compose file builds from the reviewed directory"
     return Environment(kind="local", root=root, python=python, why=why)
+
+
+# What compose itself permits, minus a leading dash. Docker reads `--dry-run`
+# or `-d` in the service position as its own flag, which turns an experiment
+# into a no-op and lets a reviewed repository suppress the proofs about it.
+_A_PLAIN_NAME = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._-]*$")
+
+
+def _is_a_plain_name(name: str) -> bool:
+    """Whether this service name is safe to hand to docker as a positional."""
+    return bool(_A_PLAIN_NAME.match(name))
 
 
 def _covers(source_root: str, wanted: set[str]) -> bool:
@@ -157,25 +175,41 @@ def _covers(source_root: str, wanted: set[str]) -> bool:
 
     Compared segment by segment, so `backend-tools` is not inside `backend`
     however the two strings sort.
+
+    A service built from the repository root -- `build: .`, which the surveyor
+    normalises to an empty string -- contains everything, including a narrowed
+    scope. Treating that empty string as falsy dropped the commonest compose
+    layout there is.
     """
-    root = source_root.strip("/").split("/")
+    stripped = source_root.strip("/")
+    if not stripped:
+        return True
+    root = stripped.split("/")
+    if not wanted:
+        return True
     return any(part.split("/")[: len(root)] == root for part in wanted)
 
 
-def _service_for(scope: tuple[str, ...], survey: Survey) -> str:
-    """The service built from the directory under review.
+def _service_for(scope: tuple[str, ...], survey: Survey) -> tuple[str, str]:
+    """The service built from the directory under review, and one it refused.
 
     Where several are -- an API and four workers all built from `backend` --
     the one taking traffic is preferred: it is the likeliest to have the
     dependencies a request path touches.
     """
     wanted = {part.strip("/") for part in scope}
-    candidates = [
-        service
-        for service in survey.services
-        if service.source_root and (not wanted or _covers(service.source_root, wanted))
-    ]
+    candidates = [service for service in survey.services if _covers(service.source_root, wanted)]
     if not candidates:
-        return ""
+        return "", ""
+
     serving = [service for service in candidates if service.is_entrypoint]
-    return (serving or candidates)[0].name
+    ordered = serving or candidates
+
+    # A compose file in a repository under review is untrusted input, and its
+    # service names go into an argv where docker reads a leading dash as its
+    # own flag. Rejecting one hostile name must not cost the review a service
+    # that is fine, so the search continues past it.
+    usable = [service for service in ordered if _is_a_plain_name(service.name)]
+    if usable:
+        return usable[0].name, ""
+    return "", ordered[0].name
