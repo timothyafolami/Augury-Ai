@@ -9,8 +9,7 @@ handler a retry can reach has to be safe to run twice.
 Specifically look for:
 
 - Handlers that a retry or a redelivery can reach, which are not idempotent:
-  they insert, increment, charge, send or append. Predict the duplicate rate
-  and the resulting divergence under N redeliveries.
+  they insert, increment, charge, send or append. Predict `duplicate_side_effects` under N redeliveries, and the `final_balance` that follows.
 - Idempotency keys that are checked and then written non-atomically, which is
   the same race one level up.
 - Side effects performed inside a transaction that commits separately from the
