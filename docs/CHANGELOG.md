@@ -552,6 +552,39 @@ That is the cause of both context-blind findings, and it is not fixed.
 
 ---
 
+## 18. The five seeds were one call repeated
+
+**What prompted it.** Wiring replay so a judge can reproduce without a key.
+The recording ran, and the resulting table had zero spread: recall
+`0.700-0.700` and `0.800-0.800` across five seeds, against a live run whose
+seeds visibly differ.
+
+**What the evidence said.** The cassette keys on (model id, prompt, schema).
+Five seeds collapsed to one recording, which means all five sent byte-identical
+prompts. Reading `runner.run_arm` confirms it: `seed` is passed straight to
+`score(...)` as a label and reaches nothing else. It does not vary the prompt,
+the temperature, the case, or the order modules are read in.
+
+**What was decided.** The cassette is right and the vocabulary was wrong. The
+seed-to-seed range in the published results measures **provider
+nondeterminism at temperature 0**, not sampling variation, and the README now
+says so in those words. `tests/test_what_a_seed_varies.py` pins it: the label
+reaches the score, and every repeat receives an identical case.
+
+This also explains something previously recorded as unexplained -- that point
+estimates moved by several points between whole runs while the within-run
+range looked tight. Both numbers were measuring the same thing, at different
+sample sizes, and neither was measuring the harness varying anything.
+
+**What it costs.** `make eval-replay` reproduces a run in which all five
+repeats are identical, because that is what the recording contains. It
+reproduces the pipeline, the routing, the findings and the grading exactly and
+for free; it cannot reproduce provider jitter, which is by definition not
+recorded. Said plainly in `REPRODUCE.md` rather than left for a judge to
+notice from a suspiciously tidy table.
+
+---
+
 ## Still open
 
 - The pipeline costs six times the baseline for a result not distinguishable
