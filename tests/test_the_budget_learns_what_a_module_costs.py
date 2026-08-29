@@ -124,3 +124,89 @@ def test_an_expensive_model_now_stops_inside_its_ceiling() -> None:
             scheduler.record(module, findings=1, spent_usd=0.05)
 
     assert spent <= 0.15 * 1.5, f"asked for $0.15 and spent ${spent:.2f}"
+
+
+def test_a_module_nobody_could_read_is_not_counted_as_covered() -> None:
+    """Coverage is the number this project is least willing to overstate."""
+    scheduler = _scheduler()
+    module = _module("broken.py")
+
+    scheduler.record(module, findings=0, spent_usd=0.02, read=False, why="every specialist failed")
+
+    assert "broken.py" not in scheduler.coverage.analysed
+    assert scheduler.coverage.skipped["broken.py"] == "every specialist failed"
+
+
+def test_a_module_nobody_could_read_still_costs_what_it_cost() -> None:
+    """The failed calls were billed. Forgetting that re-opens the ceiling."""
+    scheduler = _scheduler(usd=0.15)
+    scheduler.record(_module("broken.py"), findings=0, spent_usd=0.05, read=False, why="failed")
+
+    assert scheduler.spent_usd >= 0.05
+
+
+def test_a_replayed_module_that_cost_nothing_does_not_teach_the_rate() -> None:
+    """A cassette replay reports zero usage by construction.
+
+    Three of those satisfy the "enough to trust" count without measuring
+    anything, so the probe batch stands down and the first live batch is
+    issued at full width against a rate nobody checked.
+    """
+    scheduler = _scheduler(count=40, usd=5.0)
+    for index in range(4):
+        scheduler.record(_module(f"m{index}.py"), findings=0, spent_usd=0.0)
+
+    assert len(scheduler.next_batch(8)) <= PROBE_BATCH
+
+
+def test_three_tiny_modules_do_not_price_the_repository_out_of_reach() -> None:
+    """The ranking feeds the learning window the least representative modules.
+
+    `_value` divides by sqrt(loc), so the smallest signal-bearing modules are
+    read first by construction -- a package __init__, a settings shim. A
+    module's real cost is dominated by a fixed prompt, not by its line count,
+    so dividing a whole-module price by six lines produced a rate 250 times the
+    configured one. Nothing then fitted, and since the rate only moves when a
+    module is read, the deadlock could not correct itself.
+    """
+    tiny = [_module(f"t{i}.py", loc=6) for i in range(3)]
+    big = [_module(f"b{i}.py", loc=500) for i in range(20)]
+    scheduler = Scheduler(
+        RepoMap(root="/tmp/x", modules=[*tiny, *big], unreachable=(), unparsed=[]),
+        Budget(usd=5.0, usd_per_1k_loc=0.02),
+    )
+    for module in tiny:
+        scheduler.record(module, findings=0, spent_usd=0.09)
+
+    assert scheduler.next_batch(8), "a $5 ceiling reads more than three small files"
+
+
+def test_a_run_over_mixed_sizes_spends_most_of_its_ceiling() -> None:
+    """The milder version of the same fault: a review that stops far too early.
+
+    "Overestimating only reads less" is true of the sentence it prints and
+    false of what a reader concludes from it.
+    """
+    modules = [_module(f"m{i}.py", loc=8 if i % 3 == 0 else 500) for i in range(60)]
+    scheduler = Scheduler(
+        RepoMap(root="/tmp/x", modules=modules, unreachable=(), unparsed=[]),
+        Budget(usd=5.0, usd_per_1k_loc=0.02),
+    )
+
+    read = 0
+    spent = 0.0
+    while True:
+        batch = scheduler.next_batch(8)
+        if not batch:
+            break
+        for module in batch:
+            # A fixed prompt cost plus a small per-line cost, which is how a
+            # real call is actually priced.
+            cost = 0.02 + module.loc * 0.00002
+            spent += cost
+            read += 1
+            scheduler.record(module, findings=0, spent_usd=cost)
+
+    # Every module costs about $0.03, so sixty of them fit inside $5 with room
+    # to spare. Reading fewer means the estimate, not the ceiling, stopped it.
+    assert read == 60, f"read {read} of 60 modules having spent ${spent:.2f} of $5.00"
