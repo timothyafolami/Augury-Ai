@@ -20,6 +20,7 @@ class Language(StrEnum):
 
     PYTHON = "python"
     TYPESCRIPT = "typescript"
+    TSX = "tsx"
     JAVASCRIPT = "javascript"
     GO = "go"
     RUST = "rust"
