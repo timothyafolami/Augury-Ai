@@ -23,6 +23,7 @@ from augury.core.cartography import Cartographer
 from augury.core.cartography.languages import EXTENSIONS
 from augury.core.findings import Report
 from augury.core.reference import Registry, requirements_of
+from augury.core.reference.changelog import changelog_notes
 from augury.core.reference.staleness import dependency_findings
 from augury.core.report import write_report
 from augury.core.scheduling import Budget
@@ -216,6 +217,22 @@ def report(
 
     reviewed = asyncio.run(run())
 
+    # Where to read about each major gap. Optional and best-effort: search is
+    # the first thing to fail offline, and its absence costs the report a
+    # section rather than the run.
+    reading: dict[str, tuple[str, ...]] = {}
+    for finding in dependencies:
+        if finding.rule != "dependency-major-versions-behind":
+            continue
+        package = finding.detail.split("`")[1] if "`" in finding.detail else ""
+        pinned = requirements_of(bases[0]).get(package, "")
+        facts = registry.facts_for(package)
+        if not package or not facts:
+            continue
+        notes = changelog_notes(package, pinned, facts.latest)
+        if notes:
+            reading[package] = tuple(note.url for note in notes[:3])
+
     document = write_report(
         name=root.name,
         survey=found,
@@ -224,6 +241,7 @@ def report(
         dependencies=dependencies,
         modules=len(repo.modules),
         unreachable=len(repo.unreachable),
+        reading=reading,
     )
     destination = Path(out).expanduser()
     destination.write_text(document, encoding="utf-8")
