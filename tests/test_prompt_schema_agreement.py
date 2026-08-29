@@ -55,17 +55,34 @@ def test_a_prompt_describes_every_field_the_schema_requires(
     name: str, schema: type[BaseModel], nested: type[BaseModel] | None
 ) -> None:
     """A field the model is never told about is a field it fills badly or not
-    at all, and `prediction` is the one that decides the headline metric."""
+    at all, and `prediction` is the one that decides the headline metric.
+
+    The nested schema is checked too. It was accepted as a parameter here and
+    never used, so deleting every `metric`/`comparator`/`unit` bullet from a
+    prompt left the suite green -- and the baseline prompt was already in
+    exactly that state, describing all six prediction sub-fields in one line of
+    prose with no examples and no unit vocabulary.
+    """
     asked = described_fields(raw(name))
-    missing = set(schema.model_fields) - asked
+    required = set(schema.model_fields)
+    if nested is not None:
+        required |= set(nested.model_fields)
+    missing = required - asked
 
     assert not missing, f"{name}.md never describes {sorted(missing)}"
 
 
-def test_the_analyst_is_told_what_a_vacuous_prediction_is() -> None:
+@pytest.mark.parametrize("name", ["analyst", "baseline"])
+def test_both_arms_are_told_what_a_vacuous_prediction_is(name: str) -> None:
     """The validator rejects those, and a rejection the model could have
-    avoided is a wasted call."""
-    prompt = raw("analyst").lower()
+    avoided is a wasted call.
+
+    Parametrised over both arms. Asserting it for the analyst alone did not
+    merely miss the asymmetry -- it institutionalised it, since a rejected
+    prediction lands in the falsifiable-precision denominator and only one arm
+    was told how to avoid one.
+    """
+    prompt = raw(name).lower()
 
     assert "zero is not a prediction" in prompt
 
