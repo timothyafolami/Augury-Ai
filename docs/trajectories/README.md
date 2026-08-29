@@ -9,7 +9,19 @@ stopped.
 
 | file | what it is |
 |---|---|
-| `augury-B01.jsonl` | One full pipeline review of case B01: 59 steps, 8 findings, $0.028 |
+| `augury-B01.jsonl` | A pipeline review of B01: 59 steps across four agents |
+| `augury-C01.jsonl` | A pipeline review of C01, with the experiments run |
+| `baseline-B01.jsonl` | The baseline on B01: its whole prompt, and one call |
+
+Each was produced by a command in the reproduction guide:
+
+```bash
+augury review --case B01 --arm augury --trajectory docs/trajectories/augury-B01.jsonl
+```
+
+The earlier version of this file had no such command -- `Trajectory` was
+constructed only in tests -- so the artefact could not be regenerated. An
+artefact a reader cannot reproduce is the same kind of evidence as a summary.
 
 ## Reading it
 
@@ -36,9 +48,15 @@ the ten agents do the hardest work without one, and a trace showing only model
 calls would put the work in the wrong place.
 
 **Model calls** carry the full prompt, the parsed response, the tokens and cost
-of that single call, and the number of retries it took. Retries are recorded
+of that single call, and the retries that call took. Retries are recorded
 rather than smoothed over: a run that needed three attempts is a different run
 from one that needed none.
+
+"That single call" is load-bearing. An earlier version measured cost by reading
+the model's cumulative usage before and after, which is wrong the moment calls
+run concurrently -- every sibling that finished first landed inside the delta,
+so three specialists gathered together recorded one, two and three times the
+cost of one call. A call reports its own price now.
 
 ## Why the prompts are here in full
 
