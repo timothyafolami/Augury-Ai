@@ -123,6 +123,8 @@ def _ratio(numerator: int, denominator: int) -> float | None:
 # prediction. The counts are always reported, so withholding the ratio hides
 # nothing: a reader can still see one of one and judge it themselves.
 MIN_TESTED_FOR_A_RATE = 5
+"""Distinct experiments, not findings. A finding count is inflatable by the
+reviewer's own verbosity; an experiment count is not."""
 
 
 class ArmScore(BaseModel):
@@ -198,7 +200,14 @@ def aggregate(scores: list[Score]) -> ArmScore:
         broken=sum(s.broken for s in scores),
         dropped=sum(s.dropped for s in scores),
         falsifiable_precision=_ratio(falsifiable, observations),
-        hit_rate=_ratio(hits, tested) if tested >= MIN_TESTED_FOR_A_RATE else None,
+        # Distinct experiments, not findings: five near-duplicate findings
+        # sharing one metric are one measurement, and counting them as five
+        # unlocked a rate that could only ever be 0.0 or 1.0.
+        hit_rate=(
+            _ratio(hits, tested)
+            if sum(s.experiments for s in scores) >= MIN_TESTED_FOR_A_RATE
+            else None
+        ),
         prediction_coverage=_ratio(tested, falsifiable),
         per_case_low=min(per_case) if per_case else None,
         per_case_high=max(per_case) if per_case else None,
