@@ -107,7 +107,7 @@ def evaluate(
             scores.extend(asyncio.run(_one_run(name, reviewer, selected, seed, prove, settings)))
         # Under replay every repeat is the same recording served again, so the
         # spread between them measures nothing and must not be read as one.
-        results[name] = summarise(scores, independent=not settings.replay_only)
+        results[name] = summarise(scores, independent=settings.repeats_are_independent)
 
     _print_comparison(results)
 
