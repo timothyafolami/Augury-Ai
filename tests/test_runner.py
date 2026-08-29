@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from augury.core.adapters.base import Usage
 from augury.core.scoring import aggregate
 from augury.evaluation.cases import Case, load_cases
-from augury.evaluation.runner import run_arm
+from augury.evaluation.runner import baseline_reviewer, run_arm
 
 
 class ScriptedModel:
@@ -97,7 +97,12 @@ FINDS_SOMETHING_ELSE: dict[str, Any] = {
 async def test_scores_every_case_and_labels_the_arm(tmp_path: Path) -> None:
     model = ScriptedModel(FINDS_THE_DEFECT)
 
-    scores = await run_arm("baseline", model, fixture_cases())
+    scores = await run_arm(
+        "baseline",
+        model,
+        fixture_cases(),
+        reviewer=baseline_reviewer(model),
+    )
 
     assert scores
     assert {s.arm for s in scores} == {"baseline"}
@@ -105,8 +110,22 @@ async def test_scores_every_case_and_labels_the_arm(tmp_path: Path) -> None:
 
 
 async def test_records_whether_the_seeded_defect_was_found() -> None:
-    found = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), fixture_cases())
-    missed = await run_arm("baseline", ScriptedModel(FINDS_SOMETHING_ELSE), fixture_cases())
+    found = await run_arm(
+        "baseline",
+        ScriptedModel(FINDS_THE_DEFECT),
+        fixture_cases(),
+        reviewer=baseline_reviewer(
+            ScriptedModel(FINDS_THE_DEFECT),
+        ),
+    )
+    missed = await run_arm(
+        "baseline",
+        ScriptedModel(FINDS_SOMETHING_ELSE),
+        fixture_cases(),
+        reviewer=baseline_reviewer(
+            ScriptedModel(FINDS_SOMETHING_ELSE),
+        ),
+    )
 
     assert all(s.found == s.seeded for s in found)
     assert all(s.found == 0 for s in missed)
@@ -114,7 +133,14 @@ async def test_records_whether_the_seeded_defect_was_found() -> None:
 
 async def test_detection_rate_survives_aggregation() -> None:
     """It is the one metric a reviewer cannot improve by saying less."""
-    scores = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), fixture_cases())
+    scores = await run_arm(
+        "baseline",
+        ScriptedModel(FINDS_THE_DEFECT),
+        fixture_cases(),
+        reviewer=baseline_reviewer(
+            ScriptedModel(FINDS_THE_DEFECT),
+        ),
+    )
 
     assert aggregate(scores).detection_rate == 1.0
 
@@ -127,21 +153,37 @@ async def test_a_case_that_raises_is_recorded_rather_than_ending_the_sweep() -> 
         async def structured[T: BaseModel](self, *, prompt: str, schema: type[T]) -> T:
             raise RuntimeError("provider said no")
 
-    scores = await run_arm("baseline", Failing({}), fixture_cases())
+    scores = await run_arm(
+        "baseline",
+        Failing({}),
+        fixture_cases(),
+        reviewer=baseline_reviewer(
+            Failing({}),
+        ),
+    )
 
     assert all(s.failed for s in scores)
     assert all(s.total_findings == 0 for s in scores)
 
 
 async def test_the_seed_is_carried_onto_every_score() -> None:
-    scores = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), fixture_cases(), seed=7)
+    scores = await run_arm(
+        "baseline",
+        ScriptedModel(FINDS_THE_DEFECT),
+        fixture_cases(),
+        seed=7,
+        reviewer=baseline_reviewer(
+            ScriptedModel(FINDS_THE_DEFECT),
+        ),
+    )
 
     assert {s.seed for s in scores} == {7}
 
 
 @pytest.mark.parametrize("arm", ["baseline", "augury"])
 async def test_the_arm_name_is_recorded_verbatim(arm: str) -> None:
-    scores = await run_arm(arm, ScriptedModel(FINDS_THE_DEFECT), fixture_cases())
+    model = ScriptedModel(FINDS_THE_DEFECT)
+    scores = await run_arm(arm, model, fixture_cases(), reviewer=baseline_reviewer(model))
 
     assert aggregate(scores).arm == arm
 
@@ -149,11 +191,13 @@ async def test_the_arm_name_is_recorded_verbatim(arm: str) -> None:
 # -- proving ---------------------------------------------------------------
 
 
+# The path matters: a measurement is only attached where the experiment's
+# defect lives, so a claim about another file is deliberately left untested.
 PREDICTS_QUERY_COUNT: dict[str, Any] = {
     "findings": [
         {
-            "path": "app/db.py",
-            "line": 3,
+            "path": "app/serializers.py",
+            "line": 11,
             "layer": "data",
             "symbol": "engine",
             "mechanism": "a query per order",
@@ -181,7 +225,15 @@ async def test_predictions_are_tested_when_the_case_ships_an_experiment() -> Non
     if not provable:
         pytest.skip("no case ships an experiment yet")
 
-    scores = await run_arm("baseline", ScriptedModel(PREDICTS_QUERY_COUNT), provable, prove=True)
+    scores = await run_arm(
+        "baseline",
+        ScriptedModel(PREDICTS_QUERY_COUNT),
+        provable,
+        prove=True,
+        reviewer=baseline_reviewer(
+            ScriptedModel(PREDICTS_QUERY_COUNT),
+        ),
+    )
 
     assert any(s.tested for s in scores), "a shipped experiment was never run"
 
@@ -189,6 +241,13 @@ async def test_predictions_are_tested_when_the_case_ships_an_experiment() -> Non
 async def test_proving_is_off_by_default() -> None:
     """Experiments cost real time. A run that did not ask for them must not
     silently pay for them."""
-    scores = await run_arm("baseline", ScriptedModel(PREDICTS_QUERY_COUNT), fixture_cases())
+    scores = await run_arm(
+        "baseline",
+        ScriptedModel(PREDICTS_QUERY_COUNT),
+        fixture_cases(),
+        reviewer=baseline_reviewer(
+            ScriptedModel(PREDICTS_QUERY_COUNT),
+        ),
+    )
 
     assert all(s.tested == 0 for s in scores)
