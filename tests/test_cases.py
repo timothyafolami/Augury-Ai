@@ -139,7 +139,9 @@ def test_a_function_call_spelling_matches_the_bare_name() -> None:
     measures formatting rather than detection."""
     lost_update = defect(symbols=["debit"], locations=["a.py"])
 
-    assert lost_update.found_in(report("a.py", "wallet", "debit() reads then writes"))
+    assert lost_update.found_in(
+        report("a.py", "wallet", "debit() reads the balance and then writes it back")
+    )
 
 
 def test_shipped_case_symbols_are_specific_enough_to_identify_a_defect() -> None:
@@ -169,9 +171,9 @@ def test_shipped_case_symbols_are_specific_enough_to_identify_a_defect() -> None
     [
         ("leak", "the session leaks a connection on the error path"),
         ("leak", "this is leaking one connection per failure"),
-        ("leak", "a connection was leaked"),
-        ("shed", "the queue never sheds"),
-        ("retry", "it retries three times"),
+        ("leak", "a pooled connection was leaked on the error path"),
+        ("shed", "the queue never sheds under sustained overload"),
+        ("retry", "it retries three times with no backoff at all"),
         ("swallow", "the handler swallows the failure"),
     ],
 )
