@@ -15,9 +15,10 @@ is the caller's problem and Docker's.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
-from augury.core.proving.environment import Environment, choose_environment
+from augury.core.proving.environment import Environment, choose_environment, docker_is_up
 from augury.core.survey.model import Service, Survey
 
 
@@ -96,3 +97,34 @@ def test_a_local_environment_runs_the_interpreter_it_was_given(tmp_path: Path) -
 
     assert command[0] == "/usr/bin/python3"
     assert command[1] == "/scripts/x.py"
+
+
+def test_an_installed_docker_whose_daemon_is_down_is_not_available() -> None:
+    """The binary on PATH says nothing about whether anything will run.
+
+    Docker Desktop quit is the common case on a laptop, and `docker compose
+    run` against a dead daemon fails with a connection error rather than a
+    measurement -- so every finding would come back BROKEN for a reason that
+    has nothing to do with the code under review.
+    """
+    assert not docker_is_up(probe=lambda: (1, "Cannot connect to the Docker daemon"))
+
+
+def test_a_running_daemon_is_available() -> None:
+    assert docker_is_up(probe=lambda: (0, "Server Version: 28.0.1"))
+
+
+def test_a_missing_binary_is_not_available() -> None:
+    def missing() -> tuple[int, str]:
+        raise FileNotFoundError("docker")
+
+    assert not docker_is_up(probe=missing)
+
+
+def test_a_slow_daemon_is_treated_as_down_rather_than_hanging_the_review() -> None:
+    """A probe that times out must answer, not raise: the review continues."""
+
+    def hangs() -> tuple[int, str]:
+        raise subprocess.TimeoutExpired(cmd="docker", timeout=5.0)
+
+    assert not docker_is_up(probe=hangs)
