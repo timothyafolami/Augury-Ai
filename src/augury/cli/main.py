@@ -23,6 +23,7 @@ from augury.core.cartography import Cartographer
 from augury.core.cartography.languages import EXTENSIONS
 from augury.core.findings import Report
 from augury.core.scheduling import Budget
+from augury.core.schema import read_migrations, schema_findings
 from augury.core.scoring import Score
 from augury.core.settings import Settings, SettingsError, load_settings
 from augury.core.survey import Surveyor
@@ -118,6 +119,29 @@ def survey(
         console.print("\n[bold]no request reaches these[/bold] (first 10):")
         for unreached in repo.unreachable[:10]:
             console.print(f"  {unreached}")
+
+    _print_schema(root, limits)
+
+
+def _print_schema(root: Path, limits: tuple[str, ...]) -> None:
+    """What the migrations do to tables that already have rows.
+
+    Printed by the free command because it costs nothing: every rule is a fact
+    about DDL rather than a judgement, so no model is asked and none is needed.
+    """
+    roots = [root / part for part in limits] or [root]
+    findings = [f for base in roots for f in schema_findings(read_migrations(base))]
+    if not findings:
+        return
+
+    plural = "finding" if len(findings) == 1 else "findings"
+    console.print(f"\n[bold]schema[/bold] — {len(findings)} {plural} in the migrations")
+    for finding in findings:
+        # markup=False throughout: a rule name in square brackets is Rich
+        # markup, and printing it as markup deleted the rule from the output.
+        console.print(f"  {finding.rule}  {finding.path}:{finding.line}", markup=False)
+        console.print(f"     {finding.detail}", markup=False)
+        console.print(f"     fix: {finding.remediation}", markup=False)
 
 
 @app.command()
