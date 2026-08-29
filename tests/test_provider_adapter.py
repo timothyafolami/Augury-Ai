@@ -207,3 +207,58 @@ async def test_retries_are_counted_so_flakiness_is_visible() -> None:
     await model.structured(prompt="review", schema=Finding)
 
     assert model.retries == 2
+
+
+# -- per-call accounting ---------------------------------------------------
+# `usage` is cumulative for the life of the client, so a caller that brackets
+# a call with before/after gets the wrong answer whenever calls run
+# concurrently: every sibling that finished first is inside the delta. Measured
+# in a committed trajectory, three gathered specialists recorded 1x, 2x and 3x
+# the cost of one call.
+
+
+async def test_a_call_reports_its_own_usage() -> None:
+    model = adapter('{"claim": "c", "confidence": 0.1}')
+
+    completion = await model.call(prompt="review", schema=Finding)
+
+    assert completion.usage.usd == pytest.approx(0.0025)
+    assert isinstance(completion.result, Finding)
+    assert completion.result.claim == "c"
+
+
+async def test_concurrent_calls_are_each_charged_only_their_own_cost() -> None:
+    """Three gathered calls costing X each must record X, not X, 2X, 3X."""
+    import asyncio
+
+    model = adapter('{"claim": "c", "confidence": 0.1}')
+
+    completions = await asyncio.gather(
+        *(model.call(prompt=f"review {index}", schema=Finding) for index in range(3))
+    )
+
+    assert [c.usage.usd for c in completions] == pytest.approx([0.0025] * 3)
+    assert sum(c.usage.usd for c in completions) == pytest.approx(model.usage.usd)
+
+
+async def test_a_call_reports_its_own_retry_count() -> None:
+    """The adapter's lifetime counter says every later call retried once any
+    call ever did."""
+    model = flaky(failures=1)
+
+    first = await model.call(prompt="one", schema=Finding)
+    second = await model.call(prompt="two", schema=Finding)
+
+    assert first.retries == 1
+    assert second.retries == 0, "a clean call must not inherit an earlier failure"
+
+
+async def test_exhausting_every_attempt_reports_the_retries_that_happened() -> None:
+    """Three attempts is two retries. Reporting three implies a fourth call
+    that was never made."""
+    model = flaky(failures=99)
+
+    with pytest.raises(RuntimeError):
+        await model.call(prompt="review", schema=Finding)
+
+    assert model.retries == MAX_ATTEMPTS - 1
