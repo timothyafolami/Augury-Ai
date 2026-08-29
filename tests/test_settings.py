@@ -43,10 +43,11 @@ def test_a_missing_key_names_the_variable_to_set(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
 ) -> None:
     monkeypatch.setenv("AUGURY_ENV_FILE", "/nonexistent/.env")
-    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     monkeypatch.delenv("AUGURY_PROVIDER", raising=False)
 
-    with pytest.raises(SettingsError, match="GROQ_API_KEY"):
+    # Names the default provider's variable, which is DeepSeek's.
+    with pytest.raises(SettingsError, match="DEEPSEEK_API_KEY"):
         load_settings()
 
 
