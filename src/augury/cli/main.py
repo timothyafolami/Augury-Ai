@@ -18,7 +18,7 @@ from rich.table import Table
 
 from augury.agents.augury import AuguryReviewer
 from augury.agents.baseline import BaselineReviewer
-from augury.core.adapters.provider import build_model
+from augury.core.adapters.provider import model_from
 from augury.core.cartography import Cartographer
 from augury.core.findings import Report
 from augury.core.scoring import Score
@@ -62,7 +62,7 @@ def review(
     reviewer = _arm(arm)
     settings = _settings()
 
-    model = build_model(settings.spec, api_key=settings.api_key)
+    model = model_from(settings)
 
     recording = Trajectory(Path(trajectory)) if trajectory else None
 
@@ -127,7 +127,7 @@ async def _one_run(
     capture the loop variables by reference and every seed would run the last
     arm.
     """
-    model = build_model(settings.spec, api_key=settings.api_key)
+    model = model_from(settings)
 
     async def review_one(case: Case) -> Report:
         result: Report = await reviewer(model, experiments=case.experiment_conditions()).review(
