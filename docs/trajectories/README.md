@@ -16,7 +16,7 @@ stopped.
 | file | what it is |
 |---|---|
 | `augury-B01.jsonl` | A pipeline review of B01: 59 steps across four agents |
-| `augury-C01.jsonl` | A pipeline review of C01, with the experiments run |
+| `augury-C01.jsonl` | A pipeline review of C01. The Prover writes no trajectory, so no experiment appears here |
 | `baseline-B01.jsonl` | The baseline on B01: its whole prompt, and one call |
 
 Each was produced by a command in the reproduction guide:
