@@ -83,12 +83,21 @@ project makes.
 Three cases, ten seeded defects, five seeds per arm, every prediction put to
 the case's own experiments. `openai/gpt-oss-120b` on Groq at temperature 0.
 
+This is one run of `make evaluate`, the command in the reproduction guide, and
+the table it prints:
+
 | metric | baseline | augury | verdict |
 |---|---|---|---|
-| seeded recall | 0.760 | 0.760 | **no difference** (permutation p = 1.00) |
-| hit rate | 0.893 (25/28) | 0.757 (28/37) | **no difference** (Fisher p = 0.21) |
-| findings | 55 | 95 | |
-| cost | $0.036 | $0.216 (6.0x) | |
+| seeded recall | 0.840 | 0.860 | **inconclusive**, ranges overlap |
+| hit rate | 0.931 (27/29) | 0.781 (25/32) | **no detectable difference** (Fisher p = 0.15) |
+| cost | $0.009 | $0.043 (4.9x) | |
+
+A second run of the same sweep gave recall 0.760 for both arms and hit rates of
+0.893 and 0.757 -- the point estimates move by several points between runs at
+temperature 0, and both runs return the same verdict. Expect your own numbers
+to land near these rather than on them, and expect the verdict to be the same.
+The reasons this evaluation cannot do better than that are in
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md), iteration 15.
 
 **The pipeline does not beat one well-written prompt.** Not on defects found,
 not on whether its numbers survive testing. It costs six times as much, and on
