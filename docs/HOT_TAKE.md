@@ -1,88 +1,104 @@
 # Hot take
 
-**The reason AI code review does not work is not that the models are bad at
-reading code. They are good at it. The reason is that nothing makes them say
-anything a measurement could contradict, so nobody can tell the difference
-between a review that is right and one that merely sounds right.**
+**Everyone building AI code review is measuring whether the reviewer named the
+defect. That is the easy half, it is nearly free to score, and it is why the
+tools do not get better. The hard half is whether the reviewer's claim is
+true — and almost nobody builds the apparatus to find out, because the moment
+you do, it starts telling you things you did not want to hear.**
 
 ---
 
-## What the measurements say
+## What I set out to show, and what happened
 
-On a seventeen-module service with five seeded defects, a single well-written
-prompt found all of them. So did the pipeline. Recall was **inconclusive**
-between the two across three seeds.
+The thesis was that an agentic pipeline — routing files to specialists briefed
+from a real engineering knowledge base, under a budget — would review code
+better than one well-written prompt.
 
-Both arms produced claims that looked falsifiable. Both had roughly the same
-falsifiable precision.
+Three cases, ten seeded defects, five seeds per arm, every prediction settled
+by an experiment that provably distinguishes working code from broken code:
 
-The arms separated on one number only:
-
-| | baseline | augury |
+| metric | baseline | augury |
 |---|---|---|
-| seeded defect recall | 0.933 | 1.000 |
-| falsifiable precision | 0.833 | 0.875 |
-| **hit rate** | **0.250** | **0.500** |
+| seeded recall | 0.760 | 0.760 |
+| hit rate | 0.893 | 0.757 |
+| cost | $0.036 | $0.216 |
 
-The baseline's numbers were mostly wrong. Nothing about reading its report
-would have told you that. It named real defects, in the right files, with
-confident thresholds — and when the experiments ran, three quarters of its
-thresholds did not hold.
+No difference on either metric, at six times the cost. The thesis is not
+supported.
 
-That is the entire finding, and it is not the one I set out to prove. I
-expected the pipeline to find more defects. It did not. What it improved was
-whether the numbers it attached were true.
+I could have shipped a version of this that appeared to work. Three separate
+times I had a table that showed one, and each time the apparatus was wrong
+rather than the arms.
 
 ---
 
-## Why this is worse than it sounds
+## The actual finding
 
-A wrong finding with no number attached is cheap: you read it, you disagree,
-you move on. A wrong finding *with* a number is expensive, because the number
-is what makes you act. "p99 will exceed 1000ms at 250 requests per second"
-sends someone to resize a pool. If the real threshold was 4000ms and the pool
-was fine, that engineer spent their afternoon on the wrong thing and now trusts
-the tool slightly less than they did, which is the worst of both outcomes.
+**The measuring apparatus was the least trustworthy component in the
+experiment, and it was the last thing anybody checked.**
 
-The industry is currently optimising for the property that makes this worse.
-Fluency, specificity and confidence all rose sharply; the rate at which the
-claims survive testing is not measured by anyone, including by the tools' own
-benchmarks.
+Every published number in this project was wrong at least once. Never because
+the scoring arithmetic was wrong — I could have unit-tested that all week:
+
+- **A rate over the wrong denominator.** Falsifiable precision excluded the
+  findings the pipeline had dropped, so any architecture with a filter scored
+  near 1.0 by construction and the baseline near 0.
+- **A matcher that scored `except` as a mention of `exception`.** When I fixed
+  it, it then refused `leaks` as a mention of `leak` — and recall *inverted*:
+  a review describing every defect correctly scored 0.000, while four findings
+  whose mechanism was a single full stop scored 1.000.
+- **Experiments that returned a number without measuring anything.**
+  `worker_saturation` gave a perfect score to a correctly fixed HTTP client,
+  because httpx already defaults to a five-second timeout and my deadline was
+  three. `queries_per_request` reported 51 queries for a repository whose N+1
+  had been removed, because the experiment looped over its own query instead
+  of calling the endpoint. That number was the README's headline example.
+
+None of it was visible from inside. Every one was found by an adversarial
+reviewer given one instruction: **check each experiment by writing the fixed
+version of the code and running it again.** That single instruction found three
+dead experiments in one pass.
 
 ---
 
-## What I would build differently now
+## What I would tell someone building this
 
-**Measure the claims, not the findings.** Every code review benchmark I know
-of scores whether a defect was named. That is the easy half. Two reviewers that
-both name the N+1 are not equivalent if one of them says "51 queries for 50
-orders" and the other says "significantly more queries", and only one of those
-is checkable.
+**Score the claim, not the finding.** Two reviewers that both name the N+1 are
+not equivalent if one says "51 queries for 50 orders" and the other says
+"significantly more queries". Only one of those is checkable, and only one of
+them is worth acting on at 3am.
 
-**Ship the experiment with the claim.** The thing that made this measurable was
-not a smarter reviewer, it was that each case carries runnable code that
-settles its own defects. That took an afternoon and it is the most valuable
-part of the repository. Any team could add three of them to their own codebase
-this week and immediately know whether their AI reviewer is worth its cost.
+**Ship the experiment with the case.** The thing that made any of this
+measurable was not a smarter reviewer. It was ten defects that read correctly
+line by line, each with runnable code that settles it. Three of those took an
+afternoon each. Any team could add three to their own repository this week and
+learn, that week, whether their AI reviewer is worth its subscription.
 
-**Withhold rates you cannot support.** One of my own baseline seeds produced a
-hit rate of 1.000 from a single tested prediction, and I nearly published it.
-The harness now refuses to print a rate under five measurements and prints the
-counts instead. Almost every impressive number in this space rests on a
-denominator nobody shows you.
+**Write the fixed version and re-run.** An experiment that cannot fail on
+correct code cannot pass on incorrect code either. It just returns a number.
+This is now two lines in a test file here, it runs on every commit, and it
+would have saved me three published claims.
+
+**Then do it again against a fix you did not write.** `queue_depth` passed the
+test above and was still measuring nothing: it discriminated against the bound
+my remediation used and against no other. Passing against one fix is necessary
+and it is not sufficient.
 
 ---
 
 ## The uncomfortable part
 
-The pipeline costs six and a half times the baseline and takes four times as
-long. For that, on this case, it bought a doubled hit rate and no additional
-defects.
+Nine of the things listed above were found by adversarial review agents pointed
+at my own work, not by me. I wrote the tests, I ran the experiments, I read the
+output, and I published four numbers that were artefacts.
 
-Whether that is worth paying depends entirely on a number I do not have: how
-often a wrong threshold sends an engineer down a wrong path, priced against a
-one-cent review. On a seventeen-module repository I would not pay it. The
-architecture is built for repositories where reading everything is not an
-option, and I have not yet tested one.
+The reason is not carelessness, and that is what makes it worth saying. Every
+one of those measurements was *plausible*: 51 queries for 50 orders is exactly
+what an N+1 looks like, and it was the right answer arrived at by a mechanism
+that would have produced the same answer from correct code. A number that
+matches your expectation is the one you check least.
 
-I would rather end on that than on a chart where my system wins.
+Which is the same reason AI code review fails, in the same shape. A fluent,
+specific, confident finding about a real file is the one nobody verifies —
+and being right in appearance is not a weaker version of being right. It is
+the thing that stops you finding out.
