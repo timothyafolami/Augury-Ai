@@ -30,6 +30,7 @@ def write_report(
     dependencies: tuple[SchemaFinding, ...],
     modules: int,
     unreachable: int,
+    reading: dict[str, tuple[str, ...]] | None = None,
 ) -> str:
     """The whole document, as markdown."""
     parts = [
@@ -48,6 +49,7 @@ def write_report(
             "No dependency findings: nothing declared "
             "is a major version behind what the registry ships, and nothing is unpinned.",
         ),
+        _reading(reading or {}),
         _code(report),
         _limits(),
     ]
@@ -104,6 +106,30 @@ def _coverage(report: Report, modules: int) -> str:
         "repository, and nothing below should be read as a clean bill of health "
         "for the part that was not read."
     )
+
+
+def _reading(notes: dict[str, tuple[str, ...]]) -> str:
+    """Where to read about the version gaps, quoted and attributed.
+
+    Never asserted. The reviewer has not read these changelogs; it has found
+    where they are, and search is the least trustworthy input here -- a version
+    number is a fact, a snippet is somebody's prose about one.
+    """
+    if not notes:
+        return ""
+    lines = ["## Before you upgrade", ""]
+    lines.append(
+        "Links only. Nothing below has been read or verified by this review, "
+        "and none of it is a finding about your code."
+    )
+    lines.append("")
+    for package, urls in sorted(notes.items()):
+        lines.append(f"**{package}**")
+        lines.append("")
+        for url in urls:
+            lines.append(f"- {url}")
+        lines.append("")
+    return "\n".join(lines)
 
 
 def _section(title: str, findings: tuple[SchemaFinding, ...], empty: str) -> str:
