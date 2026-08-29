@@ -18,7 +18,12 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from augury.core.proving.environment import Environment, choose_environment, docker_is_up
+from augury.core.proving.environment import (
+    BARE_PATH,
+    Environment,
+    choose_environment,
+    docker_is_up,
+)
 from augury.core.survey.model import Service, Survey
 
 
@@ -171,3 +176,36 @@ def test_a_sibling_with_a_shared_prefix_is_not_a_match() -> None:
     )
 
     assert chosen.kind == "local"
+
+
+def test_a_compose_run_can_find_the_docker_binary() -> None:
+    """The experiment runs in a deliberately bare environment: PATH is
+    /usr/bin:/bin so a generated script inherits nothing it was not given.
+
+    Docker Desktop installs to /usr/local/bin, which is not on it, so the
+    launcher failed with "No such file or directory: 'docker'" on a machine
+    where docker was running and had already been found once. The sandbox is
+    for the script; the command that starts the container has to be runnable.
+    """
+    compose = Environment(kind="compose", root=Path("/repo"), service="api")
+
+    assert "/usr/local/bin" in compose.path(docker_at=Path("/usr/local/bin/docker"))
+
+
+def test_the_bare_path_is_kept_for_a_local_run() -> None:
+    """Nothing is added for a script that runs here: it gets what it always got."""
+    local = Environment(kind="local", root=Path("/repo"))
+
+    assert local.path(docker_at=Path("/usr/local/bin/docker")) == BARE_PATH
+
+
+def test_a_docker_on_the_bare_path_adds_nothing() -> None:
+    compose = Environment(kind="compose", root=Path("/repo"), service="api")
+
+    assert compose.path(docker_at=Path("/usr/bin/docker")) == BARE_PATH
+
+
+def test_no_docker_found_leaves_the_path_alone() -> None:
+    compose = Environment(kind="compose", root=Path("/repo"), service="api")
+
+    assert compose.path(docker_at=None) == BARE_PATH
