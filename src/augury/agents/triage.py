@@ -50,6 +50,24 @@ class Triage:
         if not allowed:
             return []
 
+        # Nothing to narrow. The call would cost a prompt, a response and a
+        # slot against the provider's tokens-per-minute ceiling, and the only
+        # answer available is the one already in hand. That ceiling is the real
+        # constraint on a full-coverage run: it is token-bound rather than
+        # latency-bound, so sending fewer tokens is what makes it faster.
+        if len(allowed) == 1:
+            if self._trace is not None:
+                self._trace.record(
+                    agent="triage",
+                    action="skipped",
+                    detail={
+                        "path": module.path,
+                        "specialists": [layer.name for layer in allowed],
+                        "why": "one specialist allowed, so there was nothing to narrow",
+                    },
+                )
+            return list(allowed)
+
         prompt = render(
             "triage",
             path=module.path,
