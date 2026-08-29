@@ -14,8 +14,8 @@
       "symbols": [
         "debit",
         "wallet.balance",
-        "lost update",
-        "SELECT FOR UPDATE"
+        "row lock",
+        "atomic"
       ],
       "verification": "differential",
       "expected_metric": "final_balance",
@@ -32,7 +32,7 @@
       "symbols": [
         "serialize_order",
         "list_orders",
-        "N+1"
+        "query per order"
       ],
       "verification": "differential",
       "expected_metric": "queries_per_request",
@@ -48,8 +48,8 @@
       "symbols": [
         "MAX_ATTEMPTS",
         "asyncio.sleep",
-        "backoff",
-        "jitter"
+        "jitter",
+        "budget"
       ],
       "verification": "load",
       "expected_metric": "retry_amplification"
@@ -64,7 +64,7 @@
       "symbols": [
         "list_for_customer",
         "except Exception",
-        "swallow"
+        "empty list"
       ],
       "verification": "probe",
       "expected_metric": "http_status"
