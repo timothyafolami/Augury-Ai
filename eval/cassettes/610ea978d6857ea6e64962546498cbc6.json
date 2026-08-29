@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "network"
+  ],
+  "reasoning": "data: the file queries the Customer model via SQLAlchemy; network: it defines FastAPI HTTP endpoints."
+}
