@@ -5,35 +5,35 @@
       "line": 26,
       "layer": "data",
       "symbol": "place_order",
-      "mechanism": "Read‑modify‑write on wallet balance without SELECT FOR UPDATE or atomic UPDATE leads to lost updates under READ COMMITTED.",
+      "mechanism": "Read-modify-write on wallet balance without SELECT ... FOR UPDATE leads to lost updates under READ COMMITTED.",
       "severity": "high",
-      "remediation": "Update wallet.debit to perform an atomic UPDATE ... SET balance = balance - :amount or use SELECT ... FOR UPDATE within a SERIALIZABLE transaction.",
-      "arithmetic": "Initial balance 100.00, 10 concurrent debits of 10.00 each. Lost‑update causes only one subtraction to be applied: final_balance = 100.00 - 10.00 = 90.00.",
+      "remediation": "Change wallet.debit to perform an atomic UPDATE ... SET balance = balance - :amount WHERE customer_id = :id, or use SELECT ... FOR UPDATE within a SERIALIZABLE transaction.",
+      "arithmetic": "10 concurrent debits of 10.00 each on initial balance 100.00. Without locking, each reads 100 and writes 90, so final_balance can be as high as 90.00 (lost 9 updates). Correct final is 0.00.",
       "prediction": {
         "metric": "final_balance",
         "comparator": "between",
-        "value": 90.0,
+        "value": 0.0,
         "upper": 90.0,
         "unit": "x",
-        "condition": "wallet=100.00, 10 concurrent debits of 10.00"
+        "condition": "10 concurrent debits of 10.00 on wallet starting at 100.00"
       }
     },
     {
       "path": "app/services/checkout.py",
-      "line": 23,
+      "line": 33,
       "layer": "data",
       "symbol": "place_order",
-      "mechanism": "Transaction kept open while awaiting external network calls (shipping.quote, payments.charge) holds DB locks and connections, causing worker saturation and pool pressure.",
+      "mechanism": "Loop inserts one LineItem per item causing N+1 statements per request.",
       "severity": "medium",
-      "remediation": "Perform external calls before starting the DB transaction or commit/rollback before awaiting; e.g., obtain shipping quote and payment charge first, then open a transaction to debit wallet and create order.",
-      "arithmetic": "Each request holds a DB connection for the duration of two external calls (~200 ms each). With 4 workers, 4 concurrent requests keep 4 connections occupied, saturating the pool (default size 5) and blocking other work. Worker saturation = active_requests / workers = 4/4 = 1.0.",
+      "remediation": "Replace per‑item session.add with a bulk insert (e.g., session.bulk_save_objects or INSERT … VALUES …) to issue a single statement for all line items.",
+      "arithmetic": "For a request with 3 items, statements = 1 (order) + 3 (line items) = 4 queries. Thus queries_per_request = 4.",
       "prediction": {
-        "metric": "worker_saturation",
-        "comparator": "at_least",
-        "value": 1.0,
+        "metric": "queries_per_request",
+        "comparator": "at_most",
+        "value": 4.0,
         "upper": null,
-        "unit": "x",
-        "condition": "4 concurrent place_order requests each awaiting shipping.quote and payments.charge (~200 ms each)"
+        "unit": "queries",
+        "condition": "place_order called with 3 items"
       }
     }
   ]
