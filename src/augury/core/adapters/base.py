@@ -84,7 +84,7 @@ class ChatModel(Protocol):
     def usage(self) -> Usage: ...
 
 
-Provider = Literal["anthropic", "openai", "groq"]
+Provider = Literal["anthropic", "openai", "groq", "deepseek"]
 
 
 class ModelSpec(BaseModel):
