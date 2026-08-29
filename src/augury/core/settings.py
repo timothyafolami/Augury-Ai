@@ -28,11 +28,18 @@ DOTENV_ALLOWED = frozenset(
         "AUGURY_TEMPERATURE",
         "AUGURY_MAX_TOKENS",
         "AUGURY_REPLAY_ONLY",
+        "AUGURY_RECORD",
+        "AUGURY_CASSETTES",
         "GROQ_API_KEY",
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
     }
 )
+
+# Recordings ship with the repository, so replay works from a clone with no
+# key. Anchored to the installation for the same reason .env is: the working
+# directory is often a repository under review.
+DEFAULT_CASSETTE_DIR = Path(__file__).resolve().parents[3] / "eval" / "cassettes"
 
 DEFAULT_PROVIDER = "groq"
 DEFAULT_MODEL = "openai/gpt-oss-120b"
@@ -56,6 +63,8 @@ class Settings(BaseModel):
     spec: ModelSpec
     api_key: str
     replay_only: bool
+    record: bool = False
+    cassette_dir: Path | None = None
 
 
 def load_settings() -> Settings:
@@ -76,7 +85,8 @@ def load_settings() -> Settings:
     except KeyError as exc:
         raise SettingsError(str(exc.args[0])) from exc
 
-    replay_only = os.environ.get("AUGURY_REPLAY_ONLY", "") not in ("", "0", "false")
+    replay_only = _flag("AUGURY_REPLAY_ONLY")
+    record = _flag("AUGURY_RECORD")
 
     return Settings(
         spec=ModelSpec(
@@ -89,7 +99,23 @@ def load_settings() -> Settings:
         # That is the path a judge takes.
         api_key="" if replay_only else _api_key(provider),
         replay_only=replay_only,
+        record=record,
+        # Resolved even when neither mode is on, so `AUGURY_CASSETTES` means
+        # the same thing whichever flag is later set.
+        cassette_dir=_cassette_dir(),
     )
+
+
+def _flag(name: str) -> bool:
+    return os.environ.get(name, "") not in ("", "0", "false")
+
+
+def _cassette_dir() -> Path:
+    """Where recordings live. Repository-relative so the default is committed."""
+    override = os.environ.get("AUGURY_CASSETTES", "")
+    if override:
+        return Path(override).expanduser().resolve()
+    return DEFAULT_CASSETTE_DIR
 
 
 def _dotenv_path() -> Path:
