@@ -32,6 +32,18 @@ NEIGHBOUR_WEIGHT = 0.5
 MICRO_USD = 1_000_000
 
 
+# A single module is noise -- one outlier should not rewrite the rate for a
+# whole review. Three agreeing is a rate.
+ENOUGH_TO_TRUST = 3
+
+# How many modules to issue before the rate has been measured. Learning what a
+# module costs is worth nothing if the budget is already spent by the time the
+# first result comes back: an entire overspending run was one batch of eight,
+# issued together at the guessed rate and corrected only afterwards, with no
+# batch left for the correction to apply to.
+PROBE_BATCH = 2
+
+
 class Budget(BaseModel):
     """Spend ceiling for one review, and what a read is expected to cost.
 
@@ -78,6 +90,8 @@ class Scheduler:
         # Money is counted in integers. Ten one-cent reads sum to less than a
         # dime in binary floating point, which buys an eleventh read.
         self._spent_micros = 0
+        # Observed dollars per 1000 lines, one entry per module read.
+        self._costs: list[float] = []
         self._budget_micros = round(self._budget.usd * MICRO_USD)
         self._seen: set[str] = set()
         # Handed out but not yet reported on, with the estimate charged for
@@ -149,7 +163,16 @@ class Scheduler:
         Reserved as they are handed out, so a module cannot appear in two
         batches. The estimate is charged now and corrected by `record` when the
         real cost is known.
+
+        The first batches are deliberately small: the estimate starts as a
+        guess, and a guess ten times too cheap issues ten times too many
+        modules before the spend catches up.
         """
+        # Until the rate is measured, hand out few enough that a wrong guess
+        # cannot spend the whole ceiling before anything is recorded.
+        if len(self._costs) < ENOUGH_TO_TRUST:
+            size = min(size, PROBE_BATCH)
+
         batch: list[ModuleNode] = []
         for _ in range(max(size, 0)):
             module = self.next()
@@ -178,6 +201,10 @@ class Scheduler:
         # replace it with what it actually cost rather than charging twice.
         self._spent_micros -= self._reserved.pop(module.path, 0)
         self._spent_micros += round(spent_usd * MICRO_USD)
+        # What this module actually cost per 1000 lines, so the estimate for
+        # the next one is a measurement rather than the guess it started with.
+        if module.loc > 0 and self._budget.calls_per_module > 0:
+            self._costs.append(spent_usd / (module.loc / 1000) / self._budget.calls_per_module)
         self.coverage_analysed.append(module.path)
         if findings > 0:
             self._suspect[module.path] = findings
@@ -195,9 +222,29 @@ class Scheduler:
     def _fits(self, module: ModuleNode) -> bool:
         return self._spent_micros + self._estimate_micros(module) <= self._budget_micros
 
+    def expected_usd(self, module: ModuleNode) -> float:
+        """What reading this module is expected to cost, in dollars."""
+        return self._estimate_micros(module) / MICRO_USD
+
     def _estimate_micros(self, module: ModuleNode) -> int:
-        per_read = module.loc / 1000 * self._budget.usd_per_1k_loc
+        per_read = module.loc / 1000 * self._rate()
         return round(per_read * self._budget.calls_per_module * MICRO_USD)
+
+    def _rate(self) -> float:
+        """Dollars per 1000 lines: the configured rate, or the measured one.
+
+        The configured rate is a guess made before anything ran, and a review
+        against a reasoning model cost about ten times it -- so a ceiling of
+        $0.15 was passed on the way to $0.80. The run measures the real rate
+        within a few modules; nothing was reading it.
+
+        Never below the configured rate. Underestimating is what overspends;
+        overestimating only reads less, and a review that stops early says so.
+        """
+        if len(self._costs) < ENOUGH_TO_TRUST:
+            return self._budget.usd_per_1k_loc
+        measured = sum(self._costs) / len(self._costs)
+        return max(self._budget.usd_per_1k_loc, measured)
 
     def _value(self, module: ModuleNode) -> float:
         blast_radius = 1.0 + module.fan_in
