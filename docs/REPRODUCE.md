@@ -42,7 +42,7 @@ make check
 ```
 
 Runs ruff, ruff format, mypy strict over `src` and `tests`, and the full test
-suite. Expect **519 passed, 3 skipped**, in about a minute. Nothing here
+suite. Expect **534 passed, 3 skipped**, in about a minute. Nothing here
 reaches the network.
 
 This is the same command CI runs and the same command the pre-commit hook runs.
@@ -165,10 +165,12 @@ path by which an overlapping result can be printed as a win.
 
 **And a difference between repeats that were not independent is also reported
 as `inconclusive`,** which matters precisely here. Replay collapses the five
-repeats to one recording, so both ranges are zero width and do *not* overlap --
-and an earlier comparator called that a win for the pipeline. The permutation
-p-value is withheld for the same reason: on replayed data it computes to
-0.0079, a confident finding drawn from one observation per arm.
+repeats to one recording, so both ranges are zero width, so a difference
+between them cannot be told from noise -- and an earlier comparator called a
+non-overlapping pair of them a win for the pipeline. The permutation p-value is
+withheld for the same reason. On an earlier recording, where the two arms
+differed, it computed to 0.0079: a confident finding drawn from one observation
+per arm.
 
 ---
 
@@ -205,10 +207,19 @@ the counts and declines to publish the ratio.
 |---|---|---|
 | `make check` | 0 | free |
 | every experiment | 0 | free |
+| `make eval-replay` | 0 | free |
 | `make review-baseline` | 1 | $0.0036, 9s |
 | `make review-augury` | ~40 | $0.0274, 43s |
-| `make evaluate` | ~250 | $0.15, about 12 minutes |
+| `make evaluate` | ~250 | $0.09 to $0.15, 4 to 12 minutes |
 
 Costs are measured from provider token counts against the table in
 `src/augury/core/adapters/pricing.py`, never estimated. A model with no entry
 there is refused at construction rather than reported as free.
+
+**These are the only numbers in this repository that cannot be reproduced from
+the committed cassettes**, because a cassette stores the parsed answer and not
+the token counts that produced it. Every figure above was measured on one live
+run, and single-review costs vary with how much the provider retries. The one
+ratio the results depend on -- the pipeline costing about five times the
+baseline -- is stated from the sweep that produced the published table, and the
+per-command rows here come from earlier runs at the same model and settings.
