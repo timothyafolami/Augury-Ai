@@ -1,0 +1,64 @@
+{
+  "id": "D01",
+  "name": "search-index",
+  "repo_description": "A document search service: a query cache, a tokenizer, a SQLite-backed store and an authenticated search endpoint, eleven modules.",
+  "notes": "Added because the evaluation could not separate the arms on three cases and the honest remedy is a fourth case rather than a sixth repeat of the same three. Its first defect is the only one in the suite that measures memory_bytes, a metric the published vocabulary has always carried and no case had ever settled.",
+  "experiment_conditions": {
+    "memory_bytes": "2000 distinct queries memoised, 5 results each, nothing evicting",
+    "queries_per_request": "one cold search over 40 matching documents"
+  },
+  "defects": [
+    {
+      "id": "D01-1",
+      "lab_topic": "01-machine/01-memory-locality",
+      "defect": "The query cache is an unbounded dict that never evicts. The query space is whatever users type, so a long-lived process retains one entry per distinct query for the life of the service.",
+      "locations": [
+        "app/index/cache.py"
+      ],
+      "symbols": [
+        "_entries",
+        "put",
+        "unbounded",
+        "evict"
+      ],
+      "verification": "differential",
+      "expected_metric": "memory_bytes",
+      "notes": "The module docstring states the growth as though it were a design decision, which is how this ships in real code: nobody wrote 'leak', they wrote 'memoise'."
+    },
+    {
+      "id": "D01-2",
+      "lab_topic": "03-data/05-n-plus-one-and-query-plans",
+      "defect": "search selects id and title for every document, then issues a second query per matching row to fetch the body the snippet needs. The query count grows with the result set.",
+      "locations": [
+        "app/index/searcher.py"
+      ],
+      "symbols": [
+        "by_id",
+        "snippet",
+        "per matching",
+        "query count"
+      ],
+      "verification": "differential",
+      "expected_metric": "queries_per_request",
+      "notes": "The listing query and the per-row query are three lines apart, which makes this the easy version of an N+1. C01's is the hard version."
+    },
+    {
+      "id": "D01-3",
+      "lab_topic": "07-security/04-tokens-sessions-and-revocation",
+      "defect": "verify_token key-stretches on every request. Stretching is expensive by design, and repeating it per request charges every call for a cost that buys security only once.",
+      "locations": [
+        "app/api/handlers.py"
+      ],
+      "symbols": [
+        "verify_token",
+        "_ROUNDS",
+        "per request",
+        "stretch"
+      ],
+      "verification": "load",
+      "expected_metric": "http_req_duration_p99",
+      "notes": "Ships with no experiment, deliberately and with a stated reason: see fixed/README.md. This is the one defect in the suite whose metric no experiment here can settle, and saying so is more useful than a measurement that cannot reproduce.",
+      "unmeasurable_because": "Its metric is http_req_duration_p99, and this harness requires every experiment to return the same number twice. A wall-clock percentile cannot. An experiment for it was written and worked -- 33.9 ms seeded against 0.001 ms remediated -- and was deleted rather than weaken the determinism guarantee for one measurement. See fixed/README.md."
+    }
+  ]
+}
