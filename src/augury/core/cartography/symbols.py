@@ -32,6 +32,14 @@ DEFINITION_NODES: dict[Language, frozenset[str]] = {
     Language.RUST: frozenset({"function_item", "struct_item", "enum_item", "trait_item"}),
     Language.JAVA: frozenset({"method_declaration", "class_declaration", "interface_declaration"}),
     Language.CPP: frozenset({"function_definition", "class_specifier", "struct_specifier"}),
+    Language.TSX: frozenset(
+        {
+            "function_declaration",
+            "method_definition",
+            "class_declaration",
+            "generator_function_declaration",
+        }
+    ),
     Language.TYPESCRIPT: frozenset(
         {
             "function_declaration",
@@ -62,6 +70,7 @@ _GRAMMARS: dict[Language, str] = {
     Language.JAVA: "java",
     Language.CPP: "cpp",
     Language.TYPESCRIPT: "typescript",
+    Language.TSX: "tsx",
     Language.JAVASCRIPT: "javascript",
 }
 
