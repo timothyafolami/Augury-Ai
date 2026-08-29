@@ -40,7 +40,7 @@ async def run_arm(
         try:
             report = await review(case)
             failed = False
-        except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
+        except Exception as exc:  # recorded and counted, never swallowed
             report = Report(model_id=model.model_id, seconds=0.0)
             failed = True
             _note(case, exc)
