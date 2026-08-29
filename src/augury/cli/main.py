@@ -65,6 +65,10 @@ def review(
         return result
 
     report = asyncio.run(run())
+    if prove:
+        # Without this the flag was accepted and ignored, so every verdict
+        # printed "untested" while the command reported success.
+        report = asyncio.run(_prove(chosen, report))
     _print_findings(report)
 
 
@@ -89,6 +93,13 @@ def evaluate(
         results[name] = summarise(scores)
 
     _print_comparison(results)
+
+
+async def _prove(case: Case, report: Report) -> Report:
+    """Put every applicable claim to the case's own experiments."""
+    from augury.evaluation.runner import measure
+
+    return await measure(case, report)
 
 
 async def _one_run(
