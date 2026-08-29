@@ -7,7 +7,9 @@ in place rather than removed: they are the ones that say most about the
 problem.
 
 Model throughout: `openai/gpt-oss-120b` on Groq, temperature 0.
-Cases: `A04` (3 modules, 1 defect), `B01` (17 modules, 5 defects, 1 red herring).
+Cases: `A04` (3 modules, 1 defect, declared non-discriminating), `B01` (17
+modules, 5 defects, 1 red herring), `C01` (11 modules, 4 defects chosen to sit
+outside the specialist briefs).
 
 ---
 
@@ -466,9 +468,12 @@ to learn.
 
 ## Still open
 
-- The pipeline costs roughly seven to ten times the baseline for a result that
-  is not yet distinguishable from it beyond noise. Either the crossover is at a
-  repository size not yet tested, or the architecture does not pay for itself,
-  and both answers are worth reporting.
-- The Prover is not built, so no prediction has yet been tested against a real
-  measurement. Hit Rate is currently unmeasured for both arms.
+- The pipeline costs six times the baseline for a result not distinguishable
+  from it. Either the crossover is at a repository size not yet tested, or the
+  architecture does not pay for itself; ten seeded defects over three cases
+  cannot separate those, and neither can more seeds of the same cases.
+- Two metrics in the published vocabulary, `http_req_duration_p99` and
+  `memory_bytes`, have no experiment in any case. A prediction naming one of
+  them is Broken however good it is, so which metric an arm happens to choose
+  partly decides whether its claim reaches the hit-rate denominator at all.
+  This is the Iteration 10 artefact, reduced but not gone.
