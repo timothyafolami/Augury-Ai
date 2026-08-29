@@ -78,45 +78,61 @@ project makes.
 
 ## Results
 
-Case **B01**: a seventeen-module orders service, five seeded defects each
-traced to a lab topic, each reading correctly line by line, plus a loud
-`FIXME: this is slow` on code that is fine.
-
-**Eight seeds per arm**, every prediction put to the case's own experiments,
-`openai/gpt-oss-120b` on Groq at temperature 0.
+Three cases, ten seeded defects, five seeds per arm, every prediction put to
+the case's own experiments. `openai/gpt-oss-120b` on Groq at temperature 0.
 
 | metric | baseline | augury | verdict |
 |---|---|---|---|
-| seeded recall, mean | 0.850 | 0.800 | no difference (permutation p = 0.63) |
-| seeded recall, spread | 0.600 - 1.000 | **0.800 - 0.800** | see below |
-| hit rate | 0.480 (12/25) | 0.703 (26/37) | suggestive, not significant (Fisher p = 0.11) |
-| prediction coverage | 25 tested | **37 tested** | |
-| cost, eight seeds | $0.025 | $0.228 (9.1x) | |
+| seeded recall | 0.760 | 0.760 | **no difference** (permutation p = 1.00) |
+| hit rate | 0.893 (25/28) | 0.757 (28/37) | **no difference** (Fisher p = 0.21) |
+| findings | 55 | 95 | |
+| cost | $0.036 | $0.216 (6.0x) | |
 
-**The pipeline does not find more defects.** The means differ by 0.05 and a
-permutation test over all 12,870 relabellings puts that at p = 0.63. There is
-nothing there, and eight seeds is enough to say so.
+**The pipeline does not beat one well-written prompt.** Not on defects found,
+not on whether its numbers survive testing. It costs six times as much and
+produces more findings of the same quality.
 
-**Its predictions are right more often, and that is not yet proven.** 0.703
-against 0.480 is the difference the whole project is about, and Fisher's exact
-test puts it at p = 0.11. That is suggestive and it is not significance. It is
-reported as suggestive.
+That is the result. It is not the one this was built to produce, and it is the
+one the evidence supports.
 
-**The one clean separation is determinism.** Across eight seeds the baseline
-returned three different answers (0.6, 0.8, 1.0); the pipeline returned exactly
-0.800 eight times out of eight. Under the baseline's own observed distribution,
-eight identical draws has probability 0.004. A review you can re-run and get
-the same answer from is worth something in CI, and it is the only property here
-that survives its own statistics.
+### The finding is about measurement, not about agents
 
-Both arms miss exactly one defect and **they miss different ones**: the
-baseline misses the N+1, whose loop and query live in separate files; the
-pipeline misses the retry storm. Neither is better. They fail differently.
+Three times this comparison appeared to have a winner, and three times the
+harness was wrong:
 
-Two earlier claims from this same comparison were withdrawn -- a consistency
-claim that turned out to be substring matching, and a hit-rate claim measured
-at a third of the coverage. Both are in
-[`docs/CHANGELOG.md`](docs/CHANGELOG.md) with what produced them.
+| claim | why it was withdrawn |
+|---|---|
+| hit rate 0.000 vs 0.750 | measured at a third of the coverage; reversed when two experiments were added |
+| the arms differ in consistency | the variance was substring matching, not the reviewers |
+| hit rate 0.480 vs 0.703 | three of five experiments reported the same number on remediated code |
+
+Each was found by pointing an adversarial reviewer at the evaluation rather
+than at the code, and each survives in
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md) with the run that produced it.
+
+The last one is worth stating plainly: **for a while, the experiments could not
+tell working code from broken code.** `worker_saturation` reported a perfect
+score for a correctly fixed client, because httpx already defaults to a
+five-second timeout and the deadline was three. `queries_per_request` reported
+51 for a repository whose N+1 had been removed, because the experiment looped
+over its own query instead of calling the endpoint. Both numbers were published.
+
+The repairs are all pinned by tests. Every experiment is run against the
+remediated version of the code it measures and must report a different number
+([`tests/test_experiments_discriminate.py`](tests/test_experiments_discriminate.py)),
+and against more than one remediation, because passing against one is how
+`queue_depth` hid ([`tests/test_experiments_are_not_overfitted.py`](tests/test_experiments_are_not_overfitted.py)).
+
+| experiment | seeded | remediated |
+|---|---|---|
+| `final_balance` | 90.0 | 0.0 |
+| `http_status` | 200 | 500 |
+| `queries_per_request` | 51 | 2 |
+| `retry_amplification` | 1.9 | 0.75 |
+| `worker_saturation` | 1.0 | 0.0 |
+| `duplicate_side_effects` | 3 | 1 |
+| `queue_depth` | 5000 | 32 |
+| `active_connections` | 36 | 40 |
 
 ## Run it
 
@@ -133,26 +149,28 @@ are in [`docs/REPRODUCE.md`](docs/REPRODUCE.md).
 
 ## The main failure mode
 
-**A metric measured at low coverage is not measuring what you think.**
+**The measuring apparatus was the least trustworthy component in the
+experiment, and it was the last one anybody checked.**
 
-An earlier run of this same comparison reported hit rates of 0.000 for the
-baseline and 0.750 for Augury, and that number was in this README. It was an
-artefact: only three experiments existed, so only a third of each arm's
-predictions could be tested, and which third happened to be testable decided
-the result. Adding two more experiments moved coverage from 0.37 to 0.53 and
-reversed the ordering.
+Every published number in this project's history was wrong at least once, and
+never because the scoring arithmetic was wrong. A metric divided by the wrong
+denominator. A matcher that scored `except` as a mention of `exception`, and
+later refused `leaks` as a mention of `leak` -- inverting recall so completely
+that four findings saying nothing beat four correct ones. Experiments that
+returned a number without measuring anything.
 
-Nothing was wrong with the scoring code. The denominator was simply too small
-to mean anything, and it was reported anyway. That is the failure mode this
-project exists to catch, found in the project itself, and it is why the harness
-now refuses to print a rate under five measurements.
+None of it was visible from inside. It took an adversarial reviewer told to
+break the measurement rather than the code, and instructed to check each
+experiment by writing the *fixed* version and re-running it. That single
+instruction found three dead experiments in one pass.
 
-The second failure mode is cheaper to state: routing to specialists costs ten
-times a single prompt for no distinguishable gain in either headline rate. The
-Scheduler exists for repositories too large to read at once, and seventeen
-modules is not that. Either the crossover is at a size not yet tested, or the
-architecture does not pay for itself. The evaluation cannot presently separate
-those, and saying so is more useful than picking one.
+If you build an evaluation, the thing to distrust first is the evaluation.
+
+The second failure mode is cheaper to state: routing to specialists costs six
+times a single prompt for no measurable gain. The Scheduler exists for
+repositories too large to read at once, and seventeen modules is not that.
+Either the crossover is at a size not yet tested, or the architecture does not
+pay for itself, and this evaluation cannot separate them.
 
 ## Hot take
 
