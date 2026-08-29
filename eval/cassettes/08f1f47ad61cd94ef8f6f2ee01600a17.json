@@ -2,5 +2,5 @@
   "specialists": [
     "data"
   ],
-  "reasoning": "The file performs a database query to retrieve courier reference data, which falls under the data specialist's responsibility."
+  "reasoning": "The file performs a database query to retrieve a courier name, which is data-layer logic."
 }
