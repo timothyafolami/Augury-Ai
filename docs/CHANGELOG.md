@@ -276,6 +276,98 @@ declines to print one.
 
 ---
 
+## Iteration 11 — the harness could not tell working code from broken code
+
+**Tried.** Publishing the comparison from Iteration 10.
+
+**Evidence.** An adversarial review was pointed at the evaluation rather than
+the code, told to break the measurement, and to check each experiment by
+writing the remediated version and re-running it. It found:
+
+- `worker_saturation` reported **1.000 for a correctly fixed client**. httpx
+  already defaults to a five-second timeout and the experiment's deadline was
+  three, so the number was a property of that constant. The seeded "missing
+  timeout" was not a defect at all.
+- `retry_amplification` reported **3 for a client with backoff, full jitter and
+  a retry budget** -- the exact remediation the defect text demands. One
+  request only ever measures `MAX_ATTEMPTS`; a budget binds across requests.
+- `queries_per_request` reported **51 for a repository whose list endpoint had
+  been fixed**, because the experiment looped over its own query instead of
+  calling the endpoint. That is the README's hero example.
+- Seeded-defect matching was a substring lottery: `except` matched "an
+  exception type is not declared", `balance` matched "should load-balance
+  across replicas". Five findings describing nothing seeded scored **1.000**,
+  and three of the five detections in the committed trajectory were earned
+  that way.
+- **The comparison was not fair.** Iteration 2 gave the pipeline the deployment
+  configuration and never gave it to the baseline, while both were graded on
+  arithmetic that needs it. Not a budget constraint: the baseline prompt used
+  16,640 of its 120,000 characters.
+
+**Decided.** All fixed, and each is now pinned by a test. The important one is
+`tests/test_experiments_discriminate.py`: every case ships the remediated
+version of every file it breaks, and every experiment is run against both.
+
+| experiment | seeded | remediated |
+|---|---|---|
+| `final_balance` | 90.0 | 0.0 |
+| `http_status` | 200 | 500 |
+| `queries_per_request` | 51 | 2 |
+| `retry_amplification` | 1.9 | 0.75 |
+| `worker_saturation` | 1.0 | 0.0 |
+
+Three of those columns used to be identical.
+
+**Every number published before this point is withdrawn.** An experiment that
+cannot fail on correct code cannot pass on incorrect code either; it just
+returns a number.
+
+---
+
+## Iteration 12 — the consistency claim was a matching artefact
+
+**Tried.** The claim from Iteration 10, that the arms differ in consistency
+rather than average quality: the baseline scoring 5/5, 5/5, 3/5 while the
+pipeline scored 5/5 every time.
+
+**Evidence.** With whole-word matching, the first re-run gave **0.800 recall
+for both arms on all three seeds, with zero variance in either.** The variance
+the claim rested on was substring matching resolving differently depending on
+which words a reviewer happened to use, not the reviewer being inconsistent.
+
+**Decided.** Withdrawn. It was the second claim in a row to come from a
+measurement artefact rather than from the arms, which is worth stating plainly
+rather than burying: both times the harness was the least trustworthy component
+in the experiment, and both times it took an adversarial pass to notice.
+
+**What is left**, on the repaired harness, is a genuine and more interesting
+observation: both arms miss exactly one defect and **they miss different ones**.
+The baseline misses the N+1, whose loop and query live in different files. The
+pipeline misses the retry storm. Neither is better; they fail differently.
+
+---
+
+## Iteration 13 — the hit rate does not survive repetition either
+
+**Tried.** Reading the repaired-harness hit rate as the differentiator: the
+first sweep gave the baseline 5 of 10 and the pipeline 10 of 12.
+
+**Evidence.** Re-running the identical three-seed sweep, changing nothing, gave
+**6 of 11 for both arms**. The pipeline's hit rate moved from 0.833 to 0.545
+between two runs of the same experiment.
+
+**Decided.** No hit-rate claim. Eleven tested predictions per arm cannot
+separate them, and the design cannot be argued out of that: B01 seeds five
+defects, so a run yields three or four distinct experiments however many
+findings it produces. More seeds of one case buys correlated measurements, not
+independent ones.
+
+The honest statement is a power statement rather than a result: **this
+evaluation, as built, cannot distinguish the arms on any published metric.**
+Separating them needs more cases, not more seeds.
+
+---
+
 ## Removed
 
 Nothing yet. When something is removed, it stays listed here with what it cost
