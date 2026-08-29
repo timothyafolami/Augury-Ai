@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 9,
+      "layer": "data",
+      "symbol": "engine",
+      "mechanism": "Pool size (5) is less than worker count (8) causing connection contention and worker saturation per reference on pool sizing against real concurrency ceiling.",
+      "severity": "high",
+      "remediation": "set pool_size>=8 or enable max_overflow to allow at least 3 extra connections",
+      "arithmetic": "workers=8, pool_size=5, max_overflow=0 => max_connections=5, saturation=5/8≈0.625",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 0.62,
+        "upper": null,
+        "unit": "ratio",
+        "condition": "8 workers, 8 concurrent requests, pool_size=5, max_overflow=0"
+      }
+    },
+    {
+      "path": "app/db.py",
+      "line": 9,
+      "layer": "data",
+      "symbol": "engine",
+      "mechanism": "Pool size (5) limits concurrent DB connections, so active connections can reach 5 under full load, exceeding safe threshold per reference on pool sizing against real concurrency ceiling.",
+      "severity": "medium",
+      "remediation": "set pool_size>=8 or enable max_overflow to allow at least 3 extra connections",
+      "arithmetic": "workers=8, pool_size=5, max_overflow=0 => max_connections=5",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 5.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "8 workers, 8 concurrent requests, pool_size=5, max_overflow=0"
+      }
+    }
+  ]
+}
