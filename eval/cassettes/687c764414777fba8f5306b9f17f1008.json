@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "data"
+  ],
+  "reasoning": "Defines database engine, session maker, and async session generator, which are core data layer concerns."
+}
