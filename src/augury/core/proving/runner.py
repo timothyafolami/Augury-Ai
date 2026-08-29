@@ -10,6 +10,7 @@ from pathlib import Path
 from tempfile import mkdtemp
 
 from augury.core.findings import Finding
+from augury.core.proving.diagnosis import diagnose
 from augury.core.proving.interpreter import interpreter_for
 from augury.core.proving.model import Experiment, Proof
 from augury.core.schemas import Outcome
@@ -69,7 +70,7 @@ async def prove_finding(
         return Proof(
             measured=None,
             outcome=Outcome.BROKEN,
-            detail=f"exited {code} under {python.name}: {_tail(stderr)}",
+            detail=diagnose(stderr, interpreter=str(python)),
             script_path=str(script),
             seconds=elapsed,
         )
