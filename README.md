@@ -46,21 +46,27 @@ augury survey --path /path/to/repo --scope backend
 Free, no API key, a few seconds. It reads `docker-compose.yml` first, so before
 spending anything it can tell you which directories hold services, what each
 one runs, what they depend on, and how much of the repository a request can
-actually reach. On a real 1,137-module service:
+actually reach. On the production service used throughout this README:
 
 ```
-| api              | backend        | 10000     | -                                        |
-| worker_default   | backend        | -         | celery -A src.tasks.celery_app worker    |
-|                  |                |           |   -Q default --concurrency=1             |
-| beat             | backend        | -         | celery -A src.tasks.celery_app beat      |
+┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+┃ service           ┃ built from ┃ runs                      ┃ capacity        ┃
+┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+│ api               │ backend    │ serves :10000             │ -               │
+│ worker_default    │ backend    │ celery worker -Q default  │ --concurrency=1 │
+│ worker_alignment  │ backend    │ celery worker -Q alignment│ --concurrency=1 │
+│ worker_generation │ backend    │ celery worker -Q generation│ --concurrency=1│
+│ worker_evaluation │ backend    │ celery worker -Q evaluation│ --concurrency=2│
+│ beat              │ backend    │ celery beat               │ -               │
+└───────────────────┴────────────┴───────────────────────────┴─────────────────┘
 
-depends on: redis (cache or queue), qdrant (vector store)
+depends on: qdrant (vector store), redis (cache or queue)
 
-261 modules, 35,380 lines
-173 reachable from an entrypoint, 88 not, 0 unparsed
+224 modules, 29,576 lines — 224 python
+164 reachable from an entrypoint, 60 not, 0 unparsed
 
 schema — 6 findings in the migrations
-dependencies — 6 findings
+dependencies — 2 findings
 ```
 
 That `--concurrency=1` is a capacity ceiling that appears in **no source file**.
@@ -86,14 +92,13 @@ The pipeline exists for repositories too large to put in one prompt. That is
 worth stating precisely, because it is also the reason the evaluation below
 cannot demonstrate it.
 
-On the 1,137-module service above, the baseline arm -- one prompt containing
-the whole repository, which is what most AI review tools are -- reaches this
-much of it:
+On the service above, the baseline arm -- one prompt containing the whole
+repository, which is what most AI review tools are -- reaches this much of it:
 
 ```
-modules the baseline can see    8
-modules it had to drop       1130   did not fit in one prompt
-                              0.7%
+modules in scope                224
+modules that fit in one prompt   19   8.5%
+modules dropped                 205   did not fit in one prompt
 ```
 
 One prompt is one prompt. The seeded cases in `eval/` are 3 to 23 modules,
@@ -167,6 +172,15 @@ The full architecture, written from the code and one recorded run, is in
 
 Three cases, ten seeded defects, five runs per arm, every prediction put to
 the case's own experiments. `openai/gpt-oss-120b` on Groq at temperature 0.
+
+**Read this section knowing what it measures.** The seeded cases are 3 to 23
+modules. A repository that small fits in one prompt, so the pipeline's whole
+reason for existing -- deciding what to read when you cannot read everything --
+is dead weight there, and the numbers below say so: the baseline wins on every
+metric. That is a real result and it stays published. It is also a result about
+a size of repository nobody hires a reviewer for. The regime this was built for
+is [further down](#on-a-production-service-nobody-seeded), and the two sections
+disagree, which is the point of having both.
 
 **What "five seeds" means here, precisely:** the seed is a label on a repeat.
 It does not vary the prompt, the temperature, the case, or the order modules
@@ -437,6 +451,98 @@ other direction.
 
 [`docs/FIELD_RUN.md`](docs/FIELD_RUN.md) has every finding and how it was scored.
 
+## On a production service nobody seeded
+
+The seeded cases and the 533-module run above are both small enough that the
+architecture is overhead. So it was pointed at a service the author has worked
+on for months -- a FastAPI backend with four Celery workers, Redis and Qdrant --
+with no budget ceiling. The command was:
+
+```bash
+augury report --path ../Interview-AI-Prod --scope backend --budget 0
+```
+
+| | |
+|---|---|
+| modules in the repository | 421 |
+| in scope (`--scope backend`) | 224 |
+| reachable from an entrypoint | 164 |
+| modules read | **147 (66%)** |
+| findings | 141 |
+| cost | **$0.51** |
+| wall clock | 7m51s |
+
+It stopped on its own, and the reason it printed is the interesting part:
+**"stopped because nothing left worth reading."** The 77 modules it skipped are
+migrations, one-off scripts and `__init__.py` files; the Scheduler ranked them
+below the threshold and never spent a call on them. That ranking is the
+component the seeded cases cannot measure, because at 23 modules there is
+nothing to rank.
+
+Three things in that report exist in no source file and could only come from
+reading the deployment:
+
+- Three of the four Celery workers run `--concurrency=1` and the fourth at 2.
+  That ceiling is declared in `docker-compose.yml` and nowhere in the code, so
+  a reviewer that reads only source is blind to it -- and it is the number that
+  decides how much queued work the service can actually clear.
+- Six migrations do something to a table with rows in it -- a `NOT NULL` with
+  no default, an index built without `CONCURRENTLY`. Found by parsing
+  `upgrade()` without importing it.
+- Six dependency findings, checked against PyPI at run time rather than against
+  the model's training data.
+
+Those twelve cost nothing: they come from the deterministic passes, before any
+model call.
+
+**The honest limit:** the 141 findings are not scored. There is no ground truth
+for a repository nobody seeded, and hand-scoring 141 findings is a week of work,
+not a weekend. What is verified here is the coverage, the cost, and the twelve
+deterministic findings -- the part a reader can check without trusting anybody's
+judgement. Three earlier attempts at this same run sit in the journal with no
+completion time; they are real, and they died on provider rate limits before the
+backoff was written.
+
+## Which model, and what it costs
+
+Four providers are supported. The choice is one environment variable, and it
+matters more than the price list suggests:
+
+```bash
+AUGURY_PROVIDER=groq      AUGURY_MODEL=openai/gpt-oss-120b
+AUGURY_PROVIDER=deepseek  AUGURY_MODEL=deepseek-v4-flash
+```
+
+The same scope of the same repository, the same $0.15 ceiling, run back to
+back:
+
+| | Groq `gpt-oss-120b` | DeepSeek `v4-flash` |
+|---|---|---|
+| modules read | **24 of 39** | 2 of 39 |
+| findings | **34** | 6 |
+| spent | **$0.135** | $0.196 |
+| wall clock | **129s** | 265s |
+| per module | **$0.0056** | $0.098 |
+
+Eighteen times the cost per module, from the model with the lower published
+price per token. DeepSeek v4-flash is a reasoning model and the chain of
+thought is billed as output: one call spent 23,000 characters thinking before
+it began the answer, and the answer was 2,900. A price list per million tokens
+does not tell you how many tokens a question will cost.
+
+This is why the budget is enforced against a measured rate rather than a
+configured one. The first version of that ceiling was a fixed $0.02 per 1000
+lines, which is about right for Groq and about ten times too cheap for
+DeepSeek -- so a review asked for $0.15 and spent $0.80 before anyone noticed.
+It now reads two modules, measures what they cost, and plans with that.
+
+DeepSeek is the configured default and Groq is one environment variable away.
+Which is right depends on what you are buying: Groq reads more of a repository
+per dollar, and DeepSeek is a different family of model entirely, so a finding
+that survives both is not an artefact of one provider's habits. What should not
+happen is choosing either from the price list alone, which is what the table
+above is here to prevent.
+
 ---
 
 ## The main failure mode
@@ -458,11 +564,13 @@ instruction found three dead experiments in one pass.
 
 If you build an evaluation, the thing to distrust first is the evaluation.
 
-The second failure mode is cheaper to state: routing to specialists costs six
-times a single prompt for no measurable gain. The Scheduler exists for
-repositories too large to read at once, and twenty-three modules is not that.
-Either the crossover is at a size not yet tested, or the architecture does not
-pay for itself, and this evaluation cannot separate them.
+The second failure mode is cheaper to state: on the seeded cases, routing to
+specialists costs six times a single prompt for no measurable gain. The
+Scheduler exists for repositories too large to read at once, and twenty-three
+modules is not that. That sentence used to end "and this evaluation cannot
+separate them" -- it now can, because the run below was done: at 224 modules
+a single prompt reaches a handful of them, and no amount of model quality fixes
+a denominator.
 
 ## Hot take
 
