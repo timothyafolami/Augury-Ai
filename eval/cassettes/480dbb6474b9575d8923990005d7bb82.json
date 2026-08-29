@@ -2,5 +2,5 @@
   "specialists": [
     "data"
   ],
-  "reasoning": "The file performs database queries and assembles shipment data, so the data specialist should review it."
+  "reasoning": "The file performs database queries and accesses Shipment model data, so the data specialist should review it."
 }
