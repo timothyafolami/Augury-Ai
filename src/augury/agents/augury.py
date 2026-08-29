@@ -22,6 +22,7 @@ from augury.core.cartography.languages import EXTENSIONS
 from augury.core.drafts import DraftReport, to_report
 from augury.core.findings import Report
 from augury.core.layers import Layer
+from augury.core.metrics import vocabulary
 from augury.core.scheduling import Budget, Scheduler
 from augury.evaluation.reconcile import reconcile
 from augury.prompts import render
@@ -71,9 +72,7 @@ class AuguryReviewer:
         )
         return report.model_copy(update={"coverage": plan.coverage})
 
-    async def _review_module(
-        self, module: ModuleNode, root: Path, context: str
-    ) -> DraftReport:
+    async def _review_module(self, module: ModuleNode, root: Path, context: str) -> DraftReport:
         source = self._read(root / module.path)
         language = EXTENSIONS[Path(module.path).suffix.lower()].value
 
@@ -89,9 +88,7 @@ class AuguryReviewer:
         )
         # Specialists collide: pool exhaustion is a network, a data and a
         # failure concern at once, and each will raise it honestly.
-        return reconcile(
-            DraftReport(findings=[f for result in results for f in result.findings])
-        )
+        return reconcile(DraftReport(findings=[f for result in results for f in result.findings]))
 
     async def _ask(
         self, layer: Layer, module: ModuleNode, source: str, language: str, context: str
@@ -107,6 +104,7 @@ class AuguryReviewer:
                 fan_in=module.fan_in,
                 source=source,
                 context=context,
+                metrics=vocabulary(),
             ),
             schema=DraftReport,
         )
