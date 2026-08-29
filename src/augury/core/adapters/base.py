@@ -50,6 +50,21 @@ class Usage(BaseModel):
         )
 
 
+class Completion(BaseModel):
+    """One model call: what came back, what it cost, what it took.
+
+    Exists because `usage` is cumulative, so a caller bracketing a call with
+    before-and-after readings gets every concurrent sibling inside its delta.
+    A call has to report its own cost rather than being measured from outside.
+    """
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    result: BaseModel
+    usage: Usage
+    retries: int = 0
+
+
 @runtime_checkable
 class ChatModel(Protocol):
     """A model that returns a validated pydantic object, never loose text.
@@ -62,6 +77,8 @@ class ChatModel(Protocol):
     def model_id(self) -> str: ...
 
     async def structured(self, *, prompt: str, schema: type[T]) -> T: ...
+
+    async def call(self, *, prompt: str, schema: type[T]) -> Completion: ...
 
     @property
     def usage(self) -> Usage: ...
