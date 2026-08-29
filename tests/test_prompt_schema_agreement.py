@@ -10,6 +10,7 @@ failed loudly; it just quietly did not work.
 import re
 
 import pytest
+from pydantic import BaseModel
 
 from augury.agents.triage import TriageDecision
 from augury.core.drafts import DraftFinding, DraftPrediction, DraftReport
@@ -38,7 +39,7 @@ def described_fields(prompt: str) -> set[str]:
 
 @pytest.mark.parametrize(("name", "schema", "nested"), CONTRACTS)
 def test_a_prompt_never_asks_for_a_field_the_schema_lacks(
-    name: str, schema: type, nested: type | None
+    name: str, schema: type[BaseModel], nested: type[BaseModel] | None
 ) -> None:
     known = set(schema.model_fields) | (set(nested.model_fields) if nested else set())
     asked = described_fields(raw(name))
@@ -51,7 +52,7 @@ def test_a_prompt_never_asks_for_a_field_the_schema_lacks(
 
 @pytest.mark.parametrize(("name", "schema", "nested"), CONTRACTS)
 def test_a_prompt_describes_every_field_the_schema_requires(
-    name: str, schema: type, nested: type | None
+    name: str, schema: type[BaseModel], nested: type[BaseModel] | None
 ) -> None:
     """A field the model is never told about is a field it fills badly or not
     at all, and `prediction` is the one that decides the headline metric."""
