@@ -1,0 +1,96 @@
+"""An experiment that cannot fail on correct code is not measuring anything.
+
+This is the highest-value test in the repository, and it exists because three
+of the five shipped experiments failed it and their numbers were published:
+
+- `worker_saturation` reported 1.000 for a client with a good timeout, because
+  its deadline was under httpx's own default.
+- `retry_amplification` reported 3 for a client with backoff, jitter and a
+  budget, because one request only ever measures MAX_ATTEMPTS.
+- `queries_per_request` reported 51 for a fixed list endpoint, because the
+  experiment looped over its own query rather than calling the endpoint.
+
+Each case ships the remediated version of every file it broke. Every experiment
+is run against the seeded repository and against the remediated one, and must
+report a different number. Without this, a hit rate says nothing about the code.
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from augury.evaluation.cases import Case, load_cases
+
+CASES = [case for case in load_cases() if (case.repo.parent / "experiments").is_dir()]
+
+
+def experiments(case_root: Path) -> list[Path]:
+    return sorted((case_root / "experiments").glob("*.py"))
+
+
+def run(script: Path, repo: Path) -> float | None:
+    """The last number the experiment printed, or None if it could not run."""
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+        timeout=180,
+        env={**os.environ, "AUGURY_CASE_REPO": str(repo)},
+    )
+    if result.returncode != 0:
+        return None
+    for line in reversed(result.stdout.strip().splitlines()):
+        try:
+            return float(line.strip())
+        except ValueError:
+            continue
+    return None
+
+
+def remediated(case_root: Path, tmp_path: Path) -> Path:
+    """A copy of the repository with every seeded defect fixed."""
+    repo = tmp_path / "repo"
+    shutil.copytree(case_root / "repo", repo)
+    for fixed in (case_root / "fixed").rglob("*.py"):
+        target = repo / fixed.relative_to(case_root / "fixed")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(fixed, target)
+    return repo
+
+
+@pytest.mark.parametrize(
+    ("case", "script"),
+    [(case, script) for case in CASES for script in experiments(case.repo.parent)],
+    ids=lambda value: value.stem if isinstance(value, Path) else value.id,
+)
+def test_an_experiment_reports_a_different_number_on_remediated_code(
+    case: Case, script: Path, tmp_path: Path
+) -> None:
+    if not (case.repo.parent / "fixed").is_dir():
+        pytest.skip(f"{case.id} ships no remediated version")
+
+    seeded = run(script, case.repo)
+    fixed = run(script, remediated(case.repo.parent, tmp_path))
+
+    assert seeded is not None, f"{script.name} could not run against the seeded repository"
+    assert seeded != fixed, (
+        f"{script.name} reports {seeded} whether the defect is present or not, "
+        "so no verdict from it says anything about the code"
+    )
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
+def test_every_seeded_defect_has_an_experiment_that_can_settle_it(case: Case) -> None:
+    """A defect whose metric has no experiment can never be proved, and its
+    predictions are permanently Broken."""
+    available = {script.stem for script in experiments(case.repo.parent)}
+
+    for defect in case.defects:
+        assert defect.expected_metric in available, (
+            f"{case.id}/{defect.id} expects {defect.expected_metric}, which no experiment measures"
+        )
