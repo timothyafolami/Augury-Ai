@@ -24,6 +24,7 @@ from augury.core.scoring import Score
 from augury.core.settings import Settings, SettingsError, load_settings
 from augury.evaluation.cases import Case, load_cases
 from augury.evaluation.runner import run_arm
+from augury.evaluation.significance import fisher_exact, verdict
 from augury.evaluation.sweep import SweepResult, summarise
 
 ARMS = {"baseline": BaselineReviewer, "augury": AuguryReviewer}
@@ -200,9 +201,25 @@ def _print_comparison(results: dict[str, SweepResult]) -> None:
     console.print(table)
 
     if len(results) == 2:
-        left, right = results["augury"], results["baseline"]
-        verdict = SweepResult.compare(left, right)
-        console.print(f"\naugury vs baseline on recall: [bold]{verdict}[/bold]")
+        _print_significance(results["augury"], results["baseline"])
+
+
+def _print_significance(left: SweepResult, right: SweepResult) -> None:
+    """The verdict, produced by the run rather than argued for afterwards.
+
+    Two claims in this project's changelog were withdrawn after being read off
+    a pair of means. Printing the test beside the numbers is what stops a
+    third.
+    """
+    hit = fisher_exact(
+        hits_a=left.hits, tested_a=left.tested, hits_b=right.hits, tested_b=right.tested
+    )
+    console.print(f"\nhit rate  p = {_probability(hit)}  [bold]{verdict(hit)}[/bold]")
+    console.print(f"recall    ranges overlap: [bold]{SweepResult.compare(left, right)}[/bold]")
+
+
+def _probability(value: float | None) -> str:
+    return f"{value:.4f}" if value is not None else "n/a"
 
 
 def _number(value: float | None) -> str:
