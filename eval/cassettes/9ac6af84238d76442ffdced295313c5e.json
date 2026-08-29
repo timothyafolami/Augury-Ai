@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "data"
+  ],
+  "reasoning": "The file performs database queries and updates wallet balances using SQLAlchemy, so it requires a data specialist review."
+}
