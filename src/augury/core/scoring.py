@@ -14,9 +14,19 @@ from augury.core.schemas import Outcome
 
 
 class Score(BaseModel):
-    """The measured result of one review."""
+    """The measured result of one review.
+
+    Carries its own identity. Without it, two of the many scores in a sweep
+    cannot be shown to be over the same case, arm, seed and model -- which is
+    the one thing the results table claims.
+    """
 
     model_config = ConfigDict(frozen=True)
+
+    case: str
+    arm: str
+    seed: int
+    model_id: str
 
     total_findings: int
     falsifiable: int
@@ -34,7 +44,7 @@ class Score(BaseModel):
     seconds: float
 
 
-def score(report: Report) -> Score:
+def score(report: Report, *, case: str, arm: str, seed: int = 0) -> Score:
     """Measure one report. No rate is invented where there is nothing to divide."""
     findings = report.findings
     falsifiable = [f for f in findings if f.is_falsifiable]
@@ -48,6 +58,10 @@ def score(report: Report) -> Score:
     observations = len(findings) + len(report.dropped)
 
     return Score(
+        case=case,
+        arm=arm,
+        seed=seed,
+        model_id=report.model_id,
         total_findings=len(findings),
         falsifiable=len(falsifiable),
         tested=len(tested),
@@ -83,3 +97,73 @@ def _distinct_experiments(tested: list[Finding]) -> int:
 def _ratio(numerator: int, denominator: int) -> float | None:
     """None when there is nothing to divide, so an empty run reads as absent."""
     return numerator / denominator if denominator else None
+
+
+class ArmScore(BaseModel):
+    """One arm's result across a case set.
+
+    Rates are pooled over summed counts, never averaged across cases: a case
+    with one observation must not outvote a case with a hundred. The per-case
+    spread is reported beside each rate so a pooled number cannot hide one case
+    carrying the whole result.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    arm: str
+    cases: int
+    model_ids: tuple[str, ...]
+
+    total_findings: int
+    falsifiable: int
+    tested: int
+    experiments: int
+    hits: int
+    broken: int
+    dropped: int
+
+    falsifiable_precision: float | None
+    hit_rate: float | None
+    prediction_coverage: float | None
+
+    per_case_low: float | None
+    per_case_high: float | None
+
+    usd: float
+    seconds: float
+
+
+def aggregate(scores: list[Score]) -> ArmScore:
+    """Combine one arm's per-case scores into the row a reader compares."""
+    if not scores:
+        raise ValueError("no scores to aggregate: an empty arm has no result")
+
+    arms = {s.arm for s in scores}
+    if len(arms) > 1:
+        raise ValueError(f"cannot aggregate more than one arm: {sorted(arms)}")
+
+    observations = sum(s.total_findings + s.dropped for s in scores)
+    falsifiable = sum(s.falsifiable for s in scores)
+    tested = sum(s.tested for s in scores)
+    hits = sum(s.hits for s in scores)
+    per_case = [s.falsifiable_precision for s in scores if s.falsifiable_precision is not None]
+
+    return ArmScore(
+        arm=arms.pop(),
+        cases=len(scores),
+        model_ids=tuple(sorted({s.model_id for s in scores})),
+        total_findings=sum(s.total_findings for s in scores),
+        falsifiable=falsifiable,
+        tested=tested,
+        experiments=sum(s.experiments for s in scores),
+        hits=hits,
+        broken=sum(s.broken for s in scores),
+        dropped=sum(s.dropped for s in scores),
+        falsifiable_precision=_ratio(falsifiable, observations),
+        hit_rate=_ratio(hits, tested),
+        prediction_coverage=_ratio(tested, falsifiable),
+        per_case_low=min(per_case) if per_case else None,
+        per_case_high=max(per_case) if per_case else None,
+        usd=sum(s.usd for s in scores),
+        seconds=sum(s.seconds for s in scores),
+    )
