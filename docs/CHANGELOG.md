@@ -691,12 +691,71 @@ One sweep at these denominators cannot establish it either way.
 
 ---
 
+## 21. The one result favouring the pipeline was one observation counted five times
+
+**What prompted it.** An adversarial review of the evaluation harness itself --
+the code that decides every published number -- with one instruction it had not
+been given before: mutate a constant, run the suite, and report every mutation
+that stays green.
+
+**What the evidence said.** Two defects, both in numbers published an hour
+earlier, both found by mutation rather than by reading.
+
+*The Fisher test was unguarded.* Iteration 18 established that repeats are not
+independent under replay, and guards were added to `compare` and to
+`recall_permutation_p`. `fisher_exact` was left un-guarded, and it was the one
+being handed pooled counts. The observation is 5 of 6 against 6 of 6; pooling
+five identical repeats made it 25 of 30 against 30 of 30, and
+
+    fisher_exact(30, 30, 25, 30) = 0.0522
+    fisher_exact(6, 6, 5, 6)     = 1.0000
+
+The published "suggestive, not significant" was one observation counted five
+times. It was the only result in this project's history pointing at the
+pipeline.
+
+*The denominator fix never reached the number.* Iteration 20 changed the
+falsifiable-precision denominator in `score()`. The published figure comes from
+`aggregate()`, which was not touched and still carried the old expression. The
+test written to catch this -- `test_aggregate_agrees_with_the_single_score` --
+used a report with zero falsifiable findings, where 0/1 and 0/2 are both 0.0.
+Published 0.583; correct 0.667.
+
+**What was decided.** `observations` is now carried on `Score`, computed once,
+so the metric cannot have two definitions again. Pooling counts one repeat when
+the repeats are not independent, and the same guard now covers the cost and
+duration means, which were reporting a fifth of one sweep. `prediction
+coverage` and `broken` are printed: they were computed and withheld, and the
+hit rate cannot be read honestly without knowing that one arm was graded on 43%
+of its claims and the other on 60%.
+
+**The result.** No metric separates the arms. Recall identical, precision to
+the baseline, hit rate to the pipeline by a single prediction with no p-value
+attached. The honest statement is the one the harness now prints on every row:
+not measured.
+
+**What it says about the method.** Of 36 mutations applied to the scoring and
+significance code, 33 were killed by the suite. Three survived, and those three
+are precisely how two wrong numbers reached the README. A test suite that kills
+92% of mutations is not a test suite that protects the published result; the
+8% it misses is not randomly distributed, it clusters exactly where the tests
+were written to confirm a fix rather than to falsify one.
+
+---
+
 ## Still open
 
-- The pipeline costs six times the baseline for a result not distinguishable
-  from it. Either the crossover is at a repository size not yet tested, or the
-  architecture does not pay for itself; ten seeded defects over three cases
-  cannot separate those, and neither can more seeds of the same cases.
+- The pipeline costs five times the baseline. It finds the same defects, states
+  fewer testable claims, and -- on one sweep, at p = 0.052 -- is right more
+  often about the claims it does state. Either that last effect is real and the
+  crossover is at a repository size not yet tested, or it is noise and the
+  architecture does not pay for itself. Ten seeded defects over three cases
+  cannot separate those, and neither can more repeats of the same cases:
+  repeats vary nothing but the provider.
+- The one result now pointing at the pipeline is the one least able to bear
+  weight. 30/30 against 25/30 is a five-prediction margin, and a single tested
+  prediction moving would change the p-value materially. It needs a fourth
+  case, not a sixth repeat.
 - Two metrics in the published vocabulary, `http_req_duration_p99` and
   `memory_bytes`, have no experiment in any case. A prediction naming one of
   them is Broken however good it is, so which metric an arm happens to choose
