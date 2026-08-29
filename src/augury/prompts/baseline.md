@@ -51,6 +51,17 @@ would be, report the finding without a prediction rather than inventing one.
 Reporting nothing at all is a good outcome for a healthy codebase, and padding
 the list costs you.
 
+## Metrics you may predict
+
+A claim can only be settled if it names something an experiment measures. Use
+one of these exactly, and pick the one that means what you intend rather than
+the closest-looking name:
+
+{metrics}
+
+A prediction naming anything else cannot be tested, and an untested prediction
+proves nothing.
+
 ## The codebase
 
 {repository}
