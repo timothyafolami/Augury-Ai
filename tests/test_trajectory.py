@@ -14,8 +14,11 @@ from pathlib import Path
 
 import pytest
 
+from augury.agents.augury import AuguryReviewer
 from augury.core.adapters.base import Usage
+from augury.core.cartography import Cartographer
 from augury.core.trajectory import Trajectory, redact
+from tests.test_augury_arm import make_repo, model
 
 
 def test_records_each_step_in_order(tmp_path: Path) -> None:
@@ -130,3 +133,47 @@ def test_ordinary_text_is_left_alone() -> None:
     prose = "pool_size is 5 against 8 workers, so p99 exceeds 1000ms at 250rps"
 
     assert redact(prose) == prose
+
+
+# -- recording an actual review --------------------------------------------
+
+
+async def test_a_review_records_what_each_agent_did(tmp_path: Path) -> None:
+    """The trajectory has to be produced by a run. Written afterwards it would
+    be a summary, and a summary is exactly what a reader cannot check."""
+    root = make_repo(tmp_path / "repo")
+    trace = Trajectory(tmp_path / "run.jsonl")
+
+    await AuguryReviewer(model(), trajectory=trace).review(Cartographer(root).map(), root)
+
+    steps = [json.loads(line) for line in (tmp_path / "run.jsonl").read_text().splitlines()]
+    agents = {step["agent"] for step in steps}
+
+    assert "cartographer" in agents, "the map is where a review starts"
+    assert "scheduler" in agents, "what was read, and why it was chosen"
+    assert any(a.startswith("triage") for a in agents)
+    assert any(a.startswith("analyst:") for a in agents)
+
+
+async def test_the_deterministic_agents_appear_without_a_model_call(tmp_path: Path) -> None:
+    """Two of the agents never consult a model. A trace showing only model
+    calls would put the work in the wrong place."""
+    root = make_repo(tmp_path / "repo")
+    trace = Trajectory(tmp_path / "run.jsonl")
+
+    await AuguryReviewer(model(), trajectory=trace).review(Cartographer(root).map(), root)
+
+    steps = [json.loads(line) for line in (tmp_path / "run.jsonl").read_text().splitlines()]
+    deterministic = [s for s in steps if s["agent"] in {"cartographer", "scheduler"}]
+
+    assert deterministic
+    assert all(step["model_call"] is False for step in deterministic)
+
+
+async def test_a_review_without_a_trajectory_still_works(tmp_path: Path) -> None:
+    """Recording is optional. A run that did not ask for it must not fail."""
+    root = make_repo(tmp_path / "repo")
+
+    report = await AuguryReviewer(model()).review(Cartographer(root).map(), root)
+
+    assert report is not None
