@@ -141,6 +141,7 @@ def test_a_sweep_in_which_every_review_failed_does_not_print_a_recall() -> None:
             found=0,
             failed=True,
             total_findings=0,
+            observations=0,
             falsifiable=0,
             tested=0,
             experiments=0,
