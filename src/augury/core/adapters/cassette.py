@@ -14,7 +14,7 @@ import json
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -100,9 +100,14 @@ class CassetteModel:
             if recorded is not None:
                 return recorded
 
-            before = self._inner.usage
-            result = await self._inner.structured(prompt=prompt, schema=schema)
-            self._usage = self._usage + (self._inner.usage - before)
+            # Per-call, from the Completion. Reading the inner adapter's
+            # cumulative total before and after does not work once calls run
+            # concurrently -- and the specialists run under asyncio.gather with
+            # a per-prompt lock, so they overlap by design. Every sibling that
+            # finished in between used to land inside the delta.
+            completion = await self._inner.call(prompt=prompt, schema=schema)
+            self._usage = self._usage + completion.usage
+            result = cast("T", completion.result)
             self._write(path, result)
             return result
 
