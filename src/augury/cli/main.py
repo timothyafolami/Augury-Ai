@@ -105,7 +105,9 @@ def evaluate(
         scores: list[Score] = []
         for seed in range(seeds):
             scores.extend(asyncio.run(_one_run(name, reviewer, selected, seed, prove, settings)))
-        results[name] = summarise(scores)
+        # Under replay every repeat is the same recording served again, so the
+        # spread between them measures nothing and must not be read as one.
+        results[name] = summarise(scores, independent=not settings.replay_only)
 
     _print_comparison(results)
 
@@ -148,6 +150,9 @@ async def _one_run(
 @app.command()
 def mcp(
     root: str = typer.Option(".", help="The only directory this server will read"),
+    max_budget: float = typer.Option(
+        1.00, min=0.0, help="Ceiling on what one review may spend, whatever the client asks"
+    ),
 ) -> None:
     """Serve Augury over the Model Context Protocol on stdio.
 
@@ -164,10 +169,22 @@ def mcp(
     # Mapping and explaining work without a key; only review needs one, and it
     # says so in its own result rather than refusing to start the server.
     try:
-        key: str | None = load_settings().api_key or None
+        settings = load_settings()
+        key: str | None = settings.api_key or None
+        replaying = settings.replay_only
     except SettingsError:
-        key = None
-    serve(Server(api_key=key, allowed_root=boundary))
+        key, replaying = None, False
+    serve(
+        Server(
+            api_key=key,
+            allowed_root=boundary,
+            max_budget_usd=max_budget,
+            # In replay the key is deliberately empty and the run is still able
+            # to answer, so a key check alone would refuse the one mode a judge
+            # without a key can actually use.
+            replaying=replaying,
+        )
+    )
 
 
 def _settings() -> Settings:
@@ -254,7 +271,21 @@ def _print_significance(left: SweepResult, right: SweepResult) -> None:
         hits_a=left.hits, tested_a=left.tested, hits_b=right.hits, tested_b=right.tested
     )
     console.print(f"\nhit rate  p = {_probability(hit)}  [bold]{verdict(hit)}[/bold]")
-    console.print(f"recall    ranges overlap: [bold]{SweepResult.compare(left, right)}[/bold]")
+    console.print(f"recall    {_why(left, right)}: [bold]{SweepResult.compare(left, right)}[/bold]")
+
+
+def _why(left: SweepResult, right: SweepResult) -> str:
+    """The reason behind the recall verdict, so the line cannot mislead.
+
+    It printed "ranges overlap" unconditionally, including for replay, where
+    the ranges are zero-width and do not overlap and the real reason is that
+    the repeats were one recording served five times.
+    """
+    if not (left.independent and right.independent):
+        return "repeats not independent"
+    return (
+        "ranges overlap" if SweepResult.compare(left, right) == "inconclusive" else "ranges clear"
+    )
 
 
 def _probability(value: float | None) -> str:
