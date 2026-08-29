@@ -2,38 +2,38 @@
   "findings": [
     {
       "path": "app/clients/shipping.py",
-      "line": 10,
+      "line": 16,
       "layer": "network",
       "symbol": "quote",
-      "mechanism": "A new httpx.AsyncClient is created per request with timeout=None, so each request opens its own TCP/TLS connection that never times‑out. With 4 uvicorn workers this means up to 4 connections can be held indefinitely, saturating all workers as described in the reference material.",
+      "mechanism": "Timeout is disabled (timeout=None) causing indefinite blocking; workers wait on upstream forever, violating the cost of talking to something else principle.",
       "severity": "high",
-      "remediation": "Instantiate a single shared httpx.AsyncClient with a finite timeout (e.g., timeout=5s) and appropriate Limits, and reuse it for all quote calls instead of creating a new client per request.",
-      "arithmetic": "workers=4; each request creates its own client → 1 connection per request; no timeout → connections remain open; active_connections=workers=4; worker_saturation=active_connections/workers=4/4=1 (100%).",
+      "remediation": "Instantiate a shared httpx.AsyncClient with a finite timeout (e.g., timeout=5s) at module load time and reuse it for all quote calls.",
+      "arithmetic": "workers=4; each request holds a worker; blocked_workers=4 => worker_saturation=blocked_workers/workers=4/4=1.0",
       "prediction": {
         "metric": "worker_saturation",
         "comparator": "at_least",
         "value": 1.0,
         "upper": null,
         "unit": "x",
-        "condition": "4 concurrent shipping quotes against a provider that accepts the connection and never answers, measured after 8 seconds"
+        "condition": "4 concurrent quote calls while provider never responds, measured after 8s"
       }
     },
     {
       "path": "app/clients/shipping.py",
-      "line": 10,
+      "line": 16,
       "layer": "network",
       "symbol": "quote",
-      "mechanism": "Because the client is constructed per request with no timeout, each request can block for the full duration of the upstream stall, adding the full connection‑setup and TLS handshake latency to the request latency. This inflates the 99th‑percentile request latency as per the reference material.",
-      "severity": "high",
-      "remediation": "Reuse a shared httpx.AsyncClient with a reasonable timeout and connection pool limits to avoid per‑request connection overhead and unbounded latency.",
-      "arithmetic": "Assume TLS handshake + TCP setup ≈200 ms; provider stall adds 8 s; total worst‑case per request ≈8 200 ms; with 4 concurrent requests the 99th‑percentile latency will be at least 8 000 ms.",
+      "mechanism": "A new AsyncClient is created per request, preventing connection reuse and incurring TLS handshake latency each call.",
+      "severity": "medium",
+      "remediation": "Create a module‑level AsyncClient (or use a connection pool) and reuse it across calls; set appropriate keep‑alive.",
+      "arithmetic": "TLS handshake ≈150ms; upstream latency ≈200ms; p99 latency increase ≥150ms.",
       "prediction": {
         "metric": "http_req_duration_p99",
         "comparator": "at_least",
-        "value": 8000.0,
+        "value": 150.0,
         "upper": null,
         "unit": "ms",
-        "condition": "4 concurrent shipping quotes against a provider that accepts the connection and never answers, measured after 8 seconds"
+        "condition": "normal upstream latency 200ms, 250 rps load"
       }
     }
   ]
