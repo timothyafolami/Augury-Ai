@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "02-network",
+    "06-observability"
+  ],
+  "reasoning": "Network: the FastAPI app and router inclusion define HTTP endpoints; Observability: logging configuration is set up."
+}
