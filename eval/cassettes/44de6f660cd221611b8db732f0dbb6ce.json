@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "network"
+  ],
+  "reasoning": "Data: uses AsyncSession, repository functions load and list_for_customer, and serialization; Network: defines FastAPI routes, HTTP status handling and request parameters."
+}
