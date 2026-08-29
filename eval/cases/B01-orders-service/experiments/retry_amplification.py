@@ -55,9 +55,16 @@ class AlwaysFails(BaseHTTPRequestHandler):
 
 
 class Threaded(HTTPServer):
-    """One thread per connection, so concurrent clients are actually concurrent."""
+    """One thread per connection, so concurrent clients are actually concurrent.
+
+    The listen backlog is raised well above the client count. At the default
+    of five, connections were refused under the burst and the refused ones
+    never reached the counter, so the same code measured anywhere between 1.9
+    and 2.5 -- a property of the socket queue rather than of the retry policy.
+    """
 
     daemon_threads = True
+    request_queue_size = 256
 
     def process_request(self, request: object, address: object) -> None:
         threading.Thread(
@@ -87,6 +94,10 @@ async def main() -> None:
             return
 
     await asyncio.gather(*(one(index) for index in range(CLIENTS)))
+
+    # Every in-flight request has been answered by the time gather returns,
+    # but the handler threads that increment the counter may not have run yet.
+    await asyncio.sleep(0.2)
     server.shutdown()
 
     print(f"{received} requests reached the gateway for {CLIENTS} client requests:")
