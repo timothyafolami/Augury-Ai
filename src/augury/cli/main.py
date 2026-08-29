@@ -27,7 +27,7 @@ from augury.core.trajectory import Trajectory
 from augury.evaluation.cases import Case, load_cases
 from augury.evaluation.runner import run_arm
 from augury.evaluation.significance import fisher_exact, verdict
-from augury.evaluation.sweep import SweepResult, summarise
+from augury.evaluation.sweep import SweepResult, recall_permutation_p, summarise
 
 ARMS = {"baseline": BaselineReviewer, "augury": AuguryReviewer}
 
@@ -272,6 +272,10 @@ def _print_significance(left: SweepResult, right: SweepResult) -> None:
     )
     console.print(f"\nhit rate  p = {_probability(hit)}  [bold]{verdict(hit)}[/bold]")
     console.print(f"recall    {_why(left, right)}: [bold]{SweepResult.compare(left, right)}[/bold]")
+    # The permutation test the hot take reports. Computed here so no published
+    # statistic is one that no shipped command produces.
+    recall_p = recall_permutation_p(left, right)
+    console.print(f"recall    permutation p = {_probability(recall_p)}")
 
 
 def _why(left: SweepResult, right: SweepResult) -> str:
