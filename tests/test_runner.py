@@ -63,6 +63,7 @@ FINDS_THE_DEFECT: dict[str, Any] = {
     ]
 }
 
+
 def fixture_cases() -> list[Case]:
     """One case seeding one defect, built here so the shipped set can grow."""
     root = Path(__file__).parent / "fixtures" / "runner-case"
@@ -136,3 +137,51 @@ async def test_the_arm_name_is_recorded_verbatim(arm: str) -> None:
     scores = await run_arm(arm, ScriptedModel(FINDS_THE_DEFECT), fixture_cases())
 
     assert aggregate(scores).arm == arm
+
+
+# -- proving ---------------------------------------------------------------
+
+
+PREDICTS_QUERY_COUNT: dict[str, Any] = {
+    "findings": [
+        {
+            "path": "app/db.py",
+            "line": 3,
+            "layer": "data",
+            "symbol": "engine",
+            "mechanism": "a query per order",
+            "severity": "high",
+            "remediation": "eager load",
+            "arithmetic": "one per row plus the list",
+            "prediction": {
+                "metric": "queries_per_request",
+                "comparator": "at_most",
+                "value": 2.0,
+                "upper": None,
+                "unit": "queries",
+                "condition": "50 orders",
+            },
+        }
+    ]
+}
+
+
+async def test_predictions_are_tested_when_the_case_ships_an_experiment() -> None:
+    """Without this the reviewer's numbers are never checked, and hit rate is
+    the metric that decides whether they were worth making."""
+    cases = load_cases()
+    provable = [c for c in cases if (c.repo.parent / "experiments").is_dir()]
+    if not provable:
+        pytest.skip("no case ships an experiment yet")
+
+    scores = await run_arm("baseline", ScriptedModel(PREDICTS_QUERY_COUNT), provable, prove=True)
+
+    assert any(s.tested for s in scores), "a shipped experiment was never run"
+
+
+async def test_proving_is_off_by_default() -> None:
+    """Experiments cost real time. A run that did not ask for them must not
+    silently pay for them."""
+    scores = await run_arm("baseline", ScriptedModel(PREDICTS_QUERY_COUNT), fixture_cases())
+
+    assert all(s.tested == 0 for s in scores)
