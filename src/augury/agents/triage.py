@@ -8,7 +8,7 @@ teaches the user to skim the report.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from augury.core.adapters.base import ChatModel
 from augury.core.cartography import ModuleNode
@@ -21,8 +21,10 @@ class TriageDecision(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    specialists: list[str] = Field(default_factory=list)
-    reasoning: str = ""
+    # Required, for the same reason DraftFinding's fields are: a strict
+    # provider rejects a response whose schema declares an optional property.
+    specialists: list[str]
+    reasoning: str
 
 
 class Triage:
@@ -31,7 +33,9 @@ class Triage:
     def __init__(self, model: ChatModel) -> None:
         self._model = model
 
-    async def route(self, module: ModuleNode, source: str, language: str) -> list[Layer]:
+    async def route(
+        self, module: ModuleNode, source: str, language: str, context: str = ""
+    ) -> list[Layer]:
         """The specialists to invoke, in declaration order.
 
         Static signals bound the choice: a specialist whose concern was never
@@ -51,6 +55,7 @@ class Triage:
                 fan_in=module.fan_in,
                 signals=", ".join(sorted(s.value for s in module.signals)),
                 source=source,
+                context=context or "(none found)",
                 specialists="\n".join(f"- {layer.name}: {layer.lab_layer}" for layer in allowed),
             ),
             schema=TriageDecision,
