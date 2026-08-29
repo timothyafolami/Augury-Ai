@@ -12,7 +12,7 @@ from typing import Any, Protocol, TypeVar, cast
 from autogen_core.models import CreateResult, ModelFamily, ModelInfo, UserMessage
 from pydantic import BaseModel
 
-from augury.core.adapters.base import ChatModel, ModelSpec, Usage
+from augury.core.adapters.base import ChatModel, Completion, ModelSpec, Usage
 from augury.core.adapters.pricing import Pricing, pricing_for
 
 __all__ = ["MODEL_CAPABILITIES", "CompletionClient", "Pricing", "ProviderAdapter", "build_model"]
@@ -58,6 +58,7 @@ class ProviderAdapter:
         self._model_id = model_id
         self._pricing = pricing
         self._usage = Usage()
+        self._last_attempt_cost = Usage()
         self.retries = 0
 
     @property
@@ -70,6 +71,11 @@ class ProviderAdapter:
         return self._usage
 
     async def structured(self, *, prompt: str, schema: type[T]) -> T:
+        """The validated object alone, for callers that do not need the cost."""
+        completion = await self.call(prompt=prompt, schema=schema)
+        return cast("T", completion.result)
+
+    async def call(self, *, prompt: str, schema: type[T]) -> Completion:
         """Ask for the schema, not for JSON in prose, and validate the answer.
 
         A response that does not match is raised rather than repaired: a
@@ -77,13 +83,22 @@ class ProviderAdapter:
         """
         last: Exception | None = None
         attempt_prompt = prompt
+        spent = Usage()
 
-        for _ in range(MAX_ATTEMPTS):
+        for attempt in range(MAX_ATTEMPTS):
             try:
-                return await self._attempt(attempt_prompt, schema)
+                result, cost = await self._attempt(attempt_prompt, schema)
+                # A rejected attempt still consumed tokens, so the cost of this
+                # call is every attempt it took, not only the one that worked.
+                return Completion(result=result, usage=spent + cost, retries=attempt)
             except Exception as error:  # provider rejection or invalid JSON
                 last = error
-                self.retries += 1
+                spent = spent + self._last_attempt_cost
+                # Counted only when another attempt will follow: three attempts
+                # is two retries, and reporting three implies a fourth call
+                # that was never made.
+                if attempt < MAX_ATTEMPTS - 1:
+                    self.retries += 1
                 # Repeating an identical prompt to a deterministic model
                 # repeats the identical failure, so the retry has to differ.
                 attempt_prompt = prompt + CORRECTION.format(error=_summarise(error))
@@ -91,26 +106,35 @@ class ProviderAdapter:
         assert last is not None  # the loop either returned or recorded an error
         raise last
 
-    async def _attempt(self, prompt: str, schema: type[T]) -> T:
+    async def _attempt(self, prompt: str, schema: type[T]) -> tuple[T, Usage]:
         response = await self._client.create(
             messages=[UserMessage(content=prompt, source="augury")],
             json_output=schema,
         )
-        self._record(response.usage)
+        cost = self._record(response.usage)
 
         content = response.content
         if not isinstance(content, str):
             raise TypeError(f"expected text from {self._model_id}, got {type(content).__name__}")
-        return schema.model_validate_json(content)
+        return schema.model_validate_json(content), cost
 
-    def _record(self, usage: object) -> None:
+    def _record(self, usage: object) -> Usage:
+        """Add this attempt to the running total and return what it cost.
+
+        Returning the cost is what lets a call report its own price. Reading
+        the cumulative total before and after does not work once calls run
+        concurrently: every sibling that finished first lands inside the delta.
+        """
         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        self._usage = self._usage + Usage(
+        cost = Usage(
             input_tokens=prompt_tokens,
             output_tokens=completion_tokens,
             usd=self._pricing.cost(input_tokens=prompt_tokens, output_tokens=completion_tokens),
         )
+        self._usage = self._usage + cost
+        self._last_attempt_cost = cost
+        return cost
 
 
 def build_model(spec: ModelSpec, *, api_key: str) -> ChatModel:
