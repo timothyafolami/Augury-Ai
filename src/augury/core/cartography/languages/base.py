@@ -40,6 +40,20 @@ class ParsedModule(BaseModel):
         default_factory=frozenset,
         description="Dotted or quoted names this file depends on, as written",
     )
+    named_in_strings: frozenset[str] = Field(
+        default_factory=frozenset,
+        description="Dotted names appearing as string constants, which may be "
+        "dynamic imports. Kept apart from `imports` because they are guesses: "
+        "the mapper resolves them by exact match only, where a real import "
+        "statement is allowed to fall back to its package.",
+    )
+    third_party: frozenset[str] = Field(
+        default_factory=frozenset,
+        description="Top-level names imported from outside the standard "
+        "library. Unlike `unmatched_imports` this keeps the ones a signal "
+        "table recognised, because those are exactly the packages worth "
+        "asking a registry about.",
+    )
     signals: frozenset[Signal] = Field(default_factory=frozenset)
     unmatched_imports: frozenset[str] = Field(
         default_factory=frozenset,
