@@ -2,24 +2,13 @@
   "findings": [
     {
       "path": "app/repositories/orders.py",
-      "line": 13,
-      "layer": "observability",
-      "symbol": "load",
-      "mechanism": "Correlation identifiers generated per service rather than propagated by the transport. Logs cannot be queried by a single request ID, making the service undiagnosable when it breaks.",
-      "severity": "high",
-      "remediation": "Inject a request‑scoped correlation ID into the logger context and include it in every log message emitted by this module.",
-      "arithmetic": "traceable_requests = 0 / total_requests = 0 % → on‑call cannot retrieve all logs for a request",
-      "prediction": null
-    },
-    {
-      "path": "app/repositories/orders.py",
-      "line": 18,
+      "line": 31,
       "layer": "observability",
       "symbol": "list_for_customer",
-      "mechanism": "Errors counted but not attributed, so a rate exists with no way to act on it. The generic except block swallows all exceptions and only logs a generic message, providing no structured error metric.",
-      "severity": "medium",
-      "remediation": "Catch specific exception types and emit structured error metrics with error‑type tags instead of a blanket exception handler.",
-      "arithmetic": "attributed_error_rate = 0 % because all errors are logged without classification → on‑call cannot determine error cause",
+      "mechanism": "Correlation identifiers generated per service rather than propagated by the transport. Logs cannot be correlated to a single request, so an on‑call engineer cannot retrieve all log lines for one request with a single query.",
+      "severity": "high",
+      "remediation": "Add a request_id argument to load and list_for_customer (and any downstream calls), propagate it via contextvars, and include it in all logger calls, e.g., logger.exception(\"could not list orders for customer %s request_id=%s\", customer_id, request_id).",
+      "arithmetic": "No numeric threshold; the issue is the absence of a request‑level identifier, which makes correlation impossible.",
       "prediction": null
     }
   ]
