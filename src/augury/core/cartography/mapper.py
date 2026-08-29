@@ -13,7 +13,7 @@ from collections import Counter
 from pathlib import Path
 
 from augury.core.cartography.languages import EXTENSIONS, ParseError, adapter_for
-from augury.core.cartography.model import ModuleNode, RepoMap
+from augury.core.cartography.model import ModuleNode, RepoMap, Signal
 
 # A single source file has no legitimate reason to be larger than this. The cap
 # bounds memory, and it stops a binary shipped with a source extension from
@@ -98,7 +98,13 @@ EXCLUDED_DIRS = frozenset(
 class Cartographer:
     """Builds a `RepoMap` from a repository root."""
 
-    def __init__(self, root: Path, *, scope: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        scope: tuple[str, ...] = (),
+        entrypoints: tuple[str, ...] = (),
+    ) -> None:
         """`scope` limits the map to these repo-relative directories.
 
         A repository is a set of services, and reviewing all of them at once
@@ -108,6 +114,10 @@ class Cartographer:
         """
         self._root = Path(root)
         self._scope = tuple(part.strip("/") for part in scope if part.strip("/"))
+        # Modules a service command says it starts. A Celery worker's module
+        # looks like nothing to a signal detector, so without these every
+        # background task in the repository is unreachable.
+        self._entrypoints = tuple(part.strip("/") for part in entrypoints if part.strip("/"))
 
     def map(self) -> RepoMap:
         sources = sorted(self._source_files())
@@ -146,6 +156,16 @@ class Cartographer:
                 for name in parsed.imports
                 if (target := self._resolve(name, index)) is not None
             }
+            # Dynamic imports, resolved by exact match only. A real import may
+            # fall back to its package -- `from src.tasks import x` legitimately
+            # depends on `src/tasks/__init__.py` -- but a bare string must not,
+            # or every unknown dotted name silently becomes an edge to the
+            # nearest package that happens to exist.
+            resolved |= {
+                target
+                for name in parsed.named_in_strings
+                if (target := index.get(name)) is not None
+            }
             nodes.append(
                 ModuleNode(
                     path=rel,
@@ -163,10 +183,18 @@ class Cartographer:
                 )
             )
 
+        modules = _with_depth(self._with_fan_in(nodes), declared=self._entrypoints)
+        unreachable = tuple(
+            sorted(m.path for m in modules if m.depth is None)
+            if any(m.depth is not None for m in modules)
+            else ()
+        )
+
         return RepoMap(
             root=str(self._root),
-            modules=self._with_fan_in(nodes),
+            modules=modules,
             unparsed=unparsed,
+            unreachable=unreachable,
             skipped=skipped,
             context=self._context(),
         )
@@ -245,12 +273,30 @@ class Cartographer:
                     index[name] = rel
         return index
 
+    # A suffix shorter than this is too ambiguous to be worth registering:
+    # `pipeline` names four files in a real repository, `tasks.pipeline` names
+    # one.
+    MIN_SUFFIX_SEGMENTS = 2
+
     def _names_for(self, path: Path) -> set[str]:
-        return {
-            name
-            for base in (self._root, self._package_root(path))
-            if (name := self._dotted(path, base))
-        }
+        """Every dotted name this module can plausibly be imported by.
+
+        Both the repository-relative name and the package-relative one, plus
+        every dotted suffix between them. A service built from `./backend` with
+        `PYTHONPATH=/app` imports `backend/src/tasks/pipeline.py` as
+        `src.tasks.pipeline`, which is neither of the two endpoints -- and
+        missing it left an entire Celery task layer unreachable.
+        """
+        names: set[str] = set()
+        for base in (self._root, self._package_root(path)):
+            full = self._dotted(path, base)
+            if not full:
+                continue
+            names.add(full)
+            segments = full.split(".")
+            for start in range(1, len(segments) - self.MIN_SUFFIX_SEGMENTS + 1):
+                names.add(".".join(segments[start:]))
+        return names
 
     @staticmethod
     def _package_root(path: Path) -> Path:
@@ -344,3 +390,37 @@ def _git_environment() -> dict[str, str]:
         "GIT_TERMINAL_PROMPT": "0",
         "GIT_OPTIONAL_LOCKS": "0",
     }
+
+
+def _with_depth(nodes: list[ModuleNode], *, declared: tuple[str, ...] = ()) -> list[ModuleNode]:
+    """Hops from the nearest entrypoint, by breadth-first walk of the imports.
+
+    Fan-in asks how many modules import this one, which is popularity, and the
+    most popular module in a service is usually its settings. Depth asks
+    whether a request reaches it and how soon, which is the question a reviewer
+    has.
+
+    None where no entrypoint reaches the module. When the repository declares
+    no entrypoint at all, every depth stays None rather than defaulting to
+    zero: a library has no request path and inventing one would be a guess.
+    """
+    named = {stem.strip("/") for stem in declared}
+    frontier = [
+        n for n in nodes if Signal.ENTRYPOINT in n.signals or n.path.rsplit(".", 1)[0] in named
+    ]
+    if not frontier:
+        return nodes
+
+    by_path = {n.path: n for n in nodes}
+    depth = {n.path: 0 for n in frontier}
+    while frontier:
+        following = []
+        for node in frontier:
+            for imported in node.imports:
+                if imported in depth or imported not in by_path:
+                    continue
+                depth[imported] = depth[node.path] + 1
+                following.append(by_path[imported])
+        frontier = following
+
+    return [n.model_copy(update={"depth": depth.get(n.path)}) for n in nodes]
