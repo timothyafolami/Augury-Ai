@@ -50,6 +50,13 @@ class AccumulatingModel:
     def usage(self) -> Usage:
         return self._usage
 
+    async def call(self, *, prompt: str, schema: type[BaseModel]):  # type: ignore[no-untyped-def]
+        from augury.core.adapters.base import Completion
+
+        before = self.usage
+        result = await self.structured(prompt=prompt, schema=schema)
+        return Completion(result=result, usage=self.usage - before, retries=0)
+
 
 def test_cassette_model_satisfies_the_chat_model_protocol(tmp_path: Path) -> None:
     """The wrapper is handed to agents wherever a ChatModel is expected, so
