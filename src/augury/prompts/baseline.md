@@ -62,6 +62,18 @@ the closest-looking name:
 A prediction naming anything else cannot be tested, and an untested prediction
 proves nothing.
 
+## Experiments available for this repository
+
+Each of these can be run against this code to settle a claim, under exactly
+the scenario described. A prediction is judged against the scenario named here,
+so state your threshold for *this* load rather than for one you would have
+chosen:
+
+{experiments}
+
+Predicting a different scenario is not wrong, but it cannot be settled, and an
+unsettled prediction proves nothing.
+
 ## The codebase
 
 {repository}
