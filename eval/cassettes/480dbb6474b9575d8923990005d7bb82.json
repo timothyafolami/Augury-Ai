@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "data"
+  ],
+  "reasoning": "The file performs database queries and assembles shipment data, so the data specialist should review it."
+}
