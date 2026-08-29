@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "data"
+  ],
+  "reasoning": "The file implements SQLite document storage, schema creation, insertion and retrieval, which falls under data handling."
+}
