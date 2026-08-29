@@ -50,6 +50,30 @@ MAX_CONTEXT_CHARS = 4_000
 # `site-packages` were listed here and `.conda` was not.
 #
 # Matched at any depth, because a monorepo nests one of these per package.
+# Directories whose contents are tests. Matched as whole path segments, never
+# as substrings: `app/contest/` and `latest.py` are production code.
+TEST_DIRS = frozenset({"tests", "test", "testing", "spec", "specs", "__tests__"})
+
+# Filename shapes that mean the same thing, across the six languages here.
+TEST_PREFIXES = ("test_", "conftest")
+TEST_SUFFIXES = ("_test", ".test", ".spec", "_spec")
+
+
+def looks_like_a_test(relative: str) -> bool:
+    """Whether this path is a test rather than the service.
+
+    A test file has defects worth finding -- one that asserts on a mock, one
+    that cannot fail -- but they are a different review with a different brief,
+    and asking eight production concerns of a file that never serves a request
+    is a fifth of a budget spent on the wrong question.
+    """
+    path = Path(relative)
+    if TEST_DIRS & set(path.parts[:-1]):
+        return True
+    stem = path.stem
+    return stem.startswith(TEST_PREFIXES) or stem.endswith(TEST_SUFFIXES)
+
+
 EXCLUDED_DIRS = frozenset(
     {
         # Python environments and build output
@@ -104,6 +128,7 @@ class Cartographer:
         *,
         scope: tuple[str, ...] = (),
         entrypoints: tuple[str, ...] = (),
+        include_tests: bool = False,
     ) -> None:
         """`scope` limits the map to these repo-relative directories.
 
@@ -118,6 +143,7 @@ class Cartographer:
         # looks like nothing to a signal detector, so without these every
         # background task in the repository is unreachable.
         self._entrypoints = tuple(part.strip("/") for part in entrypoints if part.strip("/"))
+        self._include_tests = include_tests
 
     def map(self) -> RepoMap:
         sources = sorted(self._source_files())
@@ -135,6 +161,10 @@ class Cartographer:
 
         for path in sources:
             rel = self._relative(path)
+
+            if not self._include_tests and looks_like_a_test(rel):
+                skipped[rel] = "a test rather than the service; --include-tests to review it"
+                continue
 
             reason = self._refuse(path)
             if reason is not None:
