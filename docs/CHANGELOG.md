@@ -638,6 +638,59 @@ full evaluation run to discover.
 
 ---
 
+## 20. The comparison was unfair, and fixing it reversed a result
+
+**What prompted it.** A review of the prompts, asked one question: is anything
+present in the analyst's instructions and absent from the baseline's?
+
+**What the evidence said.** Four asymmetries, every one favouring the pipeline.
+
+1. `analyst.md` stated exactly what the falsifiability validator rejects -- a
+   threshold of zero, a band wider than a hundredfold. `baseline.md` did not.
+   A rejected prediction lands in the falsifiable-precision denominator, so one
+   arm held the answer key to a metric both arms are scored on.
+2. `to_report` keeps a finding whose prediction failed validation *and* records
+   a `Dropped` for it, and `aggregate` added both. A malformed prediction cost
+   two observations; no prediction cost one. The arm not told the rules
+   produced more malformed predictions and was charged double for each.
+3. `reconcile` ran on the pipeline arm only. It is deterministic, costs no
+   model call, and removes duplicate findings from the denominator.
+4. `baseline.md` said to omit `prediction` entirely when none could be derived.
+   The schema requires the field and permits null; strict providers reject the
+   whole response, and this arm is a single call, so a rejection can cost the
+   run.
+
+Two tests were enforcing the asymmetry rather than catching it.
+`test_the_analyst_is_told_what_a_vacuous_prediction_is` asserted the rule for
+one arm by name. `test_a_prompt_describes_every_field_the_schema_requires`
+accepted a `nested` schema argument and never used it, so a prompt describing
+none of the six prediction sub-fields passed -- and `baseline.md` was in
+exactly that state.
+
+**What happened when it was fixed.**
+
+| metric | before (unfair) | after (fair) |
+|---|---|---|
+| seeded recall | 0.800 / 0.900 | 0.800 / 0.800 |
+| falsifiable precision | 0.778 / **0.833** | **0.909** / 0.583 |
+| hit rate | 0.833 / 0.889 | 0.833 / **1.000** |
+
+The falsifiable-precision result **reversed**. The pipeline's advantage there
+was the coaching. Recall converged to a tie. And the hit rate separated in the
+other direction: 30 of 30 against 25 of 30, Fisher p = 0.052, which the harness
+reports as *suggestive, not significant* and which is the correct thing to say.
+
+**What was decided.** Republish all of it, including the reversal. This is the
+fifth claim this file has had to withdraw, and the first where the correction
+made the pipeline look worse on a metric it had been winning.
+
+**What it means.** The pipeline states fewer testable claims and a higher share
+of the ones it states survive measurement. That is a coherent trade rather than
+a contradiction, and it is not the trade the project set out to demonstrate.
+One sweep at these denominators cannot establish it either way.
+
+---
+
 ## Still open
 
 - The pipeline costs six times the baseline for a result not distinguishable
