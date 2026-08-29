@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "network"
+  ],
+  "reasoning": "Uses httpx AsyncClient to call an external shipping API, so the network specialist should review the request handling and timeout behavior."
+}
