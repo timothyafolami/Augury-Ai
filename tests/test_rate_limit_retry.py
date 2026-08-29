@@ -12,6 +12,8 @@ exactly the codebases this exists for.
 
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 from augury.core.adapters.retry import RateLimited, retry_after, sleep_schedule
@@ -108,3 +110,51 @@ async def test_more_rate_limits_than_attempts_still_succeeds() -> None:
     assert completion.result.value == "ok"  # type: ignore[attr-defined]
     assert adapter.rate_limited == MAX_ATTEMPTS + 2
     assert adapter.retries == 0, "a rate limit is not a rejected answer"
+
+
+@pytest.mark.asyncio
+async def test_the_wait_budget_is_per_call_not_per_adapter() -> None:
+    """One adapter serves a whole review, so a lifetime budget runs out.
+
+    The wait counter lived on the adapter and never reset. Eight waits across
+    a 261-module run exhausted it, and every 429 after that was fatal --
+    which is why a full-coverage run still died at module eight with the
+    retry logic apparently in place.
+    """
+    from pydantic import BaseModel
+
+    from augury.core.adapters.provider import Pricing, ProviderAdapter
+
+    class Answer(BaseModel):
+        value: str
+
+    class _LimitsEveryOtherCall:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def create(self, messages, **kwargs):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            if self.calls % 2 == 1:
+                raise RuntimeError("429 rate_limit_exceeded, try again in 1ms")
+            from autogen_core.models import CreateResult, RequestUsage
+
+            return CreateResult(
+                content='{"value": "ok"}',
+                usage=RequestUsage(prompt_tokens=1, completion_tokens=1),
+                cached=False,
+                finish_reason="stop",
+            )
+
+    adapter = ProviderAdapter(
+        _LimitsEveryOtherCall(),
+        model_id="a-model",
+        pricing=Pricing(usd_per_1m_input=1.0, usd_per_1m_output=1.0),
+    )
+
+    # Far more calls than one call's wait budget. Every one must succeed.
+    for _ in range(12):
+        completion = await adapter.call(prompt="p", schema=Answer)
+        answered = cast("Answer", completion.result)
+        assert answered.value == "ok"
+
+    assert adapter.rate_limited == 12
