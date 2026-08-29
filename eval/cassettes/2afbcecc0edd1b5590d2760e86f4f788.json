@@ -3,5 +3,5 @@
     "01-machine",
     "06-observability"
   ],
-  "reasoning": "01-machine: async functions, infinite loop, and queue usage; 06-observability: logging of recorded deliveries."
+  "reasoning": "Concurrency: async functions, infinite loop and inbox queue; Observability: logging of recorded deliveries."
 }
