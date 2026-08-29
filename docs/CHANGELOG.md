@@ -684,10 +684,14 @@ reports as *suggestive, not significant* and which is the correct thing to say.
 fifth claim this file has had to withdraw, and the first where the correction
 made the pipeline look worse on a metric it had been winning.
 
-**What it means.** The pipeline states fewer testable claims and a higher share
-of the ones it states survive measurement. That is a coherent trade rather than
-a contradiction, and it is not the trade the project set out to demonstrate.
-One sweep at these denominators cannot establish it either way.
+**What it means, as read at the time.** That the pipeline states fewer testable
+claims and a higher share of them survive measurement.
+
+**Both halves of that sentence were wrong**, and iterations 21 and 22 say why.
+It states *more* claims -- fourteen against ten -- and a *smaller* share
+survive. The reading here was drawn from numbers two later corrections
+withdrew; it is left in place because a changelog that quietly revises its own
+conclusions is not a changelog.
 
 ---
 
@@ -788,16 +792,15 @@ shipped with tests that passed without the fix working.
 ## Still open
 
 - The pipeline costs five times the baseline. It finds the same defects, states
-  fewer testable claims, and -- on one sweep, at p = 0.052 -- is right more
-  often about the claims it does state. Either that last effect is real and the
-  crossover is at a repository size not yet tested, or it is noise and the
-  architecture does not pay for itself. Ten seeded defects over three cases
-  cannot separate those, and neither can more repeats of the same cases:
+  *more* testable claims of which a smaller share survive validation, and is
+  ahead on hit rate by a single experiment -- five of five against five of six,
+  with no p-value attached because the repeats are not independent. Either that
+  last effect is real and the crossover is at a repository size not yet tested,
+  or it is noise and the architecture does not pay for itself. Ten seeded
+  defects over three cases cannot separate those, and neither can more repeats:
   repeats vary nothing but the provider.
-- The one result now pointing at the pipeline is the one least able to bear
-  weight. 30/30 against 25/30 is a five-prediction margin, and a single tested
-  prediction moving would change the p-value materially. It needs a fourth
-  case, not a sixth repeat.
+- The margin is one experiment. A single measurement moving would erase or
+  double it. It needs a fourth case, not a sixth repeat.
 - Two metrics in the published vocabulary, `http_req_duration_p99` and
   `memory_bytes`, have no experiment in any case. A prediction naming one of
   them is Broken however good it is, so which metric an arm happens to choose
