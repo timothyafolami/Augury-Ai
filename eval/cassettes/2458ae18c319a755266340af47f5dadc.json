@@ -5,17 +5,17 @@
       "line": 13,
       "layer": "data",
       "symbol": "with_session",
-      "mechanism": "When `work` raises an exception the session is never closed, so the underlying DB connection remains checked out. With `pool_size=10` and `max_overflow=0` each failed call holds one connection, exhausting the pool after ten concurrent failures and causing subsequent workers to block, leading to worker saturation and request timeouts. This follows the reference on pool sizing against real concurrency ceiling.",
-      "severity": "high",
-      "remediation": "Wrap the session usage in a try/finally (or use `async with SessionLocal() as session:`) to guarantee `await session.close()` runs even when `work` raises, ensuring connections are always returned to the pool.",
-      "arithmetic": "pool_size=10, max_overflow=0 → max simultaneous connections =10. In the experiment `active_connections`: 40 concurrent `with_session` calls where each `work` raises. Each call retains a connection until closed. After 10 failures the pool is full, so active_connections reaches 10 and further calls wait, causing 100% worker saturation.",
+      "mechanism": "The async engine is created with pool_size=10 and max_overflow=0. In the experiment `active_connections`: 40 pieces of work run through with_session against a pool of 10, every one raising, only 10 connections can be checked out simultaneously, causing worker saturation.",
+      "severity": "medium",
+      "remediation": "Set engine pool_size to at least the maximum concurrent work count, e.g., pool_size=40, or configure max_overflow to allow extra connections.",
+      "arithmetic": "pool_size=10; concurrent works=40 → max active connections = min(pool_size, concurrent) = 10. Therefore active_connections ≤10, and workers >10 will block, yielding saturation.",
       "prediction": {
         "metric": "active_connections",
-        "comparator": "at_least",
+        "comparator": "at_most",
         "value": 10.0,
         "upper": null,
         "unit": "count",
-        "condition": "40 concurrent with_session calls where work raises exception"
+        "condition": "40 pieces of work run through with_session against a pool of 10"
       }
     }
   ]
