@@ -16,6 +16,8 @@ import pytest
 
 from augury.core.adapters.retry import RateLimited, retry_after, sleep_schedule
 
+pytestmark = pytest.mark.asyncio
+
 
 def test_a_provider_message_naming_a_delay_is_honoured() -> None:
     """Groq says how long to wait. Guessing when told is not better."""
@@ -53,3 +55,57 @@ def test_a_rate_limit_is_recognised_from_its_message() -> None:
 def test_a_429_that_never_clears_eventually_raises() -> None:
     """Retrying forever is a hang. The run should end saying why."""
     assert len(list(sleep_schedule(attempts=3, floor=0.1))) == 3
+
+
+# -- the loop that said it did not count, and counted ----------------------
+
+
+async def test_more_rate_limits_than_attempts_still_succeeds() -> None:
+    """A 429 must not consume one of the three attempts reserved for bad JSON.
+
+    The first version of this said so in a comment and did the opposite:
+    `continue` inside `for attempt in range(MAX_ATTEMPTS)` advances the
+    counter, so three consecutive rate limits exhausted the loop and killed a
+    full-coverage run at module nine -- twice, because the comment read as
+    though the case were handled.
+    """
+    from pydantic import BaseModel
+
+    from augury.core.adapters.provider import MAX_ATTEMPTS, Pricing, ProviderAdapter
+
+    class Answer(BaseModel):
+        value: str
+
+    class _Limited:
+        """Rate-limits more times than there are attempts, then answers."""
+
+        def __init__(self, times: int) -> None:
+            self.remaining = times
+            self.calls = 0
+
+        async def create(self, messages, **kwargs):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            if self.remaining > 0:
+                self.remaining -= 1
+                raise RuntimeError("Error code: 429 - rate_limit_exceeded ... try again in 1ms")
+            from autogen_core.models import CreateResult, RequestUsage
+
+            return CreateResult(
+                content='{"value": "ok"}',
+                usage=RequestUsage(prompt_tokens=1, completion_tokens=1),
+                cached=False,
+                finish_reason="stop",
+            )
+
+    client = _Limited(times=MAX_ATTEMPTS + 2)
+    adapter = ProviderAdapter(
+        client,
+        model_id="a-model",
+        pricing=Pricing(usd_per_1m_input=1.0, usd_per_1m_output=1.0),
+    )
+
+    completion = await adapter.call(prompt="p", schema=Answer)
+
+    assert completion.result.value == "ok"  # type: ignore[attr-defined]
+    assert adapter.rate_limited == MAX_ATTEMPTS + 2
+    assert adapter.retries == 0, "a rate limit is not a rejected answer"
