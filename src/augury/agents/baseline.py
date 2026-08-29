@@ -18,6 +18,7 @@ from augury.core.adapters.base import ChatModel
 from augury.core.cartography import RepoMap
 from augury.core.drafts import DraftReport, to_report
 from augury.core.findings import Report
+from augury.core.metrics import vocabulary
 from augury.core.scheduling import Coverage
 from augury.prompts import render
 
@@ -44,7 +45,11 @@ class BaselineReviewer:
         started = time.monotonic()
         before = self._model.usage
         draft = await self._model.structured(
-            prompt=render("baseline", repository="\n\n".join(included)),
+            prompt=render(
+                "baseline",
+                repository="\n\n".join(included),
+                metrics=vocabulary(),
+            ),
             schema=DraftReport,
         )
         spent = self._model.usage - before
