@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -67,6 +67,60 @@ MAX_SOURCE_CHARS = 40_000
 # Triage, plus the specialists it typically selects. Used only to forecast a
 # read before paying for it; actual spend is always measured.
 TYPICAL_CALLS_PER_MODULE = 3
+
+
+async def gather_survivors(
+    work: Sequence[Awaitable[DraftReport]],
+    *,
+    note: Callable[[Exception], None] | None = None,
+) -> list[DraftReport]:
+    """Run these concurrently and return the ones that finished.
+
+    A provider fault is the likeliest failure in this system and the least
+    interesting: it says nothing about the code under review. Absorbing it
+    here costs one opinion about one concern; letting it out costs the run.
+
+    Cancellation is not absorbed -- Ctrl-C has to keep working.
+    """
+    done = await asyncio.gather(*work, return_exceptions=True)
+    kept: list[DraftReport] = []
+    for outcome in done:
+        if isinstance(outcome, BaseException):
+            if isinstance(outcome, asyncio.CancelledError):
+                raise outcome
+            if note is not None and isinstance(outcome, Exception):
+                note(outcome)
+            continue
+        kept.append(outcome)
+    return kept
+
+
+async def gather_each(
+    work: Sequence[Awaitable[DraftReport]],
+    *,
+    instead: DraftReport,
+    note: Callable[[int, Exception], None] | None = None,
+) -> list[DraftReport]:
+    """Run these concurrently, one result per item, in order.
+
+    Unlike gather_survivors this keeps position: the batch's cost is
+    apportioned by zipping modules with their results, so dropping a failure
+    would charge every later module for the wrong read. A module that could
+    not be read comes back as a module with no findings, which is what it is,
+    and is counted as read so the scheduler does not offer it again forever.
+    """
+    done = await asyncio.gather(*work, return_exceptions=True)
+    kept: list[DraftReport] = []
+    for index, outcome in enumerate(done):
+        if isinstance(outcome, BaseException):
+            if isinstance(outcome, asyncio.CancelledError):
+                raise outcome
+            if note is not None and isinstance(outcome, Exception):
+                note(index, outcome)
+            kept.append(instead)
+            continue
+        kept.append(outcome)
+    return kept
 
 
 class AuguryReviewer:
@@ -140,8 +194,17 @@ class AuguryReviewer:
             # One batch at a time rather than the whole repository at once: the
             # scheduler promotes a module whose neighbours produced findings,
             # and that adaptivity needs results back before the next choice.
-            results = await asyncio.gather(
-                *(self._review_module(module, root, context) for module in batch)
+            # A module that cannot be read is a module with no findings, not
+            # the end of the review. Position is preserved because the cost of
+            # the batch is apportioned by zipping these with `batch`.
+            results = await gather_each(
+                [self._review_module(module, root, context) for module in batch],
+                instead=DraftReport(findings=[]),
+                note=lambda index, error: self._record(
+                    "module",
+                    "failed",
+                    {"path": batch[index].path, "why": str(error)[:200]},
+                ),
             )
             batch_usd = (self._model.usage - before).usd
 
@@ -228,8 +291,17 @@ class AuguryReviewer:
         # Specialists are independent by construction: each reads for its own
         # concern only. Running them concurrently costs the same and takes the
         # time of the slowest rather than the sum.
-        results = await asyncio.gather(
-            *(self._ask(layer, module, source, language, context) for layer in chosen)
+        # One specialist failing costs its opinion, not the review. A run
+        # ended on its eleventh module because a provider returned no content
+        # three times: the exception left the gather and took thirty-eight
+        # unread modules and every finding already in hand with it.
+        results = await gather_survivors(
+            [self._ask(layer, module, source, language, context) for layer in chosen],
+            note=lambda error: self._record(
+                "specialist",
+                "failed",
+                {"path": module.path, "why": str(error)[:200]},
+            ),
         )
         # Specialists collide: pool exhaustion is a network, a data and a
         # failure concern at once, and each will raise it honestly.
