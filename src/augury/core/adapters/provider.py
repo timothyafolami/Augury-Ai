@@ -8,6 +8,7 @@ of the system sees only `ChatModel`.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from autogen_core.models import CreateResult, ModelFamily, ModelInfo, UserMessage
@@ -61,6 +62,59 @@ CORRECTION = (
 )
 
 
+TOO_LONG = (
+    "\n\nYour previous response was cut off before it ended: {error}\n\n"
+    "It was not malformed -- it ran past the output limit. Return the same "
+    "kind of answer with fewer findings: keep only the most severe, and make "
+    "each explanation shorter. A complete answer about three problems is worth "
+    "more than a truncated one about ten."
+)
+
+NOTHING_BACK = (
+    "\n\nYour previous response was empty: {error}\n\n"
+    "Finding nothing is a valid answer, but it has to be written down. Reply "
+    "with the json object anyway and leave the list empty -- for example "
+    '{{"findings": []}} -- rather than replying with no content at all.'
+)
+
+# What a JSON parser says when the document simply stopped. Distinguishing
+# this from a schema mismatch is the whole point: they need opposite advice.
+_RAN_OUT = ("eof while parsing", "unexpected end of", "eof expected")
+
+
+# DeepSeek allows 384K output tokens; the others allow far less, and a
+# ceiling nobody reaches costs nothing. This is a backstop against a loop
+# that keeps asking for more, not a target.
+MOST_TOKENS = 64_000
+
+
+def _more_room(current: int) -> int:
+    """Twice what was not enough, up to a ceiling worth stopping at."""
+    return min(max(current, 1) * 2, MOST_TOKENS)
+
+
+def ran_out_of_room(error: str) -> bool:
+    """Whether this failure is a cut-off answer rather than a wrong one."""
+    said = error.lower()
+    return any(phrase in said for phrase in _RAN_OUT)
+
+
+def correction_for(error: str) -> str:
+    """The advice that addresses what actually went wrong.
+
+    Telling a model whose answer was truncated to stop returning the schema is
+    advice about a mistake it did not make, and it makes the identical mistake
+    again -- which is how one module consumed three attempts and ended a run.
+    """
+    if "empty response" in error.lower():
+        template = NOTHING_BACK
+    elif ran_out_of_room(error):
+        template = TOO_LONG
+    else:
+        template = CORRECTION
+    return template.format(error=error)
+
+
 class CompletionClient(Protocol):
     """The only part of a provider client this adapter depends on.
 
@@ -79,13 +133,86 @@ OPENAI_COMPATIBLE_BASE_URLS: dict[str, str | None] = {
 }
 
 
+# Providers whose API accepts a named JSON schema and decodes against it.
+# Anything absent is asked for a JSON object instead, because a 400 on the
+# first model call is a worse default than a schema in the prompt.
+STRICT_DECODERS = frozenset({"openai", "groq", "anthropic"})
+
+
+def wants_named_schema(provider: str) -> bool:
+    """Whether this provider accepts a schema-shaped response_format."""
+    return provider in STRICT_DECODERS
+
+
+def schema_in_prompt(prompt: str, schema: type[BaseModel]) -> str:
+    """The prompt, followed by the shape the answer has to take.
+
+    DeepSeek's JSON mode documents two requirements: the word "json" must
+    appear in the prompt, and it must "provide an example of the desired JSON
+    format". Both are met here rather than assumed -- a schema dump mentions
+    JSON only incidentally, and a model without strict decoding follows an
+    example more reliably than a `$defs` block.
+    """
+    shape = json.dumps(schema.model_json_schema(), indent=2, sort_keys=True)
+    return (
+        f"{prompt}\n\n"
+        "Reply with one json object and nothing else: no prose, no code fence, "
+        "no explanation, and never the schema itself.\n\n"
+        f"It must match this schema:\n{shape}\n\n"
+        f"An answer of this shape looks like:\n{_example_of(schema)}"
+    )
+
+
+def _example_of(schema: type[BaseModel]) -> str:
+    """A skeleton instance, showing field names in place rather than described."""
+    fields = schema.model_json_schema().get("properties", {})
+    lines = [f'  "{name}": {_placeholder(spec)}' for name, spec in fields.items()]
+    return "{\n" + ",\n".join(lines) + "\n}"
+
+
+def _placeholder(spec: dict[str, object]) -> str:
+    kind = spec.get("type")
+    if kind == "array":
+        return "[...]"
+    if kind == "object":
+        return "{...}"
+    if kind == "integer":
+        return "0"
+    if kind == "number":
+        return "0.0"
+    if kind == "boolean":
+        return "false"
+    return '"..."'
+
+
+def came_back_empty(content: str) -> bool:
+    """Whether the provider answered with nothing.
+
+    DeepSeek documents this: "the API may occasionally return empty content".
+    Handed to a JSON parser it becomes "expecting value at line 1", which reads
+    like a malformed answer and earns advice about formatting -- for a response
+    that had no formatting to get wrong.
+    """
+    return not content.strip()
+
+
 class ProviderAdapter:
     """Turns a provider response into a validated object and a measured cost."""
 
-    def __init__(self, client: CompletionClient, *, model_id: str, pricing: Pricing) -> None:
+    def __init__(
+        self,
+        client: CompletionClient,
+        *,
+        model_id: str,
+        pricing: Pricing,
+        provider: str = "",
+        max_tokens: int = 0,
+    ) -> None:
         self._client = client
         self._model_id = model_id
         self._pricing = pricing
+        self._provider = provider
+        self._max_tokens = max_tokens
         self._usage = Usage()
         self._last_attempt_cost = Usage()
         self.retries = 0
@@ -139,9 +266,14 @@ class ProviderAdapter:
         # should happen and the code did the opposite.
         attempt = 0
         waited = 0
+        # Raised only when the provider says the answer was cut off. A
+        # reasoning model spends this budget thinking before it writes, so a
+        # ceiling that fits the answer may not fit the thinking, and advice to
+        # be brief does not create room that is not there.
+        ceiling = 0
         while attempt < MAX_ATTEMPTS:
             try:
-                result, cost = await self._attempt(attempt_prompt, schema)
+                result, cost = await self._attempt(attempt_prompt, schema, ceiling=ceiling)
                 # A rejected attempt still consumed tokens, so the cost of this
                 # call is every attempt it took, not only the one that worked.
                 return Completion(result=result, usage=spent + cost, retries=attempt)
@@ -167,19 +299,51 @@ class ProviderAdapter:
                 attempt += 1
                 # Repeating an identical prompt to a deterministic model
                 # repeats the identical failure, so the retry has to differ.
-                attempt_prompt = prompt + CORRECTION.format(error=_summarise(error))
+                if ran_out_of_room(_summarise(error)):
+                    ceiling = _more_room(ceiling or self._max_tokens)
+                attempt_prompt = prompt + correction_for(_summarise(error))
 
         assert last is not None  # the loop either returned or recorded an error
         raise last
 
-    async def _attempt(self, prompt: str, schema: type[T]) -> tuple[T, Usage]:
+    async def _attempt(self, prompt: str, schema: type[T], *, ceiling: int = 0) -> tuple[T, Usage]:
+        # DeepSeek answers 400 to the schema-shaped response_format the others
+        # accept, so it is asked for a JSON object and shown the schema in the
+        # prompt instead. What comes back is validated identically either way.
+        named = wants_named_schema(self._provider)
+        # Only a call that already ran out of room asks for more; a normal one
+        # keeps the configured budget so the cost of a review stays predictable.
+        extra = {"max_tokens": ceiling} if ceiling else {}
         response = await self._client.create(
-            messages=[UserMessage(content=prompt, source="augury")],
-            json_output=schema,
+            messages=[
+                UserMessage(
+                    content=prompt if named else schema_in_prompt(prompt, schema),
+                    source="augury",
+                )
+            ],
+            json_output=schema if named else True,
+            extra_create_args=extra,
         )
         cost = self._record(response.usage)
 
+        # The provider says why it stopped. A reasoning model spends the output
+        # budget thinking before it answers, so an overflow arrives as empty
+        # content with finish_reason="length" -- and guessing from the parse
+        # error instead blamed the provider for an "occasional" empty response
+        # that was neither occasional nor its fault.
+        if response.finish_reason == "length":
+            raise ValueError(
+                f"{self._model_id} hit the output limit before finishing: "
+                "EOF while parsing the answer. Reasoning tokens are spent from "
+                "the same budget as the answer"
+            )
+
         content = response.content
+        if isinstance(content, str) and came_back_empty(content):
+            raise ValueError(
+                f"{self._model_id} returned an empty response, which its provider "
+                "documents as an occasional fault; the same prompt usually succeeds"
+            )
         if not isinstance(content, str):
             raise TypeError(f"expected text from {self._model_id}, got {type(content).__name__}")
         return schema.model_validate_json(content), cost
@@ -251,7 +415,13 @@ def build_model(spec: ModelSpec, *, api_key: str) -> ChatModel:
             ),
         )
 
-    return ProviderAdapter(client, model_id=spec.model, pricing=pricing)
+    return ProviderAdapter(
+        client,
+        model_id=spec.model,
+        pricing=pricing,
+        provider=spec.provider,
+        max_tokens=spec.max_tokens,
+    )
 
 
 # Declared rather than looked up. Groq's models have no entry in autogen's
