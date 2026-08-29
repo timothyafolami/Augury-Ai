@@ -145,7 +145,6 @@ The planning documents describe these. None was built.
 
 | | |
 |---|---|
-| MCP server | not built |
 | VS Code extension | not built |
 | FastAPI serving layer | not built |
 | Live docker-compose stack, k6, Grafana | not built; experiments run in process |
@@ -159,6 +158,41 @@ led to a deterministic answer would hide how it was reached.
 
 ---
 
+## The MCP surface
+
+`augury mcp --root <dir>` serves the same pipeline over the Model Context
+Protocol on stdio, so the reviewer runs inside whatever agent the reader already
+has rather than only behind this CLI.
+
+```
+  client  --JSON-RPC over stdio-->  serve()  -->  Server.handle(request)
+                                     |                    |
+                              no decisions        pure function,
+                              only framing        no IO of its own
+```
+
+Three tools. Two of them are free and need no API key, because cartography is
+deterministic and the layer briefs are files on disk:
+
+| tool | what it returns | cost |
+|---|---|---|
+| `augury_map` | modules per language, concerns per file, what was skipped and why | free |
+| `augury_explain` | one specialist's brief, or the metric vocabulary | free |
+| `augury_review` | findings with predictions, plus what it spent | metered |
+
+Being able to see the map and the cost before buying the review is the point of
+splitting them.
+
+**The root is a launch argument, not a call argument.** An MCP client is driven
+by a language model, and a model that can name any path can read any file on the
+machine. `Server._resolve` refuses anything outside the boundary it was
+constructed with.
+
+The stdio protocol is implemented directly rather than through the `mcp` SDK:
+the framing is small, it keeps the dependency list installable offline, and it
+made `handle` a pure request-to-response function that the tests drive without
+spawning anything.
+
 ## Where things live
 
 | | |
@@ -171,4 +205,5 @@ led to a deterministic answer would hide how it was reached.
 | `core/layers.py`, `prompts/layers/` | The eight specialists and their briefs |
 | `agents/` | Baseline, Triage, the pipeline |
 | `evaluation/` | Cases, runner, prover, reconciler, sweep |
+| `mcp/` | The MCP server: dispatch, tools, stdio framing |
 | `cli/` | The only evaluated surface |
