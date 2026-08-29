@@ -51,9 +51,14 @@ class Defect(BaseModel):
         into a lottery: `except` matched "an exception type is not declared",
         `balance` matched "should load-balance across replicas", and five
         findings describing nothing seeded scored a perfect 1.000.
+
+        The finding must also say something. Four findings naming the right
+        functions with a full stop for a mechanism scored 1.000, because the
+        symbol field alone decided. A pointer is not a diagnosis.
         """
         return any(
             finding.path in self.locations
+            and _is_a_claim(finding.mechanism)
             and any(
                 _mentions(symbol, f"{finding.symbol} {finding.mechanism}")
                 for symbol in self.symbols
@@ -118,15 +123,40 @@ def load_cases(root: Path | None = None) -> list[Case]:
     )
 
 
+# Inflection, not derivation. Reviewers conjugate: "leaks", "leaking",
+# "leaked" are all mentions of a leak. `exception` is not a mention of
+# `except`, and admitting it was the failure the whole-word rule was
+# introduced for. Only endings that change a word's form are allowed, never
+# ones that change what word it is.
+_INFLECTIONS = "(?:s|es|ed|d|ing)?"
+
+
 @lru_cache(maxsize=512)
 def _pattern(symbol: str) -> re.Pattern[str]:
-    """A whole-word match, tolerating a trailing `()` and a dotted prefix.
+    """A whole-word match, allowing an inflected ending.
 
-    Word boundaries rather than substrings, because `except` inside
-    `exception` is not a mention of the handler. Underscores are part of a
-    word in Python's own sense, so `pool_size` matches as written.
+    Underscores are part of a word in Python's own sense, so `pool_size`
+    matches as written and `pool` does not match it.
     """
-    return re.compile(rf"(?<![\w-]){re.escape(symbol)}(?![\w-])", re.IGNORECASE)
+    stem = re.escape(symbol)
+    forms = [stem + _INFLECTIONS]
+    if symbol.endswith("y"):
+        # retry / retries, apply / applied. A y-stem inflects by replacing it.
+        forms.append(re.escape(symbol[:-1]) + "(?:ies|ied)")
+
+    return re.compile(
+        rf"(?<![\w-])(?:{'|'.join(forms)})(?![\w-])", re.IGNORECASE
+    )
+
+
+# A mechanism shorter than this is a label rather than an explanation. Set by
+# what the shortest genuine finding needs, not by what looks strict.
+_WORDS_IN_A_CLAIM = 5
+
+
+def _is_a_claim(mechanism: str) -> bool:
+    """Whether the finding says what is wrong, rather than only where."""
+    return len(mechanism.split()) >= _WORDS_IN_A_CLAIM
 
 
 def _mentions(symbol: str, text: str) -> bool:
