@@ -16,6 +16,17 @@ from pydantic import BaseModel, Field
 from augury.core.cartography import ModuleNode, RepoMap, Signal
 
 ENTRYPOINT_WEIGHT = 2.0
+
+# How much being far from an entrypoint costs. Depth is hops along the import
+# graph from where a request arrives, so this makes the request path the thing
+# the budget buys first: a module three hops from a route handler is read
+# before one nine hops away, whatever their fan-in.
+DEPTH_DECAY = 0.6
+
+# What a module no entrypoint reaches is worth. Not zero -- unreachable code
+# has its own defects and its unreachability is itself worth reporting -- but
+# it is not where a production incident starts.
+UNREACHABLE_WEIGHT = 0.25
 CHURN_WEIGHT = 0.1
 NEIGHBOUR_WEIGHT = 0.5
 MICRO_USD = 1_000_000
@@ -157,12 +168,13 @@ class Scheduler:
         breadth = float(len(module.signals))
         recency = 1.0 + CHURN_WEIGHT * module.churn
         entrypoint = ENTRYPOINT_WEIGHT if Signal.ENTRYPOINT in module.signals else 1.0
+        reach = UNREACHABLE_WEIGHT if module.depth is None else DEPTH_DECAY**module.depth
         neighbour = 1.0 + NEIGHBOUR_WEIGHT * sum(
             self._suspect.get(dependency, 0) for dependency in module.imports
         )
         cost = math.sqrt(max(module.loc, 1))
 
-        return blast_radius * breadth * recency * entrypoint * neighbour / cost
+        return blast_radius * breadth * recency * entrypoint * reach * neighbour / cost
 
     # -- reporting ---------------------------------------------------------
 
