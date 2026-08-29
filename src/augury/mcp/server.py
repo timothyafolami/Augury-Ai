@@ -57,11 +57,11 @@ class _Reviewer(Protocol):
 def _default_reviewer(**kwargs: Any) -> _Reviewer:
     """Built lazily so importing this module never requires a provider."""
     from augury.agents.augury import AuguryReviewer
-    from augury.core.adapters.provider import build_model
+    from augury.core.adapters.provider import model_from
     from augury.core.settings import load_settings
 
     settings = load_settings()
-    model = build_model(settings.spec, api_key=settings.api_key)
+    model = model_from(settings)
     return AuguryReviewer(model, budget=kwargs["budget"])
 
 
