@@ -511,6 +511,47 @@ to learn.
 
 ---
 
+## 17. Pointed at a repository nobody prepared
+
+**What prompted it.** Every number in this file came from cases where this
+project planted the defects and the grader held the answers. That is the right
+way to measure a difference between two arms. It is not evidence that either
+arm is useful, and after sixteen iterations of tightening the apparatus, the
+apparatus was the only thing that had ever been tested.
+
+**What was tried.** The practice lab: 533 modules, six languages, no seeded
+defects, no answer key, a $0.05 budget. Then every finding scored by hand
+against the source, because there was nothing else to score it against.
+
+**What the evidence said.** It read 14 of 533 modules (3%) and stopped saying
+so. Ten findings. Four correct and verified. Two true about the code and wrong
+about what the code was for -- missing auth on a docker-compose lab fixture,
+a default password in a localhost config table -- both reported `high`. Three
+needing an experiment that does not exist, scored as neither. One false:
+
+> `active_connections at_least 1 count @ DATABASE_URL='http://169.254.169.254/'`
+
+described as SSRF. The value is used as an asyncpg DSN; asyncpg will not fetch
+an HTTP URL. The claim is confidently and completely wrong, and it carries a
+metric, a comparator, a value, a unit and a runnable condition. It passed the
+falsifiability gate without a murmur.
+
+**What was decided.** Publish it, in [`FIELD_RUN.md`](FIELD_RUN.md), including
+the false one. Two things it settled that the seeded cases could not:
+
+- **The gate is not a truth filter and was never described as one, but the
+  report format invites the confusion.** A well-formed wrong claim is visually
+  identical to a well-formed right one. Only the Prover separates them, which
+  is the same conclusion the evaluation reached from the other side.
+- **Bind findings on symbols, not lines.** Every finding named the correct
+  function. One was reported 140 lines from where the function actually is.
+
+**What is still wrong.** Nothing in the pipeline reads what a repository is
+*for*, so a lab fixture and a payment service get the same security brief.
+That is the cause of both context-blind findings, and it is not fixed.
+
+---
+
 ## Still open
 
 - The pipeline costs six times the baseline for a result not distinguishable
