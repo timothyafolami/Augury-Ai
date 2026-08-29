@@ -7,8 +7,8 @@ in place rather than removed: they are the ones that say most about the
 problem.
 
 Model throughout: `openai/gpt-oss-120b` on Groq, temperature 0.
-Cases: `A04` (3 modules, 1 defect, declared non-discriminating), `B01` (17
-modules, 5 defects, 1 red herring), `C01` (11 modules, 4 defects chosen to sit
+Cases: `A04` (3 modules, 1 defect, declared non-discriminating), `B01` (23
+modules, 5 defects, 1 red herring), `C01` (13 modules, 4 defects chosen to sit
 outside the specialist briefs).
 
 ---
@@ -146,7 +146,7 @@ repository where reading everything is free, so nothing the pipeline does can
 pay for itself. The verdict is written into A04's own manifest so the case
 cannot later be cited as evidence of anything.
 
-**Consequence.** Built case B01: seventeen modules, five defects each traced to
+**Consequence.** Built case B01: twenty-three modules, five defects each traced to
 a lab topic, each reading correctly line by line, plus a loud `FIXME: this is
 slow` on code that is fine, to see whether a reviewer follows the loudest
 signal or the causal one.
