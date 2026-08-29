@@ -15,6 +15,7 @@ from typing import cast
 from pydantic import BaseModel, ConfigDict
 
 from augury.core.scoring import Score, aggregate
+from augury.evaluation.significance import permutation_p
 
 
 class SweepResult(BaseModel):
@@ -38,6 +39,12 @@ class SweepResult(BaseModel):
     recall_mean: float | None
     recall_low: float | None
     recall_high: float | None
+    recalls: tuple[float, ...] = ()
+    """Recall per repeat, kept so the permutation test has something to permute.
+
+    Only the range was retained, so `permutation_p` -- defined, tested, and
+    reported in the hot take -- was computable by no shipped command.
+    """
 
     # Pooled across seeds rather than averaged. A single run of a case yields
     # too few distinct experiments to support a rate, so every per-seed value
@@ -127,6 +134,7 @@ def summarise(scores: list[Score], *, independent: bool = True) -> SweepResult:
         arm=arms.pop(),
         seeds=len(by_seed),
         independent=independent,
+        recalls=tuple(recalls),
         failed=failures,
         hits=pooled.hits,
         tested=pooled.tested,
@@ -139,3 +147,16 @@ def summarise(scores: list[Score], *, independent: bool = True) -> SweepResult:
         usd_mean=fmean(run.usd for run in per_seed),
         seconds_mean=fmean(run.seconds for run in per_seed),
     )
+
+
+def recall_permutation_p(left: SweepResult, right: SweepResult) -> float | None:
+    """The permutation probability for recall, or None when it would mislead.
+
+    Withheld for the same reason `compare` refuses a verdict: replay repeats one
+    observation, and permuting five copies of 0.800 against five copies of 0.700
+    returns p = 0.0079. A spurious range is visibly a range; a spurious p-value
+    reads as a finding.
+    """
+    if not (left.independent and right.independent):
+        return None
+    return permutation_p(list(left.recalls), list(right.recalls))
