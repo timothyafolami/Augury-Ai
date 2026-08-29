@@ -14,6 +14,14 @@ authority. Cite them.
 
 {corpus}
 
+## How this service is deployed
+
+These set the conditions the code runs under. A pool size is not wrong on its
+own; it is wrong relative to a worker count, and the worker count is here
+rather than in the file you are reading.
+
+{context}
+
 ## The file
 
 Path: {path}
@@ -44,12 +52,33 @@ applied. A reviewer who cannot show the arithmetic is guessing.
 
 ## Respond with
 
+A list of findings. Report nothing rather than padding: an empty result is a
+good outcome for a healthy file, and a finding you cannot ground costs you.
+
 For each finding:
 
-- `symbol`: the function, class or config key involved
+- `path`: the file, exactly as given above
 - `line`: where it starts
+- `layer`: `{layer_name}`
+- `symbol`: the function, class or configuration key involved
 - `mechanism`: why this fails, in terms of the reference material, citing it
-- `claim`: what will be observed, with a number, a unit and a condition
-- `arithmetic`: how you arrived at the number
 - `severity`: high, medium or low
-- `remediation`: the change you would make, stated as a change and not as advice
+- `remediation`: the change, stated as a change and not as advice
+- `arithmetic`: how you derived the threshold below, showing the numbers
+- `prediction`: the falsifiable claim, as an object:
+  - `metric`: what would be measured, e.g. `http_req_duration_p99`,
+    `queries_per_request`, `active_connections`, `final_balance`
+  - `comparator`: `at_least`, `at_most`, or `between`
+  - `value`: the threshold, or the lower bound when the comparator is `between`
+  - `upper`: the upper bound for `between`, otherwise `null`
+  - `unit`: `ms`, `s`, `queries`, `rows`, `x`, `rps`, `count`
+  - `condition`: the circumstance it holds under, e.g. `rate=250rps`,
+    `50 rows`, `two concurrent writers`
+
+  Set `prediction` to `null` only when you genuinely cannot derive a number
+  from the mechanism. A finding whose arithmetic you have already worked out
+  above has a prediction; write it down.
+
+  A threshold of zero is not a prediction, because every measurement of a
+  magnitude is at least zero. Neither is a range spanning more than about a
+  hundredfold. Both will be rejected.
