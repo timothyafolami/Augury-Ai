@@ -39,6 +39,13 @@ class ScriptedModel:
     def usage(self) -> Usage:
         return self._usage
 
+    async def call(self, *, prompt: str, schema: type[BaseModel]):  # type: ignore[no-untyped-def]
+        from augury.core.adapters.base import Completion
+
+        before = self.usage
+        result = await self.structured(prompt=prompt, schema=schema)
+        return Completion(result=result, usage=self.usage - before, retries=0)
+
 
 ONE_GOOD_FINDING: dict[str, Any] = {
     "findings": [
