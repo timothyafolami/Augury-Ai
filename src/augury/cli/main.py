@@ -176,6 +176,9 @@ def _print_comparison(results: dict[str, SweepResult]) -> None:
         "seeded recall (mean)": lambda r: _number(r.recall_mean),
         "  range": lambda r: f"{_number(r.recall_low)}-{_number(r.recall_high)}",
         "falsifiable precision": lambda r: _number(r.precision_mean),
+        "hit rate": lambda r: _number(r.hit_rate),
+        "  hits / tested": lambda r: f"{r.hits} / {r.tested}",
+        "  experiments": lambda r: str(r.experiments),
         "cost usd": lambda r: f"{r.usd_mean:.5f}",
         "seconds": lambda r: f"{r.seconds_mean:.1f}",
     }
