@@ -130,7 +130,9 @@ async def _one_run(
     model = build_model(settings.spec, api_key=settings.api_key)
 
     async def review_one(case: Case) -> Report:
-        result: Report = await reviewer(model).review(Cartographer(case.repo).map(), case.repo)
+        result: Report = await reviewer(model, experiments=case.experiment_conditions()).review(
+            Cartographer(case.repo).map(), case.repo
+        )
         return result
 
     return await run_arm(arm, model, cases, seed=seed, reviewer=review_one, prove=prove)
