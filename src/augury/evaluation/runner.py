@@ -12,9 +12,10 @@ from collections.abc import Awaitable, Callable
 from augury.agents.baseline import BaselineReviewer
 from augury.core.adapters.base import ChatModel
 from augury.core.cartography import Cartographer
-from augury.core.findings import Report
+from augury.core.findings import Finding, Measurement, Report
 from augury.core.scoring import Score, score
 from augury.evaluation.cases import Case
+from augury.evaluation.prover import Prover
 
 Reviewer = Callable[[Case], Awaitable[Report]]
 
@@ -26,12 +27,17 @@ async def run_arm(
     *,
     seed: int = 0,
     reviewer: Reviewer | None = None,
+    prove: bool = False,
 ) -> list[Score]:
     """Review every case with one arm and score each result.
 
     A case that raises is recorded as a failure rather than ending the sweep or
     vanishing from the denominator: one provider hiccup must not cost the whole
     run, and a review that crashed did not find the defect.
+
+    With `prove`, every falsifiable finding is put to the case's own experiment
+    and the measurement attached. Off by default because experiments cost real
+    time, and a run that did not ask for them must not silently pay for them.
     """
     review = reviewer or _baseline_reviewer(model)
     results: list[Score] = []
@@ -44,6 +50,9 @@ async def run_arm(
             report = Report(model_id=model.model_id, seconds=0.0)
             failed = True
             _note(case, exc)
+
+        if prove and not failed:
+            report = await _measure(case, report)
 
         results.append(
             score(
@@ -70,3 +79,27 @@ def _baseline_reviewer(model: ChatModel) -> Reviewer:
 def _note(case: Case, exc: Exception) -> None:
     """A failure is reported to the operator and counted against the arm."""
     print(f"  {case.id}: review failed: {type(exc).__name__}: {exc}")
+
+
+async def _measure(case: Case, report: Report) -> Report:
+    """Put every falsifiable finding to the case's own experiment.
+
+    One experiment per metric, run once and shared: twenty findings about the
+    same mechanism get one measurement between them, which is also how the
+    score counts them.
+    """
+    prover = Prover(case)
+    measured: dict[str, Measurement] = {}
+    findings: list[Finding] = []
+
+    for finding in report.findings:
+        if finding.prediction is None:
+            findings.append(finding)
+            continue
+
+        metric = finding.prediction.metric
+        if metric not in measured:
+            measured[metric] = await prover.prove(finding.prediction)
+        findings.append(finding.model_copy(update={"measurement": measured[metric]}))
+
+    return report.model_copy(update={"findings": tuple(findings)})
