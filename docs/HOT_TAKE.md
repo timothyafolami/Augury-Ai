@@ -14,17 +14,24 @@ The thesis was that an agentic pipeline — routing files to specialists briefed
 from a real engineering knowledge base, under a budget — would review code
 better than one well-written prompt.
 
-Three cases, ten seeded defects, five seeds per arm, every prediction settled
-by an experiment that provably distinguishes working code from broken code:
+Three cases, ten seeded defects, five seeds per arm. Every prediction that
+could be settled was settled by an experiment shown to distinguish working code
+from broken code -- one of the three cases ships no experiments, and its
+predictions are recorded as untested rather than counted:
 
-| metric | baseline | augury |
-|---|---|---|
-| seeded recall | 0.760 | 0.760 |
-| hit rate | 0.893 | 0.757 |
-| cost | $0.036 | $0.216 |
+| metric | baseline | augury | |
+|---|---|---|---|
+| seeded recall | 0.760 | 0.760 | permutation p = 1.00 |
+| hit rate | 0.893 (25/28) | 0.757 (28/37) | Fisher p = 0.21 |
+| cost | $0.036 | $0.216 | 6.0x |
 
-No difference on either metric, at six times the cost. The thesis is not
-supported.
+No detectable difference on either metric, at six times the cost. The thesis is
+not supported.
+
+Not disproved either: twenty-eight and thirty-seven tested predictions cannot
+resolve a gap that size, and the point estimate that does exist favours the
+baseline. The study is underpowered and the honest report of an underpowered
+study is that it did not answer the question.
 
 I could have shipped a version of this that appeared to work. Three separate
 times I had a table that showed one, and each time the apparatus was wrong
