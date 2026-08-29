@@ -1,0 +1,51 @@
+{
+  "findings": [
+    {
+      "path": "app/index/cache.py",
+      "line": 20,
+      "layer": "data",
+      "symbol": "put",
+      "mechanism": "Cache entries are never evicted, so memory grows linearly with distinct queries",
+      "severity": "medium",
+      "remediation": "Add a size limit or eviction policy (e.g., LRU) to the cache and purge old entries",
+      "arithmetic": "2000 queries × 5 results × ≈200 bytes ≈ 2 000 000 bytes",
+      "prediction": {
+        "metric": "memory_bytes",
+        "comparator": "at_least",
+        "value": 2000000.0,
+        "upper": null,
+        "unit": "bytes",
+        "condition": "2000 distinct queries memoised, 5 results each"
+      }
+    },
+    {
+      "path": "app/index/searcher.py",
+      "line": 29,
+      "layer": "data",
+      "symbol": "search",
+      "mechanism": "N+1 query pattern – a separate DB query for each matching document",
+      "severity": "high",
+      "remediation": "Fetch the body together with id and title in a single query (e.g., JOIN) or batch the by_id calls",
+      "arithmetic": "1 base query + 40 matching documents = 41 queries",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 41.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "one cold search over 40 matching documents"
+      }
+    },
+    {
+      "path": "app/api/handlers.py",
+      "line": 20,
+      "layer": "security",
+      "symbol": "verify_token",
+      "mechanism": "Key‑stretching hash does ~60 000 SHA‑256 rounds per request, consuming CPU and saturating the single worker",
+      "severity": "high",
+      "remediation": "Reduce _ROUNDS or move verification to a background task / cache verified tokens",
+      "arithmetic": "≈60 000 hashes × ~0.01 ms ≈ 600 ms of CPU per request",
+      "prediction": null
+    }
+  ]
+}
