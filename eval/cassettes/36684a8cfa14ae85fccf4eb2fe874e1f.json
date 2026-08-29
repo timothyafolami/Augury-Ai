@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/handlers/webhook.py",
+      "line": 9,
+      "layer": "data",
+      "symbol": "record_delivery",
+      "mechanism": "Read‑modify‑write without SELECT FOR UPDATE (or atomic UPDATE) causes lost‑update anomalies under READ COMMITTED isolation when multiple writers overlap.",
+      "severity": "high",
+      "remediation": "Wrap the read‑modify‑write in a SELECT … FOR UPDATE or replace it with an atomic UPDATE … SET delivery_count = delivery_count + 1, or run the transaction at SERIALIZABLE isolation.",
+      "arithmetic": "Assume initial delivery_count=0 and N=5 concurrent calls. Each call reads 0, adds 1, and commits. Only one commit wins, so final delivery_count ≤1 (lost updates). Correct behavior would yield delivery_count=5. Thus final_balance is at most 1 under the given concurrency.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_most",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "5 concurrent writers"
+      }
+    }
+  ]
+}
