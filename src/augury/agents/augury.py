@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import time
 from pathlib import Path
+from typing import cast
 
 from augury.agents.triage import Triage
 from augury.core.adapters.base import ChatModel
@@ -136,17 +137,16 @@ class AuguryReviewer:
             context=context,
             metrics=vocabulary(),
         )
-        before = self._model.usage
-        result = await self._model.structured(prompt=prompt, schema=DraftReport)
+        completion = await self._model.call(prompt=prompt, schema=DraftReport)
         if self._trace is not None:
             self._trace.record_call(
                 agent=f"analyst:{layer.name}",
                 prompt=prompt,
-                response=result.model_dump(),
-                usage=self._model.usage - before,
-                retries=getattr(self._model, "retries", 0),
+                response=completion.result.model_dump(),
+                usage=completion.usage,
+                retries=completion.retries,
             )
-        return result
+        return cast("DraftReport", completion.result)
 
     @staticmethod
     def _read(path: Path) -> str:
