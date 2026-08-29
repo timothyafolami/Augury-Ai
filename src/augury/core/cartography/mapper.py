@@ -43,20 +43,54 @@ CONTEXT_FILES = (
 # Enough to carry a CMD line and a service block, not a whole manifest.
 MAX_CONTEXT_CHARS = 4_000
 
+# Directories that hold somebody else's code. Run against a production
+# repository the mapper reported 1,137 modules, 843 of which were a bundled
+# `.conda` environment -- so three quarters of the map, and three quarters of
+# any budget spent from it, was a vendored standard library. `.venv` and
+# `site-packages` were listed here and `.conda` was not.
+#
+# Matched at any depth, because a monorepo nests one of these per package.
 EXCLUDED_DIRS = frozenset(
     {
+        # Python environments and build output
         ".venv",
         "venv",
         "env",
+        ".conda",
+        "conda",
+        ".tox",
+        ".nox",
+        "site-packages",
+        "dist-packages",
         "__pycache__",
+        "eggs",
+        ".eggs",
+        "*.egg-info",
+        # JavaScript and TypeScript
+        "node_modules",
+        "bower_components",
+        ".next",
+        ".nuxt",
+        ".svelte-kit",
+        # Other ecosystems
+        "vendor",
+        "third_party",
+        "Pods",
+        ".gradle",
+        "target",
+        # Tooling and build artefacts
         ".git",
+        ".hg",
+        ".svn",
         ".mypy_cache",
         ".pytest_cache",
         ".ruff_cache",
-        "node_modules",
-        "site-packages",
+        ".idea",
+        ".vscode",
         "build",
         "dist",
+        "coverage",
+        "htmlcov",
     }
 )
 
