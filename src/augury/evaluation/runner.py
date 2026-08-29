@@ -15,7 +15,7 @@ from augury.core.cartography import Cartographer
 from augury.core.findings import Finding, Measurement, Report
 from augury.core.scoring import Score, score
 from augury.evaluation.cases import Case
-from augury.evaluation.prover import Prover
+from augury.evaluation.prover import Prover, applies_to
 
 Reviewer = Callable[[Case], Awaitable[Report]]
 
@@ -39,7 +39,12 @@ async def run_arm(
     and the measurement attached. Off by default because experiments cost real
     time, and a run that did not ask for them must not silently pay for them.
     """
-    review = reviewer or _baseline_reviewer(model)
+    if reviewer is None:
+        # An omitted keyword once published baseline results under the augury
+        # label, and every downstream check verifies arms by that same string,
+        # so nothing could detect it.
+        raise ValueError("run_arm needs an explicit reviewer: the arm label is only a label")
+    review = reviewer
     results: list[Score] = []
 
     for case in cases:
@@ -67,6 +72,11 @@ async def run_arm(
         )
 
     return results
+
+
+def baseline_reviewer(model: ChatModel) -> Reviewer:
+    """The default arm, named so a caller must ask for it on purpose."""
+    return _baseline_reviewer(model)
 
 
 def _baseline_reviewer(model: ChatModel) -> Reviewer:
@@ -98,6 +108,13 @@ async def _measure(case: Case, report: Report) -> Report:
             continue
 
         metric = finding.prediction.metric
+        locations = prover.locations_for(metric)
+        if not applies_to(finding.prediction, path=finding.path, locations=locations):
+            # The experiment measures a defect somewhere else. Settling this
+            # claim with it would grade a file the measurement is not about.
+            findings.append(finding)
+            continue
+
         if metric not in measured:
             measured[metric] = await prover.prove(finding.prediction)
         findings.append(finding.model_copy(update={"measurement": measured[metric]}))
