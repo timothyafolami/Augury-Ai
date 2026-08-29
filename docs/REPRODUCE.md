@@ -70,7 +70,7 @@ against the remediated code shipped in each case's `fixed/` directory:
 | B01 | `queries_per_request` | 2 | **51** | one query per order plus the listing |
 | B01 | `final_balance` | 0.00 | **90.0** | nine of ten concurrent debits silently lost |
 | B01 | `http_status` | 500 | **200** | a broken database returning a successful empty list |
-| B01 | `retry_amplification` | 0.75 | **1.9** | one client request reaching the gateway twice over |
+| B01 | `retry_amplification` | 1.15 | **3.0** | twenty clients reaching a failing gateway sixty times |
 | B01 | `worker_saturation` | 0.0 | **1.0** | every worker held by one silent provider |
 | C01 | `duplicate_side_effects` | 1 | **3** | one parcel counted three times |
 | C01 | `queue_depth` | 32 | **5000** | a queue that holds everything offered |
@@ -144,9 +144,17 @@ path by which an overlapping result can be printed as a win.
 
 ## What you should and should not expect to match
 
-The **experiments are deterministic**. 51, 90.0 and 200 will reproduce exactly.
-If they do not, that is a real difference in your environment and worth
-reporting.
+The **experiments are deterministic**, all nine of them, and a test asserts it
+by running each one twice and comparing
+(`tests/test_experiments_discriminate.py`). Every number in the table above
+will reproduce exactly. If one does not, that is a real difference in your
+environment and worth reporting.
+
+That guarantee was false until recently: `retry_amplification` returned
+anywhere between 1.9 and 2.5 for identical code, because its HTTP server's
+listen backlog dropped connections under the burst it creates. The number was a
+property of the socket queue. It is 3.0 now, which is also the arithmetic:
+twenty clients, three attempts each, sixty arrivals.
 
 The **reviews are not**. Both arms were observed changing their answer between
 runs at temperature 0: over eight seeds the baseline returned three different
