@@ -43,9 +43,7 @@ def fisher_exact(*, hits_a: int, tested_a: int, hits_b: int, tested_b: int) -> f
     return min(
         1.0,
         fsum(
-            probability(x)
-            for x in range(low, high + 1)
-            if probability(x) <= observed * (1 + 1e-9)
+            probability(x) for x in range(low, high + 1) if probability(x) <= observed * (1 + 1e-9)
         ),
     )
 
