@@ -1,11 +1,24 @@
 {
   "id": "A04",
   "name": "pool-smaller-than-workers",
-  "lab_topic": "02-network/02-connection-pooling-and-pool-exhaustion",
-  "defect": "SQLAlchemy pool_size of 5 against 8 uvicorn workers. Requests do not fail, they queue, in a place application metrics do not look.",
-  "locations": ["app/db.py"],
-  "symbols": ["engine", "create_async_engine", "pool_size"],
-  "verification": "load",
-  "expected_metric": "http_req_duration_p99",
-  "notes": "The service is otherwise correct. Nothing in the file is wrong on its own; the defect is the relationship between two numbers in two different files."
+  "repo_description": "A small orders lookup API over Postgres.",
+  "defects": [
+    {
+      "id": "A04-1",
+      "lab_topic": "02-network/02-connection-pooling-and-pool-exhaustion",
+      "defect": "SQLAlchemy pool_size of 5 against 8 uvicorn workers. Requests do not fail, they queue, in a place application metrics do not look.",
+      "locations": [
+        "app/db.py"
+      ],
+      "symbols": [
+        "engine",
+        "create_async_engine",
+        "pool_size"
+      ],
+      "verification": "load",
+      "expected_metric": "http_req_duration_p99",
+      "notes": "The service is otherwise correct. Nothing in the file is wrong on its own; the defect is the relationship between two numbers in two different files."
+    }
+  ],
+  "notes": "Deliberately easy. Three files and one defect is a repository where reading everything is free, so it cannot distinguish an arm that chooses what to read from one that reads it all."
 }
