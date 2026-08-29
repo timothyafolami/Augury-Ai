@@ -24,6 +24,7 @@ from augury.core.cartography.languages import EXTENSIONS
 from augury.core.findings import Report
 from augury.core.reference import Registry, requirements_of
 from augury.core.reference.staleness import dependency_findings
+from augury.core.report import write_report
 from augury.core.scheduling import Budget
 from augury.core.schema import read_migrations, schema_findings
 from augury.core.scoring import Score
@@ -169,6 +170,64 @@ def _print_schema(root: Path, limits: tuple[str, ...]) -> None:
         console.print(f"  {finding.rule}  {finding.path}:{finding.line}", markup=False)
         console.print(f"     {finding.detail}", markup=False)
         console.print(f"     fix: {finding.remediation}", markup=False)
+
+
+@app.command()
+def report(
+    path: str = typer.Option(..., help="Repository to review"),
+    scope: str = typer.Option("", help="Comma-separated directories to limit the review to"),
+    budget: float = typer.Option(0.25, min=0.0, help="Ceiling on what this review may spend"),
+    out: str = typer.Option("augury-report.md", help="Where to write the document"),
+) -> None:
+    """Review a repository and write a document a team can act on.
+
+    A findings table is the wrong artefact above a few dozen modules: nobody
+    triages a hundred rows. This writes what the service is, what its
+    deployment declares, what its schema and dependencies say, the findings in
+    rank order, and how much of the repository was never looked at.
+    """
+    root = Path(path).expanduser().resolve()
+    if not root.is_dir():
+        _fail(f"--path must be a directory: {root}")
+
+    found = Surveyor(root).survey()
+    limits = tuple(part.strip() for part in scope.split(",") if part.strip())
+    entrypoints = tuple({e for service in found.services for e in service.entrypoints})
+    try:
+        repo = Cartographer(root, scope=limits, entrypoints=entrypoints).map()
+    except ValueError as exc:
+        _fail(str(exc))
+
+    bases = [root / part for part in limits] or [root]
+    schema = tuple(f for base in bases for f in schema_findings(read_migrations(base)))
+    registry = Registry()
+    dependencies = tuple(
+        f for base in bases for f in dependency_findings(requirements_of(base), registry)
+    )
+
+    console.print(f"reviewing {len(repo.modules)} modules, budget ${budget:.2f}...")
+    settings = _settings()
+    model = model_from(settings)
+
+    async def run() -> Report:
+        built = AuguryReviewer(model, budget=Budget(usd=budget))
+        result: Report = await built.review(repo, root)
+        return result
+
+    reviewed = asyncio.run(run())
+
+    document = write_report(
+        name=root.name,
+        survey=found,
+        report=reviewed,
+        schema=schema,
+        dependencies=dependencies,
+        modules=len(repo.modules),
+        unreachable=len(repo.unreachable),
+    )
+    destination = Path(out).expanduser()
+    destination.write_text(document, encoding="utf-8")
+    console.print(f"wrote {destination} ({len(document.splitlines())} lines)")
 
 
 @app.command()
