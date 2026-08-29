@@ -40,12 +40,22 @@ PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "augury"
 SERVER_VERSION = "0.1.0"
 
+PARSE_ERROR = -32700
+INVALID_REQUEST = -32600
 METHOD_NOT_FOUND = -32601
+INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 
 # A review over MCP is interactive: someone is waiting for it. The default is
-# small on purpose, and the client can raise it per call.
+# small on purpose, and the client can raise it per call -- up to the ceiling
+# the launcher set, never past it.
 DEFAULT_BUDGET_USD = 0.05
+
+# The most a single review may cost, whatever the client asks for. The client
+# is a language model reading a tool description written to persuade it that
+# reviewing is worthwhile, so the same argument that fixes the root at launch
+# fixes the money at launch.
+DEFAULT_MAX_BUDGET_USD = 1.00
 
 
 class _Reviewer(Protocol):
@@ -151,15 +161,29 @@ class Server:
         api_key: str | None = None,
         allowed_root: Path | None = None,
         reviewer_factory: Callable[..., _Reviewer] = _default_reviewer,
+        max_budget_usd: float = DEFAULT_MAX_BUDGET_USD,
+        replaying: bool = False,
     ) -> None:
         self._api_key = api_key
         self._root = allowed_root.resolve() if allowed_root else None
         self._reviewer_factory = reviewer_factory
+        self._max_budget_usd = max_budget_usd
+        # Replay answers from recordings and needs no key, so "can this reach a
+        # provider" and "is there a key" are opposite in that mode.
+        self._replaying = replaying
 
     # -- protocol ---------------------------------------------------------
 
-    def handle(self, request: dict[str, Any]) -> dict[str, Any] | None:
-        """One request in, one response out. None for a notification."""
+    def handle(self, request: object) -> dict[str, Any] | None:
+        """One request in, one response out. None for a notification.
+
+        `request` is typed `object` because it arrives from a pipe. A batch is
+        a top-level array and several MCP clients send one; reading `.get` off
+        it raised out of the stdio loop and killed the session.
+        """
+        if not isinstance(request, dict):
+            return _error(None, INVALID_REQUEST, "A JSON-RPC request must be an object.")
+
         request_id = request.get("id")
         method = request.get("method", "")
 
@@ -167,13 +191,20 @@ class Server:
         if request_id is None:
             return None
 
+        # Resolved before anything runs, so "unknown method" cannot be the
+        # answer to a KeyError raised deep inside a review that was paid for.
+        if method not in _METHODS:
+            return _error(request_id, METHOD_NOT_FOUND, f"Unknown method: {method}")
+
+        params = request.get("params")
+        if params is not None and not isinstance(params, dict):
+            return _ok(request_id, _tool_error("`params` must be an object."))
+
         try:
-            result = self._dispatch(method, request.get("params") or {})
+            result = self._dispatch(method, params or {})
         except ToolFailure as failure:
             return _ok(request_id, _tool_error(str(failure)))
-        except KeyError:
-            return _error(request_id, METHOD_NOT_FOUND, f"Unknown method: {method}")
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:
             return _error(request_id, INTERNAL_ERROR, str(exc))
         return _ok(request_id, result)
 
@@ -186,9 +217,10 @@ class Server:
             }
         if method == "tools/list":
             return {"tools": list(TOOLS)}
-        if method == "tools/call":
-            return self._call(params.get("name", ""), params.get("arguments") or {})
-        raise KeyError(method)
+        arguments = params.get("arguments")
+        if arguments is not None and not isinstance(arguments, dict):
+            raise ToolFailure("`arguments` must be an object.")
+        return self._call(str(params.get("name", "")), arguments or {})
 
     def _call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if name == "augury_map":
@@ -196,9 +228,27 @@ class Server:
         if name == "augury_explain":
             return _tool_ok(self._explain(str(arguments.get("topic", ""))), raw=True)
         if name == "augury_review":
-            budget = float(arguments.get("budget_usd") or DEFAULT_BUDGET_USD)
-            return _tool_ok(self._review(self._resolve(arguments.get("path", "")), budget))
+            return _tool_ok(
+                self._review(
+                    self._resolve(arguments.get("path", "")),
+                    self._budget(arguments.get("budget_usd")),
+                )
+            )
         raise ToolFailure(f"Unknown tool: {name}")
+
+    def _budget(self, requested: object) -> float:
+        """The spend for one review, clamped to the launcher's ceiling.
+
+        `or DEFAULT` read an explicit 0 as absent and quietly raised it to the
+        default, which also slipped past Budget's own `gt=0` validator.
+        """
+        if requested is None:
+            return min(DEFAULT_BUDGET_USD, self._max_budget_usd)
+        if isinstance(requested, bool) or not isinstance(requested, int | float):
+            raise ToolFailure(f"budget_usd must be a number, got {requested!r}.")
+        if requested <= 0:
+            raise ToolFailure("budget_usd must be greater than zero.")
+        return min(float(requested), self._max_budget_usd)
 
     # -- boundary ---------------------------------------------------------
 
@@ -254,11 +304,12 @@ class Server:
         raise ToolFailure(f"Unknown topic '{topic}'. Known concerns: {known}, or 'metrics'.")
 
     def _review(self, path: Path, budget_usd: float) -> dict[str, Any]:
-        if not self._api_key:
+        if not (self._api_key or self._replaying):
             raise ToolFailure(
-                "augury_review needs a provider API key. Set AUGURY_API_KEY (or "
-                "GROQ_API_KEY) in the environment this server was launched from. "
-                "augury_map and augury_explain work without one."
+                "augury_review needs a provider API key. Set GROQ_API_KEY (or the "
+                "variable matching AUGURY_PROVIDER) in the environment this server "
+                "was launched from, or set AUGURY_REPLAY_ONLY=1 to answer from "
+                "recordings. augury_map and augury_explain work without either."
             )
         repo = Cartographer(path).map()
         reviewer = self._reviewer_factory(budget=Budget(usd=budget_usd))
@@ -301,6 +352,10 @@ def _ok(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
+# Declared so an unknown method is refused before any tool runs.
+_METHODS = frozenset({"initialize", "tools/list", "tools/call"})
+
+
 def _error(request_id: Any, code: int, message: str) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
 
@@ -325,9 +380,18 @@ def serve(server: Server) -> None:  # pragma: no cover - exercised by the CLI
             continue
         try:
             request = json.loads(line)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            _write(_error(None, PARSE_ERROR, f"Invalid JSON: {exc}"))
             continue
-        response = server.handle(request)
+        try:
+            response = server.handle(request)
+        except Exception as exc:
+            _write(_error(None, INTERNAL_ERROR, str(exc)))
+            continue
         if response is not None:
-            sys.stdout.write(json.dumps(response) + "\n")
-            sys.stdout.flush()
+            _write(response)
+
+
+def _write(payload: dict[str, Any]) -> None:  # pragma: no cover - exercised by the CLI
+    sys.stdout.write(json.dumps(payload) + "\n")
+    sys.stdout.flush()
