@@ -21,7 +21,9 @@ def finding(path: str, symbol: str, mechanism: str = "") -> Finding:
         line=10,
         layer="data",
         symbol=symbol,
-        mechanism=mechanism or "something is wrong",
+        # A detection requires a claim, not a pointer, so the default here is
+        # a sentence rather than a label.
+        mechanism=mechanism or "this reads the value and then writes it back unlocked",
         severity=Severity.HIGH,
         remediation="fix it",
     )
