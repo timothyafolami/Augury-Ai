@@ -79,11 +79,7 @@ def test_the_merged_finding_keeps_the_highest_severity() -> None:
 def test_the_merged_finding_credits_every_specialist_that_raised_it() -> None:
     """Agreement across concerns is evidence. Discarding it loses information
     the reader would have used."""
-    merged = reconcile(
-        DraftReport(
-            findings=[finding(layer="failure"), finding(layer="network")]
-        )
-    )
+    merged = reconcile(DraftReport(findings=[finding(layer="failure"), finding(layer="network")]))
 
     assert set(merged.findings[0].layer.split("+")) == {"failure", "network"}
 
@@ -92,9 +88,7 @@ def test_a_falsifiable_finding_survives_a_merge_with_an_unfalsifiable_one() -> N
     """Keeping the version without a prediction would throw away the only
     testable claim, which is the whole point of the report."""
     merged = reconcile(
-        DraftReport(
-            findings=[finding(pred=None), finding(layer="network", pred=prediction())]
-        )
+        DraftReport(findings=[finding(pred=None), finding(layer="network", pred=prediction())])
     )
 
     assert merged.findings[0].prediction is not None
@@ -118,9 +112,7 @@ def test_the_strictest_prediction_wins_when_both_are_falsifiable() -> None:
 
 def test_findings_on_different_constructs_are_left_alone() -> None:
     merged = reconcile(
-        DraftReport(
-            findings=[finding(symbol="charge"), finding(symbol="quote", path="app/s.py")]
-        )
+        DraftReport(findings=[finding(symbol="charge"), finding(symbol="quote", path="app/s.py")])
     )
 
     assert len(merged.findings) == 2
