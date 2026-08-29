@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 9,
+      "layer": "concurrency",
+      "symbol": "engine",
+      "mechanism": "The asyncpg connection pool is sized to 5 while the FastAPI server runs 8 workers, so under load more workers will contend for DB connections, leading to request queuing or failures.",
+      "severity": "high",
+      "remediation": "Increase pool_size to at least the number of workers (e.g., set pool_size=8) or enable max_overflow to allow extra connections.",
+      "arithmetic": "workers=8, pool_size=5 → excess_workers=8-5=3; at 8 concurrent requests active_connections=5 and 3 workers must wait (saturation=3/8≈0.375).",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 5.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "8 concurrent requests"
+      }
+    },
+    {
+      "path": "app/main.py",
+      "line": 24,
+      "layer": "failure",
+      "symbol": "health",
+      "mechanism": "The health endpoint depends on a database session; if the database is unreachable the endpoint raises an exception and returns a 5xx status, causing false‑negative health checks.",
+      "severity": "medium",
+      "remediation": "Remove the session dependency from the health endpoint and return a static OK response.",
+      "arithmetic": "When DB is down, health() raises an exception → HTTP 500 returned; thus status code ≥500 under DB failure.",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "at_least",
+        "value": 500.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "DB unreachable"
+      }
+    }
+  ]
+}
