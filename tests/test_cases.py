@@ -91,3 +91,62 @@ def test_shipped_case_locations_point_at_files_that_exist() -> None:
 def test_a_shipped_case_repository_is_a_real_path(tmp_path: Path) -> None:
     for case in load_cases():
         assert case.repo.name == "repo"
+
+
+# -- matching must not be a lottery ----------------------------------------
+# An adversarial review scored recall 1.000 on B01 from five findings that
+# described nothing seeded: "except" matched "an exception type is not
+# declared", "balance" matched "should load-balance across replicas". Three of
+# the five detections in the committed trajectory were earned that way.
+
+
+def test_a_symbol_must_match_a_whole_word_not_a_fragment() -> None:
+    """`except` inside `exception` is not a mention of the handler."""
+    handler = defect(symbols=["except"], locations=["a.py"])
+
+    assert not handler.found_in(
+        report("a.py", "logger", "no structured logging; an exception here would be invisible")
+    )
+
+
+def test_the_whole_word_still_matches() -> None:
+    handler = defect(symbols=["except"], locations=["a.py"])
+
+    assert handler.found_in(report("a.py", "load", "the bare except swallows the failure"))
+
+
+def test_a_hyphenated_neighbour_is_not_a_match() -> None:
+    """`balance` inside `load-balance` is a different subject entirely."""
+    wallet = defect(symbols=["balance"], locations=["a.py"])
+
+    assert not wallet.found_in(
+        report("a.py", "credit", "credit() should load-balance across read replicas")
+    )
+
+
+def test_a_symbol_with_an_underscore_matches_as_written() -> None:
+    pool = defect(symbols=["pool_size"], locations=["a.py"])
+
+    assert pool.found_in(report("a.py", "engine", "pool_size is 5 against 8 workers"))
+
+
+def test_a_function_call_spelling_matches_the_bare_name() -> None:
+    """Reviewers write `debit()` as often as `debit`, and penalising that
+    measures formatting rather than detection."""
+    lost_update = defect(symbols=["debit"], locations=["a.py"])
+
+    assert lost_update.found_in(report("a.py", "wallet", "debit() reads then writes"))
+
+
+def test_shipped_case_symbols_are_specific_enough_to_identify_a_defect() -> None:
+    """A symbol that is a common English fragment turns recall into a lottery
+    over whether a reviewer happened to use the word."""
+    too_generic = {"except", "quote", "load", "charge", "balance", "list", "get", "set"}
+
+    for case in load_cases():
+        for seeded in case.defects:
+            weak = {s for s in seeded.symbols if s.lower() in too_generic}
+            assert not weak, (
+                f"{case.id}/{seeded.id} identifies itself by {sorted(weak)}, which any "
+                "finding in the right file could contain by accident"
+            )
