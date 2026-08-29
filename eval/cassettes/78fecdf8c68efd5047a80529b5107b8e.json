@@ -4,5 +4,5 @@
     "observability",
     "craft"
   ],
-  "reasoning": "data: contains SQLAlchemy queries for loading and listing orders; observability: includes logging and exception handling; craft: async function definitions, type hints, and overall code quality."
+  "reasoning": "data: uses SQLAlchemy queries to load and list orders. observability: logs exceptions when listing fails. craft: defines async repository functions with type hints and error handling."
 }
