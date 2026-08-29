@@ -506,10 +506,14 @@ async def _settle(report_in: Report, *, root: Path, model: ChatModel, how_many: 
             detail=proof.detail,
         )
         settled.append(finding.model_copy(update={"measurement": measured}))
-        shown = "no number" if proof.measured is None else f"{proof.measured:g}"
-        console.print(
-            f"  {finding.symbol}: measured {shown} -> {proof.outcome.value}", markup=False
-        )
+        if proof.measured is None:
+            # Why, not merely that. "Printed no number" is true and useless.
+            console.print(f"  {finding.symbol}: broken — {proof.detail}", markup=False)
+        else:
+            console.print(
+                f"  {finding.symbol}: measured {proof.measured:g} -> {proof.outcome.value}",
+                markup=False,
+            )
 
     return report_in.model_copy(update={"findings": tuple(settled)})
 
