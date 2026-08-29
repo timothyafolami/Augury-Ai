@@ -10,6 +10,8 @@ penalising that measures formatting rather than detection.
 
 from pathlib import Path
 
+import pytest
+
 from augury.core.findings import Finding, Report, Severity
 from augury.evaluation.cases import Defect, load_cases
 
@@ -150,3 +152,76 @@ def test_shipped_case_symbols_are_specific_enough_to_identify_a_defect() -> None
                 f"{case.id}/{seeded.id} identifies itself by {sorted(weak)}, which any "
                 "finding in the right file could contain by accident"
             )
+
+
+# -- inflection, but not derivation ----------------------------------------
+# A whole-word matcher that rejects `leaks` scored a review saying "leaks the
+# connection" as having found nothing, while a review whose mechanism was a
+# single full stop scored 1.000 by putting the function name in the symbol
+# field. Recall inverted: describing every defect correctly beat nothing, and
+# saying nothing in the right files beat both.
+
+
+@pytest.mark.parametrize(
+    ("symbol", "prose"),
+    [
+        ("leak", "the session leaks a connection on the error path"),
+        ("leak", "this is leaking one connection per failure"),
+        ("leak", "a connection was leaked"),
+        ("shed", "the queue never sheds"),
+        ("retry", "it retries three times"),
+        ("swallow", "the handler swallows the failure"),
+    ],
+)
+def test_an_inflected_form_of_a_symbol_counts(symbol: str, prose: str) -> None:
+    """Reviewers conjugate. Penalising that measures grammar, not detection."""
+    assert defect(symbols=[symbol], locations=["a.py"]).found_in(report("a.py", "f", prose))
+
+
+@pytest.mark.parametrize(
+    ("symbol", "prose"),
+    [
+        ("except", "an exception type is not declared"),
+        ("bound", "this is unbounded and grows forever"),
+        ("count", "the accountant reconciles it"),
+    ],
+)
+def test_a_different_word_sharing_a_prefix_does_not_count(symbol: str, prose: str) -> None:
+    """`exception` is not a mention of `except`. That is the failure the
+    whole-word rule was introduced for, and it must survive the fix."""
+    assert not defect(symbols=[symbol], locations=["a.py"]).found_in(report("a.py", "f", prose))
+
+
+def test_every_shipped_symbol_can_actually_match_something() -> None:
+    """A symbol matching neither the code it points at nor its own defect
+    description is inert: it cannot raise recall and it makes the answer key
+    look more forgiving than it is."""
+    from augury.evaluation.cases import _mentions
+
+    for case in load_cases():
+        for seeded in case.defects:
+            source = " ".join(
+                (case.repo / location).read_text(encoding="utf-8", errors="replace")
+                for location in seeded.locations
+                if (case.repo / location).is_file()
+            )
+            for symbol in seeded.symbols:
+                assert _mentions(symbol, source) or _mentions(symbol, seeded.defect), (
+                    f"{case.id}/{seeded.id}: {symbol!r} appears in neither the source "
+                    "nor the description, so nothing can ever match it"
+                )
+
+
+def test_a_finding_that_says_nothing_has_not_found_anything() -> None:
+    """Naming the right function with an empty mechanism scored a perfect
+    recall. Detection requires a claim about what is wrong, not a pointer."""
+    pointer = report("a.py", "debit", ".")
+
+    assert not defect(symbols=["debit"], locations=["a.py"]).found_in(pointer)
+
+
+def test_a_brief_but_real_mechanism_counts() -> None:
+    """The bar is that something was said, not that it was said at length."""
+    terse = report("a.py", "debit", "reads the balance then writes it back, unlocked")
+
+    assert defect(symbols=["debit"], locations=["a.py"]).found_in(terse)
