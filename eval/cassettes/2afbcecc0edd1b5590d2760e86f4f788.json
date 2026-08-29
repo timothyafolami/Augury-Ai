@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "01-machine",
+    "06-observability"
+  ],
+  "reasoning": "Concurrency: the file defines async functions, runs an infinite async loop, and interacts with an async inbox queue; Observability: it logs delivery recording results via the standard logging module."
+}
