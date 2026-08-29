@@ -97,7 +97,7 @@ them is worth acting on at 3am.
 
 **Ship the experiment with the case.** The thing that made any of this
 measurable was not a smarter reviewer. It was ten defects that read correctly
-line by line, each with runnable code that settles it. Three of those took an
+line by line, nine of them with runnable code that settles it. Three of those took an
 afternoon each. Any team could add three to their own repository this week and
 learn, that week, whether their AI reviewer is worth its subscription.
 
