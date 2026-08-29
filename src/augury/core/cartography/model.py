@@ -57,6 +57,12 @@ class RepoMap(BaseModel):
         default_factory=dict,
         description="Files deliberately not read, mapped to why. Never silent.",
     )
+    context: dict[str, str] = Field(
+        default_factory=dict,
+        description="Deployment configuration that sets the conditions a module "
+        "runs under. Sent alongside every module, because a defect is often the "
+        "relationship between a number here and a number in the source.",
+    )
 
     def module(self, path: str) -> ModuleNode:
         for module in self.modules:
