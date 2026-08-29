@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "data"
+  ],
+  "reasoning": "Defines a SQLAlchemy ORM model with table columns and types, which is directly relevant to data handling."
+}
