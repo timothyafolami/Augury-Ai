@@ -22,6 +22,7 @@ from rich.table import Table
 from augury.agents.augury import AuguryReviewer
 from augury.agents.baseline import BaselineReviewer
 from augury.cli import banner
+from augury.cli.rendering import languages_read, service_table
 from augury.core.adapters.base import ChatModel
 from augury.core.adapters.provider import model_from
 from augury.core.cartography import Cartographer
@@ -106,14 +107,7 @@ def survey(
         _fail(str(exc))
 
     if found.services:
-        services = Table("service", "built from", "ports", "command")
-        for service in found.services:
-            services.add_row(
-                service.name,
-                service.source_root or ".",
-                ", ".join(service.ports) or "-",
-                (service.command[:70] or "-"),
-            )
+        services = service_table(found.services)
         console.print(services)
 
     if found.backing:
@@ -129,8 +123,8 @@ def survey(
 
     reached = [m for m in repo.modules if m.depth is not None]
     console.print(
-        f"\n{len(repo.modules)} modules, {sum(m.loc for m in repo.modules):,} lines, "
-        f"{dict(sorted(languages.items()))}"
+        f"\n{len(repo.modules)} modules, {sum(m.loc for m in repo.modules):,} lines"
+        f"{' — ' + languages_read(languages) if languages else ''}"
     )
     console.print(
         f"{len(reached)} reachable from an entrypoint, "
