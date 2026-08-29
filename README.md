@@ -131,7 +131,7 @@ reproducible exactly, with no API key: `make eval-replay` prints it verbatim.
 | seeded recall (matcher) | 0.800 | 0.800 |
 | seeded recall (hand-audited) | 0.700 | 0.800 |
 | falsifiable precision | **0.909** | 0.667 |
-| hit rate | 0.833 (5/6) | 1.000 (6/6) |
+| hit rate | 0.833 (5/6) | 1.000 (5/5) |
 | experiments run | 6 | 5 |
 | prediction coverage | 0.600 | 0.429 |
 | cost | $0.00 replayed | $0.00 replayed |
@@ -146,9 +146,16 @@ every row.**
 
 Recall is identical. Falsifiable precision favours the baseline: the pipeline
 states more claims and a smaller share survive validation. The hit rate favours
-the pipeline by **one prediction** — six of six against five of six — which is
+the pipeline by **one experiment** — five of five against five of six — which is
 not a result, and the significance test refuses to dignify it with a p-value
 because the repeats are not independent.
+
+The unit there is the experiment, not the finding. Two of the pipeline's
+findings both predict `queries_per_request` and are both settled by the single
+run `B01/queries_per_request`; counting them separately let one measurement move
+two units on one arm and one on the other. An experiment counts as a hit only
+when every claim it settled held, so an arm cannot buy one by pairing a correct
+prediction with a wrong one the same run decides.
 
 #### Recall, audited by hand
 
