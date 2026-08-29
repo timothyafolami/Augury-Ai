@@ -16,8 +16,6 @@ import pytest
 
 from augury.core.adapters.retry import RateLimited, retry_after, sleep_schedule
 
-pytestmark = pytest.mark.asyncio
-
 
 def test_a_provider_message_naming_a_delay_is_honoured() -> None:
     """Groq says how long to wait. Guessing when told is not better."""
@@ -60,6 +58,7 @@ def test_a_429_that_never_clears_eventually_raises() -> None:
 # -- the loop that said it did not count, and counted ----------------------
 
 
+@pytest.mark.asyncio
 async def test_more_rate_limits_than_attempts_still_succeeds() -> None:
     """A 429 must not consume one of the three attempts reserved for bad JSON.
 
