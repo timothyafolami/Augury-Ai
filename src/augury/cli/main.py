@@ -8,6 +8,9 @@ judge does is run one of them.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import os
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import NoReturn
@@ -18,10 +21,13 @@ from rich.table import Table
 
 from augury.agents.augury import AuguryReviewer
 from augury.agents.baseline import BaselineReviewer
+from augury.cli import banner
 from augury.core.adapters.provider import model_from
 from augury.core.cartography import Cartographer
 from augury.core.cartography.languages import EXTENSIONS
 from augury.core.findings import Report
+from augury.core.journal import Journal, Run
+from augury.core.memo import Memo
 from augury.core.reference import Registry, requirements_of
 from augury.core.reference.changelog import changelog_notes
 from augury.core.reference.staleness import dependency_findings
@@ -29,7 +35,13 @@ from augury.core.report import write_report
 from augury.core.scheduling import Budget
 from augury.core.schema import read_migrations, schema_findings
 from augury.core.scoring import Score
-from augury.core.settings import Settings, SettingsError, load_settings
+from augury.core.settings import (
+    API_KEY_VARIABLES,
+    DEFAULT_PROVIDER,
+    Settings,
+    SettingsError,
+    load_settings,
+)
 from augury.core.survey import Surveyor
 from augury.core.trajectory import Trajectory
 from augury.evaluation.cases import Case, load_cases
@@ -182,6 +194,13 @@ def report(
         min=0.0,
         help="Ceiling on spend. 0 reads every module worth reading and reports what it cost",
     ),
+    cache: bool = typer.Option(
+        True,
+        help="Reuse findings for files whose content and prompt are unchanged",
+    ),
+    provider: str = typer.Option("", help="groq | openai | anthropic | deepseek"),
+    model: str = typer.Option("", help="Model id, e.g. deepseek-v4-flash"),
+    api_key: str = typer.Option("", help="Key for this run, instead of the environment"),
     out: str = typer.Option("augury-report.md", help="Where to write the document"),
 ) -> None:
     """Review a repository and write a document a team can act on.
@@ -195,30 +214,69 @@ def report(
     if not root.is_dir():
         _fail(f"--path must be a directory: {root}")
 
+    settings = _settings_from(provider, model, api_key)
+    banner.opening(
+        console, target=root.name, provider=settings.spec.provider, model=settings.spec.model
+    )
+
+    banner.stage(console, 1, 5, "Surveyor", "reading the deployment before the code")
     found = Surveyor(root).survey()
     limits = tuple(part.strip() for part in scope.split(",") if part.strip())
     entrypoints = tuple({e for service in found.services for e in service.entrypoints})
+    banner.note(
+        console,
+        f"{len(found.services)} services, {len(found.backing)} backing services, "
+        f"{len(entrypoints)} entrypoints declared by their commands",
+    )
+
+    banner.stage(console, 2, 5, "Cartographer", "six languages, imports, request path")
     try:
         repo = Cartographer(root, scope=limits, entrypoints=entrypoints).map()
     except ValueError as exc:
         _fail(str(exc))
+    reached = len(repo.modules) - len(repo.unreachable)
+    banner.note(
+        console,
+        f"{len(repo.modules)} modules, {reached} reachable from an entrypoint, "
+        f"{len(repo.unreachable)} not",
+    )
 
     bases = [root / part for part in limits] or [root]
+    banner.stage(console, 3, 5, "Schema", "what the migrations do to tables with rows in them")
     schema = tuple(f for base in bases for f in schema_findings(read_migrations(base)))
     registry = Registry()
     dependencies = tuple(
         f for base in bases for f in dependency_findings(requirements_of(base), registry)
     )
+    banner.note(
+        console,
+        f"{len(schema)} schema findings, {len(dependencies)} dependency findings, "
+        "all deterministic and free",
+    )
 
-    console.print(f"reviewing {len(repo.modules)} modules, budget ${budget:.2f}...")
-    settings = _settings()
-    model = model_from(settings)
+    ceiling = f"${budget:.2f}" if budget else "no ceiling"
+    banner.stage(console, 4, 5, "Specialists", f"eight concerns, {ceiling}")
+    built_model = model_from(settings)
+
+    # Recorded before any specialist runs. A run written down on completion is
+    # a run that can never admit to having been interrupted.
+    journal = _journal_for(root)
+    run_id = uuid.uuid4().hex[:12]
+    journal.begin(
+        Run(
+            run_id=run_id,
+            model=f"{settings.spec.provider}/{settings.spec.model}",
+            scope=scope or "",
+            modules=len(repo.modules),
+        )
+    )
 
     async def run() -> Report:
         built = AuguryReviewer(
-            model,
+            built_model,
             budget=Budget(usd=budget) if budget else Budget(),
             watching=_watcher(),
+            memo=_memo_for(root, enabled=cache),
         )
         result: Report = await built.review(repo, root)
         return result
@@ -253,6 +311,13 @@ def report(
     )
     destination = Path(out).expanduser()
     destination.write_text(document, encoding="utf-8")
+    journal.finish(
+        run_id,
+        read=len(reviewed.coverage.analysed) if reviewed.coverage else 0,
+        findings=len(reviewed.findings),
+        usd=reviewed.usd,
+        report=str(destination),
+    )
     console.print(f"wrote {destination} ({len(document.splitlines())} lines)")
 
 
@@ -266,6 +331,13 @@ def review(
         min=0.0,
         help="Ceiling on spend. 0 reads every module worth reading and reports what it cost",
     ),
+    cache: bool = typer.Option(
+        True,
+        help="Reuse findings for files whose content and prompt are unchanged",
+    ),
+    provider: str = typer.Option("", help="groq | openai | anthropic | deepseek"),
+    model: str = typer.Option("", help="Model id, e.g. deepseek-v4-flash"),
+    api_key: str = typer.Option("", help="Key for this run, instead of the environment"),
     arm: str = typer.Option("augury", help="baseline or augury"),
     prove: bool = typer.Option(False, help="Run the case's experiments against the claims"),
     trajectory: str = typer.Option("", help="Write every step to this JSONL file"),
@@ -276,19 +348,19 @@ def review(
     if not case and not path:
         _fail("Give --case for a seeded fixture, or --path for your own repository.")
     if path:
-        _review_repository(path, scope, budget, arm, trajectory)
+        _review_repository(path, scope, budget, arm, trajectory, cache, provider, model, api_key)
         return
     chosen = _case(case)
     reviewer = _arm(arm)
-    settings = _settings()
+    settings = _settings_from(provider, model, api_key)
 
-    model = model_from(settings)
+    built_model = model_from(settings)
 
     recording = Trajectory(Path(trajectory)) if trajectory else None
 
     async def run() -> Report:
         built = reviewer(
-            model,
+            built_model,
             experiments=chosen.experiment_conditions(),
             trajectory=recording,
         )
@@ -303,7 +375,80 @@ def review(
     _print_findings(report)
 
 
-def _review_repository(path: str, scope: str, budget_usd: float, arm: str, trajectory: str) -> None:
+def _settings_from(provider: str, model: str, api_key: str) -> Settings:
+    """Settings from the environment, with any flag given here overriding it.
+
+    A flag rather than only an environment variable because someone testing
+    this across four projects should not edit a dotenv between each, and
+    someone bringing their own model should not have to edit anything at all.
+    """
+    for name, value in (
+        ("AUGURY_PROVIDER", provider),
+        ("AUGURY_MODEL", model),
+    ):
+        if value:
+            os.environ[name] = value
+    if api_key and provider:
+        os.environ[API_KEY_VARIABLES.get(provider, "AUGURY_API_KEY")] = api_key
+    elif api_key:
+        # No provider named, so set the key for whichever one is configured.
+        configured = os.environ.get("AUGURY_PROVIDER", DEFAULT_PROVIDER)
+        os.environ[API_KEY_VARIABLES.get(configured, "AUGURY_API_KEY")] = api_key
+    return _settings()
+
+
+def _journal_for(root: Path) -> Journal:
+    """Where a repository's run history lives, beside its remembered findings."""
+    key = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:16]
+    home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return Journal(home / "augury" / key)
+
+
+@app.command()
+def history(
+    path: str = typer.Option(..., help="Repository whose runs to list"),
+) -> None:
+    """What has been run against this repository, and what was interrupted.
+
+    A cache says which files were read. It cannot say a run started, so a
+    review stopped halfway leaves a warm cache and no reason for it.
+    """
+    root = Path(path).expanduser().resolve()
+    entries = _journal_for(root).history()
+    if not entries:
+        console.print(f"no runs recorded for {root.name}")
+        return
+
+    console.print(f"[bold]{root.name}[/bold] — {len(entries)} runs, newest first\n")
+    for entry in entries:
+        mark = "[yellow]![/yellow]" if entry.interrupted else "[green]ok[/green]"
+        console.print(f" {mark} {entry.summary()}", markup=True)
+        console.print(f"    [dim]{entry.model} · scope={entry.scope or 'whole repo'}[/dim]")
+
+
+def _memo_for(root: Path, *, enabled: bool) -> Memo:
+    """Where a repository's remembered findings live.
+
+    Under the user's cache directory rather than inside the repository: a
+    reviewer that writes into the tree it is reading has changed the thing it
+    is reporting on.
+    """
+    key = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:16]
+    home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return Memo(home / "augury" / key, enabled=enabled)
+
+
+def _review_repository(
+    path: str,
+    scope: str,
+    budget_usd: float,
+    arm: str,
+    trajectory: str,
+    cache: bool = True,
+    provider: str = "",
+    model: str = "",
+    api_key: str = "",
+) -> None:
     """Review a repository that ships no answer key.
 
     The survey runs first and for nothing: it says which directories hold
@@ -327,8 +472,8 @@ def _review_repository(path: str, scope: str, budget_usd: float, arm: str, traje
         f"no entrypoint. Budget ${budget_usd:.2f}."
     )
 
-    settings = _settings()
-    model = model_from(settings)
+    settings = _settings_from(provider, model, api_key)
+    built_model = model_from(settings)
     reviewer = _arm(arm)
     recording = Trajectory(Path(trajectory)) if trajectory else None
 
@@ -338,13 +483,14 @@ def _review_repository(path: str, scope: str, budget_usd: float, arm: str, traje
         # dollar budget would imply a knob it does not have.
         built = (
             AuguryReviewer(
-                model,
+                built_model,
                 budget=Budget(usd=budget_usd) if budget_usd else Budget(),
                 trajectory=recording,
                 watching=_watcher(),
+                memo=_memo_for(root, enabled=cache),
             )
             if reviewer is AuguryReviewer
-            else BaselineReviewer(model, trajectory=recording)
+            else BaselineReviewer(built_model, trajectory=recording)
         )
         result: Report = await built.review(repo, root)
         return result
