@@ -298,7 +298,10 @@ def report(
         result: Report = await built.review(repo, root)
         return result
 
-    reviewed = asyncio.run(run())
+    try:
+        reviewed = asyncio.run(run())
+    except Exception as error:  # the provider is the one thing outside our control
+        _fail(_provider_failure(error, provider=settings.spec.provider, model=settings.spec.model))
 
     if prove:
         # Where the experiments can import the code they measure. A repository
@@ -407,7 +410,10 @@ def review(
         result: Report = await built.review(Cartographer(chosen.repo).map(), chosen.repo)
         return result
 
-    report = asyncio.run(run())
+    try:
+        report = asyncio.run(run())
+    except Exception as error:  # the provider is the one thing outside our control
+        _fail(_provider_failure(error, provider=settings.spec.provider, model=settings.spec.model))
     if prove:
         # Without this the flag was accepted and ignored, so every verdict
         # printed "untested" while the command reported success.
@@ -608,7 +614,10 @@ def _review_repository(
         result: Report = await built.review(repo, root)
         return result
 
-    report = asyncio.run(run())
+    try:
+        report = asyncio.run(run())
+    except Exception as error:  # the provider is the one thing outside our control
+        _fail(_provider_failure(error, provider=settings.spec.provider, model=settings.spec.model))
     _print_findings(report)
     if report.coverage is not None:
         console.print(
@@ -743,6 +752,54 @@ def _arm(name: str) -> type[BaselineReviewer] | type[AuguryReviewer]:
 
 def _known_cases() -> str:
     return ", ".join(case.id for case in load_cases()) or "none"
+
+
+# The environment variable each provider reads its key from. A first run that
+# fails on authentication should say which one to set, not make the reader go
+# looking for it.
+_KEY_NAMES = {
+    "groq": "GROQ_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+}
+
+# Long enough to carry a provider's own message, short enough that it stays a
+# paragraph. One provider returned five thousand characters of HTML.
+_MOST_OF_A_MESSAGE = 400
+
+
+def _provider_failure(error: Exception, *, provider: str, model: str) -> str:
+    """One paragraph saying which provider refused, and what to do about it.
+
+    The alternative, and what happened on the first DeepSeek run, is sixty
+    lines of traceback through httpx, openai and pydantic -- with everything
+    the reader needed on the last line, under frames from libraries they never
+    called.
+    """
+    said = str(error)
+    if len(said) > _MOST_OF_A_MESSAGE:
+        said = said[:_MOST_OF_A_MESSAGE] + "…"
+
+    key = _KEY_NAMES.get(provider, f"{provider.upper()}_API_KEY")
+    lowered = said.lower()
+
+    # Advice only where the cause is known. Naming the key for a failure that
+    # was not about the key sends the reader to check the one thing that was
+    # already right, which is worse than saying nothing -- and it printed
+    # "set DEEPSEEK_API_KEY in .env" for a key that worked.
+    advice = ""
+    if "401" in said or "403" in said or "authentication" in lowered:
+        advice = f"{key} is missing or not accepted — check it in .env"
+    elif "429" in said or "rate limit" in lowered:
+        advice = "the rate limit was hit and the waits ran out; retry, or use a smaller --scope"
+    elif "output limit" in lowered or "max_tokens" in lowered:
+        advice = "raise AUGURY_MAX_TOKENS, or narrow --scope so each answer is shorter"
+    elif "404" in said or ("model" in lowered and "not" in lowered):
+        advice = f"the provider may not recognise {model!r} — check AUGURY_MODEL"
+
+    tail = f"\n{advice}" if advice else ""
+    return f"{provider} refused the request for {model}: {said}{tail}"
 
 
 def _fail(message: str) -> NoReturn:
