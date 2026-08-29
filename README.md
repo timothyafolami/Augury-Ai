@@ -96,53 +96,67 @@ anything the harness varied and must not be read as a confidence interval.
 This was discovered by recording the sweep: all five collapsed to one, because
 they were one call repeated.
 
-This is one run of `make evaluate`, the command in the reproduction guide, and
-the table it prints:
+### The comparison was unfair until recently, in the pipeline's favour
+
+Every number published before this section was produced by a harness that gave
+the two arms different instructions. A review found four asymmetries, all
+pointing the same way:
+
+- The analyst prompt was told exactly what the falsifiability validator
+  rejects. The baseline prompt was not -- so one arm held the answer key to a
+  metric both arms are scored on.
+- A finding whose prediction failed validation was counted **twice** in that
+  metric's denominator, once as a finding and once as dropped. So a malformed
+  prediction cost more than no prediction at all, and the arm that was not
+  coached produced more of them.
+- `reconcile`, which is deterministic and costs no model call, ran on the
+  pipeline arm only. It removes duplicate findings from the denominator.
+- The baseline was told to omit a field the schema requires, which strict
+  providers reject outright.
+
+All four are fixed, with tests that fail against the old behaviour
+([`tests/test_arm_symmetry_beyond_bytes.py`](tests/test_arm_symmetry_beyond_bytes.py),
+[`tests/test_precision_denominator.py`](tests/test_precision_denominator.py)).
+Two of the tests that were supposed to catch this were instead enforcing it:
+one asserted the vacuity rule for the analyst *by name*, and one accepted a
+`nested` schema argument and never used it.
+
+### The result after fixing it
+
+A sweep was recorded call by call and the recordings committed, so this is
+reproducible exactly, with no API key: `make eval-replay` prints it verbatim.
 
 | metric | baseline | augury | verdict |
 |---|---|---|---|
-| seeded recall | 0.840 | 0.860 | **inconclusive**, ranges overlap |
-| hit rate | 0.931 (27/29) | 0.781 (25/32) | **no detectable difference** (Fisher p = 0.15) |
-| cost | $0.009 | $0.043 (4.9x) | |
+| seeded recall | 0.800 | 0.800 | **tied** |
+| falsifiable precision | **0.909** | 0.583 | baseline, by a wide margin |
+| hit rate | 0.833 (25/30) | **1.000** (30/30) | **suggestive, not significant** (Fisher p = 0.052) |
+| cost | $0.00 replayed | $0.00 replayed | $0.0017 / $0.0083 recorded (5.0x) |
 
-A second run of the same sweep gave recall 0.760 for both arms and hit rates of
-0.893 and 0.757 -- the point estimates move by several points between runs at
-temperature 0, and both runs return the same verdict. Expect your own numbers
-to land near these rather than on them, and expect the verdict to be the same.
-The reasons this evaluation cannot do better than that are in
-[`docs/CHANGELOG.md`](docs/CHANGELOG.md), iteration 15.
+**The falsifiable-precision result reversed.** It was 0.778 baseline against
+0.833 augury when only one arm knew the validator's rules. Told the same rules,
+the baseline goes to 0.909 and the pipeline drops to 0.583. The pipeline's
+apparent advantage on that metric was the coaching, not the architecture, and
+it is now clearly behind: it makes more claims and a smaller share of them
+survive validation.
 
-### One run you can reproduce exactly, with no API key
+**The hit rate moved the other way.** Every prediction the pipeline made and
+had tested came back a hit, 30 out of 30, against 25 of 30. At these
+denominators that is p = 0.052 -- which the harness reports as *suggestive, not
+significant*, and which is the correct thing to say about a one-sweep result
+sitting on the wrong side of every conventional threshold. It is the first
+signal in this project's history that has pointed at the pipeline and survived
+a fair comparison, and one sweep is not enough to believe it.
 
-Because live runs move, a third sweep was recorded call by call and the
-recordings committed. `make eval-replay` serves every model call from them,
-reaches no network, spends nothing, and prints this, exactly:
+Read the two together and they say something coherent rather than
+contradictory: **the pipeline states fewer testable claims, and the ones it
+does state are more often right.** Whether that trade is worth five times the
+cost is not a question this evaluation can answer.
 
-| metric | baseline | augury | verdict |
-|---|---|---|---|
-| seeded recall | 0.800 | 0.900 | **inconclusive**, repeats not independent |
-| falsifiable precision | 0.778 | 0.833 | |
-| hit rate | 0.833 (25/30) | 0.889 (40/45) | **no detectable difference** (Fisher p = 0.51) |
-| cost | $0.00 replayed | $0.00 replayed | $0.0015 / $0.0083 when recorded (5.4x) |
-
-Note the recall row. The ranges are `0.800-0.800` and `0.900-0.900`, which do
-not overlap, and an earlier version of the comparator called that a **win for
-the pipeline**. It is not one: replay serves every repeat from the same
-recording, so five repeats are one observation and the zero width says only
-that a recording is deterministic. The comparator now refuses a verdict when
-the repeats were not independent, and withholds the permutation p-value for the
-same reason -- on this data it would read p = 0.0079, a confident finding
-computed from one observation per arm.
-
-Four sweeps now. Recall favours augury in three and ties in one. Hit rate
-favours the baseline in three and augury in this one. **Every sweep returns the
-same verdict.** The point estimates are noise at this sample size; the verdict
-is not, and the direction of the noise is not evidence of anything.
-
-**The pipeline does not beat one well-written prompt.** Not on defects found,
-not on whether its numbers survive testing. It costs five times as much in the
-run above, six in the run in the hot take, and on
-hit rate its point estimate is nominally *lower* than the baseline's.
+**The pipeline still does not beat one well-written prompt on the headline
+question.** Recall is tied: it finds the same seeded defects. On falsifiable
+precision it is clearly worse. It costs five times as much. The one metric
+where it leads is under-powered and unreplicated.
 
 It is also not shown to be worse. Ten seeded defects over three cases cannot
 resolve a difference this size in either direction, and saying so is the honest
