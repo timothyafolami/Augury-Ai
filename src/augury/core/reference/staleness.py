@@ -9,6 +9,7 @@ answer from its training cutoff, confidently.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Protocol
 
 from augury.core.reference.registry import PackageFacts
@@ -23,16 +24,88 @@ class _Registry(Protocol):
     def facts_for(self, name: str) -> PackageFacts | None: ...
 
 
+@dataclass(frozen=True)
+class Audit:
+    """What was checked, alongside what was found.
+
+    Three consecutive runs against one repository printed 2, then 6, then 5
+    findings, because a registry lookup that fails is silent -- correctly, since
+    a review has to work offline. Silence is the right behaviour and the wrong
+    report: a reader cannot tell "checked it, it is current" from "could not
+    reach the registry", and those are opposite facts about the same package.
+    """
+
+    findings: tuple[SchemaFinding, ...]
+    declared: int
+    unreachable: tuple[str, ...]
+
+    @property
+    def checked(self) -> int:
+        return self.declared - len(self.unreachable)
+
+    @property
+    def complete(self) -> bool:
+        return not self.unreachable
+
+    def coverage(self) -> str:
+        """One line a reader can act on, or empty when there is nothing to say."""
+        if self.complete:
+            return ""
+        missing = len(self.unreachable)
+        names = ", ".join(self.unreachable[:4])
+        more = f" and {missing - 4} more" if missing > 4 else ""
+        return (
+            f"{self.checked} of {self.declared} checked against the registry; "
+            f"{missing} could not be reached ({names}{more}), so they are "
+            "unknown rather than current"
+        )
+
+
 def dependency_findings(pinned: dict[str, str], registry: _Registry) -> tuple[SchemaFinding, ...]:
     """Findings about the dependency list, in a stable order."""
+    return dependency_audit(pinned, registry).findings
+
+
+def dependency_audit(pinned: dict[str, str], registry: _Registry) -> Audit:
+    """Findings about the dependency list, and how much of it was checked."""
     found: list[SchemaFinding] = []
+    unreachable: list[str] = []
+    # Ask for all of them at once where the registry can: sequentially the
+    # tail of a long requirements file times out behind its own queue.
+    ahead = getattr(registry, "facts_for_many", None)
+    if ahead is not None:
+        ahead(tuple(pinned))
     for name, version in sorted(pinned.items()):
         facts = registry.facts_for(name)
         if facts is None:
-            # Not on the registry: an internal package, not a stale one.
+            if not version:
+                # An unpinned dependency is a fact about the declaration, not
+                # about any published version, so it does not need a registry
+                # to be true. Requiring one made the most basic finding here
+                # depend on the most fragile resource.
+                found.append(_unpinned_without_facts(name))
+                continue
+            # Either an internal package or a registry that did not answer.
+            # From here the two are indistinguishable, which is the reason
+            # this is reported as coverage rather than resolved as a finding.
+            unreachable.append(name)
             continue
         found.extend(_check(name, version, facts))
-    return tuple(found)
+    return Audit(findings=tuple(found), declared=len(pinned), unreachable=tuple(unreachable))
+
+
+def _unpinned_without_facts(name: str) -> SchemaFinding:
+    return SchemaFinding(
+        rule="dependency-unpinned",
+        path="requirements",
+        line=1,
+        detail=(
+            f"`{name}` is declared with no version, so it installs whatever exists "
+            "the day the image is built. That makes two deploys of one commit two "
+            "different services"
+        ),
+        remediation=(f"Pin it to the version you have installed: pip freeze | grep -i {name}"),
+    )
 
 
 def _check(name: str, version: str, facts: PackageFacts) -> list[SchemaFinding]:
