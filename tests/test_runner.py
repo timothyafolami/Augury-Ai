@@ -90,8 +90,8 @@ async def test_records_whether_the_seeded_defect_was_found() -> None:
     found = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), load_cases())
     missed = await run_arm("baseline", ScriptedModel(FINDS_SOMETHING_ELSE), load_cases())
 
-    assert all(s.detected for s in found)
-    assert not any(s.detected for s in missed)
+    assert all(s.found == s.seeded for s in found)
+    assert all(s.found == 0 for s in missed)
 
 
 async def test_detection_rate_survives_aggregation() -> None:
