@@ -12,12 +12,12 @@ Specifically look for:
 
 - Read-modify-write on state reachable from more than one task, thread or
   request: counters, caches, accumulators, dictionaries keyed by request.
-  Predict the final value after N concurrent operations versus the correct N.
+  Predict `final_balance` after N concurrent operations against the correct N.
 - Check-then-act: `if key not in cache` followed by a write, `if not exists`
-  followed by create. Predict the duplicate rate.
+  followed by create. Predict `duplicate_side_effects`.
 - Lock ordering that differs between two paths, which is a deadlock.
 - `async` functions performing blocking work, which stalls the whole loop.
-  Predict the effect on p99 for unrelated requests.
+  Predict `http_req_duration_p99` for unrelated requests.
 - Assumptions the runtime does not honour: the GIL does not make `+=` atomic,
   a single-threaded event loop does not make an await sequence atomic.
 
