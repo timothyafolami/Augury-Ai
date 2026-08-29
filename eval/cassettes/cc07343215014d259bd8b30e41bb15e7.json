@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/payments.py",
+      "line": 15,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "A new httpx.AsyncClient is created for every call, so each request incurs a full TCP/TLS handshake and cannot reuse keep‑alive connections. This matches the reference that a client constructed per request pays connection and TLS setup each time, increasing latency.",
+      "severity": "medium",
+      "remediation": "Create a single httpx.AsyncClient at module load time and reuse it for all charge calls instead of constructing one inside the function.",
+      "arithmetic": "Assume TCP handshake 20 ms + TLS handshake 100 ms = 120 ms added per request. The p99 latency therefore increases by at least 120 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 120.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "single charge request under normal load"
+      }
+    },
+    {
+      "path": "app/clients/payments.py",
+      "line": 24,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "The AsyncClient is configured with a 10 s timeout, which can exceed the caller’s overall request deadline (e.g., typical API timeout 5 s). A slow or hanging upstream will keep a worker blocked for the full timeout, saturating the worker pool as described in the reference about timeouts longer than the caller’s deadline.",
+      "severity": "high",
+      "remediation": "Set the client timeout to a value lower than or equal to the service’s request deadline (e.g., 5 s) and propagate a deadline to the upstream call.",
+      "arithmetic": "Workers=4. Each request holds a worker for up to 10 s. With 4 concurrent requests, after 8 s all workers are blocked: worker_saturation = blocked_workers / total_workers = 4/4 = 1.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "4 concurrent charge calls to an unresponsive gateway, measured after 8 s"
+      }
+    }
+  ]
+}
