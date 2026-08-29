@@ -77,7 +77,7 @@
   "experiment_conditions": {
     "queries_per_request": "one shipments_by_courier report over 40 shipments carried by 2 couriers",
     "duplicate_side_effects": "the same delivery webhook posted 3 times with one delivery_id",
-    "queue_depth": "200 events arriving while one worker serves them at 2ms each, measured after 200ms",
-    "active_connections": "20 pieces of work run through with_session, every one of them raising"
+    "queue_depth": "5000 events offered to the inbox with nothing draining them",
+    "active_connections": "40 pieces of work run through with_session against a pool of 10, every one of them raising"
   }
 }
