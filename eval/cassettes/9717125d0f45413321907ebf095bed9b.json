@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/repositories/orders.py",
+      "line": 18,
+      "layer": "craft",
+      "symbol": "list_for_customer",
+      "mechanism": "Broad exception handler catches all errors and returns an empty list, swallowing the failure so the caller believes the customer has no orders (reference: silent failure description).",
+      "severity": "high",
+      "remediation": "Remove the blanket except block; let database exceptions propagate or translate them to an explicit error response (e.g., raise HTTPException 500) instead of returning [] on failure.",
+      "arithmetic": "The function always returns [] on any exception, so the HTTP layer will serialize this as a successful 200 response with an empty array. Therefore the observed http_status under a database‑unreachable condition is 200.",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "between",
+        "value": 200.0,
+        "upper": 200.0,
+        "unit": "x",
+        "condition": "database unreachable"
+      }
+    }
+  ]
+}
