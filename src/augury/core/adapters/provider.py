@@ -7,6 +7,7 @@ of the system sees only `ChatModel`.
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from autogen_core.models import CreateResult, ModelFamily, ModelInfo, UserMessage
@@ -15,6 +16,11 @@ from pydantic import BaseModel
 from augury.core.adapters.base import ChatModel, Completion, ModelSpec, Usage
 from augury.core.adapters.cassette import CassetteMiss
 from augury.core.adapters.pricing import Pricing, pricing_for
+from augury.core.adapters.retry import (
+    MAX_DELAY_SECONDS,
+    RateLimited,
+    retry_after,
+)
 
 if TYPE_CHECKING:  # Settings imports this module's siblings; keep it one-way.
     from augury.core.settings import Settings
@@ -36,6 +42,16 @@ T = TypeVar("T", bound=BaseModel)
 # that would be a harness failure reported as a reviewer failure. Bounded,
 # because a model that cannot produce the schema will not start doing so.
 MAX_ATTEMPTS = 3
+
+# How many times one call will wait out a rate limit before giving up. Groq
+# allows 250,000 tokens a minute, and a concurrent review of a real backend
+# exceeds that routinely -- a full run died on its ninth module before this
+# existed, losing everything already paid for.
+MAX_RATE_LIMIT_WAITS = 8
+
+# Added per wait so concurrent callers do not all wake at the same instant and
+# re-trigger the limit together.
+JITTER_SECONDS = 0.25
 
 CORRECTION = (
     "\n\nYour previous response was rejected: {error}\n\n"
@@ -59,6 +75,7 @@ class CompletionClient(Protocol):
 OPENAI_COMPATIBLE_BASE_URLS: dict[str, str | None] = {
     "openai": None,
     "groq": "https://api.groq.com/openai/v1",
+    "deepseek": "https://api.deepseek.com",
 }
 
 
@@ -72,6 +89,8 @@ class ProviderAdapter:
         self._usage = Usage()
         self._last_attempt_cost = Usage()
         self.retries = 0
+        self.rate_limited = 0
+        self._rate_limit_waits = 0
 
     @property
     def model_id(self) -> str:
@@ -86,6 +105,17 @@ class ProviderAdapter:
         """The validated object alone, for callers that do not need the cost."""
         completion = await self.call(prompt=prompt, schema=schema)
         return cast("T", completion.result)
+
+    async def _wait_out(self, error: Exception) -> bool:
+        """Sleep off a rate limit. False when we have waited long enough."""
+        if self._rate_limit_waits >= MAX_RATE_LIMIT_WAITS:
+            return False
+        asked = retry_after(str(error))
+        delay = asked if asked is not None else min(2.0**self._rate_limit_waits, MAX_DELAY_SECONDS)
+        self._rate_limit_waits += 1
+        self.rate_limited += 1
+        await asyncio.sleep(delay + JITTER_SECONDS * self._rate_limit_waits)
+        return True
 
     async def call(self, *, prompt: str, schema: type[T]) -> Completion:
         """Ask for the schema, not for JSON in prose, and validate the answer.
@@ -103,7 +133,16 @@ class ProviderAdapter:
                 # A rejected attempt still consumed tokens, so the cost of this
                 # call is every attempt it took, not only the one that worked.
                 return Completion(result=result, usage=spent + cost, retries=attempt)
-            except Exception as error:  # provider rejection or invalid JSON
+            except Exception as error:  # provider rejection, rate limit, bad JSON
+                # A rate limit is a wait, not a failure. It consumed no tokens
+                # and the same prompt will succeed shortly, so it does not
+                # count against MAX_ATTEMPTS and the prompt is not "corrected"
+                # -- correcting a prompt that was never read is how a transient
+                # 429 turns into three wasted calls and then a lost run.
+                if RateLimited.looks_like(str(error)):
+                    waited = await self._wait_out(error)
+                    if waited:
+                        continue
                 last = error
                 spent = spent + self._last_attempt_cost
                 # Counted only when another attempt will follow: three attempts
