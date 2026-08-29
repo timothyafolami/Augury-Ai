@@ -74,7 +74,7 @@ collide on one construct. A **Prover** runs the case's own experiment and
 records what it measured.
 
 Knowing which parts must not be a language model is the engineering claim this
-project makes. Four of the six stages consult no model.
+project makes. Five of the seven steps consult no model.
 
 The full architecture, written from the code and one recorded run, is in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -130,7 +130,8 @@ favouring the baseline all three times, and **the same verdict every time**.
 The point estimates are noise at this sample size; the verdict is not.
 
 **The pipeline does not beat one well-written prompt.** Not on defects found,
-not on whether its numbers survive testing. It costs six times as much, and on
+not on whether its numbers survive testing. It costs five times as much in the
+run above, six in the run in the hot take, and on
 hit rate its point estimate is nominally *lower* than the baseline's.
 
 It is also not shown to be worse. Ten seeded defects over three cases cannot
@@ -193,7 +194,7 @@ and against more than one remediation, because passing against one is how
 ```bash
 make install
 cp .env.example .env      # add GROQ_API_KEY
-make check                # lint, types, 443 tests
+make check                # lint, types, 495 tests
 ```
 
 Full instructions, including reproducing the published numbers with no API key,
@@ -268,7 +269,7 @@ If you build an evaluation, the thing to distrust first is the evaluation.
 
 The second failure mode is cheaper to state: routing to specialists costs six
 times a single prompt for no measurable gain. The Scheduler exists for
-repositories too large to read at once, and seventeen modules is not that.
+repositories too large to read at once, and twenty-three modules is not that.
 Either the crossover is at a size not yet tested, or the architecture does not
 pay for itself, and this evaluation cannot separate them.
 
