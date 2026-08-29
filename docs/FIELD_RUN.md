@@ -1,5 +1,13 @@
 # The first run on code nobody seeded
 
+> **Recorded before the arm-parity fixes of iteration 20.** The prompts have
+> since changed: both arms are now told what the falsifiability validator
+> rejects, and every layer brief names a metric from the published vocabulary.
+> This run is kept as recorded rather than re-run, because what it demonstrates
+> -- that a well-formed prediction can be completely false -- does not depend on
+> those changes, and re-running it would replace a real observation with a
+> tidier one.
+
 Every number in `README.md` comes from `eval/cases/`, where the defects were
 planted by this project and the grader knew the answers. That is the right way
 to measure, and it is not evidence that the thing is useful.
