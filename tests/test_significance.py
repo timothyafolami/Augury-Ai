@@ -66,3 +66,11 @@ def test_an_empty_arm_yields_no_verdict_from_the_permutation_test_either() -> No
     Returning a probability for it would be a positive claim of equivalence
     drawn from nothing, and fisher_exact already abstains."""
     assert permutation_p([], [1.0, 0.8]) is None
+
+
+def test_the_null_is_never_asserted() -> None:
+    """A study too small to detect a difference has not shown there is none."""
+    from augury.evaluation.significance import verdict
+
+    assert verdict(0.9) == "no detectable difference"
+    assert verdict(0.9) != "no difference"
