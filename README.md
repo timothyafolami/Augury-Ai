@@ -112,6 +112,23 @@ to land near these rather than on them, and expect the verdict to be the same.
 The reasons this evaluation cannot do better than that are in
 [`docs/CHANGELOG.md`](docs/CHANGELOG.md), iteration 15.
 
+### One run you can reproduce exactly, with no API key
+
+Because live runs move, a third sweep was recorded call by call and the
+recordings committed. `make eval-replay` serves every model call from them,
+reaches no network, spends nothing, and prints this, exactly:
+
+| metric | baseline | augury | verdict |
+|---|---|---|---|
+| seeded recall | 0.700 | 0.800 | **inconclusive**, ranges overlap |
+| falsifiable precision | 0.900 | 0.810 | |
+| hit rate | 0.750 (15/20) | 0.700 (35/50) | **no detectable difference** (Fisher p = 0.78) |
+| cost | $0.00 replayed | $0.00 replayed | $0.001 / $0.011 when recorded |
+
+Three sweeps now: recall favouring augury twice and tied once, hit rate
+favouring the baseline all three times, and **the same verdict every time**.
+The point estimates are noise at this sample size; the verdict is not.
+
 **The pipeline does not beat one well-written prompt.** Not on defects found,
 not on whether its numbers survive testing. It costs six times as much, and on
 hit rate its point estimate is nominally *lower* than the baseline's.
