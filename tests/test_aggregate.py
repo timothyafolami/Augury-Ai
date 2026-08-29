@@ -101,3 +101,65 @@ def test_aggregating_nothing_is_refused() -> None:
     a measurement."""
     with pytest.raises(ValueError, match="no scores"):
         aggregate([])
+
+
+# -- the floor under a published rate --------------------------------------
+# Measured on B01: the baseline's hit rate rested on four tested predictions
+# and one of its seeds produced 1.000 from a single measurement. A ratio over
+# one is not a rate, and printing it in a results table beside a ratio over
+# fifty invites exactly the wrong comparison.
+
+
+def measured(*, arm: str, tested: int, hits: int) -> Score:
+    return Score(
+        case="B01",
+        arm=arm,
+        seed=0,
+        model_id="stub",
+        seeded=5,
+        found=5,
+        total_findings=tested,
+        falsifiable=tested,
+        tested=tested,
+        experiments=tested,
+        hits=hits,
+        broken=0,
+        dropped=0,
+        falsifiable_precision=1.0,
+        hit_rate=hits / tested if tested else None,
+        prediction_coverage=1.0,
+        usd=0.01,
+        seconds=1.0,
+    )
+
+
+def test_a_hit_rate_over_too_few_measurements_is_withheld() -> None:
+    arm = aggregate([measured(arm="a", tested=1, hits=1)])
+
+    assert arm.hit_rate is None
+    assert arm.tested == 1
+    assert arm.hits == 1
+
+
+def test_the_counts_are_always_reported_even_when_the_rate_is_not() -> None:
+    """Withholding the ratio must not hide the evidence. A reader can still
+    see one of one and judge it themselves."""
+    arm = aggregate([measured(arm="a", tested=2, hits=0)])
+
+    assert arm.hit_rate is None
+    assert (arm.hits, arm.tested) == (0, 2)
+
+
+def test_a_hit_rate_over_enough_measurements_is_published() -> None:
+    arm = aggregate([measured(arm="a", tested=10, hits=5)])
+
+    assert arm.hit_rate == pytest.approx(0.5)
+
+
+def test_the_floor_is_reached_by_pooling_across_seeds() -> None:
+    """Three seeds of four tested predictions each is twelve measurements, and
+    twelve is a rate even though four is not."""
+    arm = aggregate([measured(arm="a", tested=4, hits=2) for _ in range(3)])
+
+    assert arm.tested == 12
+    assert arm.hit_rate == pytest.approx(0.5)
