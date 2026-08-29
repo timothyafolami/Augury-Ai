@@ -50,6 +50,17 @@ Derive the threshold from the mechanism, not from intuition. Show the
 arithmetic: the pool size, the worker count, the service time, the law you
 applied. A reviewer who cannot show the arithmetic is guessing.
 
+## Metrics you may predict
+
+A claim can only be settled if it names something an experiment measures. Use
+one of these exactly, and pick the one that means what you intend rather than
+the closest-looking name:
+
+{metrics}
+
+A prediction naming anything else cannot be tested, and an untested prediction
+proves nothing.
+
 ## Respond with
 
 A list of findings. Report nothing rather than padding: an empty result is a
