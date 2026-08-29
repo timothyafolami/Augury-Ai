@@ -80,6 +80,11 @@ class Scheduler:
         self._spent_micros = 0
         self._budget_micros = round(self._budget.usd * MICRO_USD)
         self._seen: set[str] = set()
+        # Handed out but not yet reported on, with the estimate charged for
+        # them. Kept apart from `_seen` so a reserved module is neither
+        # re-offered nor double-charged when its real cost arrives.
+        self._reserved: dict[str, int] = {}
+        self._recorded: set[str] = set()
         self._suspect: dict[str, int] = {}
         self._stopped_because = "still running"
         self.coverage_analysed: list[str] = []
@@ -133,14 +138,45 @@ class Scheduler:
 
         return max(affordable, key=lambda m: (self._value(m), m.path))
 
+    def next_batch(self, size: int) -> list[ModuleNode]:
+        """The next `size` modules worth reading, handed out together.
+
+        Modules are reviewed concurrently, because full coverage of a real
+        backend is 261 of them and one at a time is an hour. Batched rather
+        than unbounded: a module whose neighbours produced findings is
+        promoted, and that needs results back before the next choice is made.
+
+        Reserved as they are handed out, so a module cannot appear in two
+        batches. The estimate is charged now and corrected by `record` when the
+        real cost is known.
+        """
+        batch: list[ModuleNode] = []
+        for _ in range(max(size, 0)):
+            module = self.next()
+            if module is None:
+                break
+            batch.append(module)
+            self._reserve(module)
+        return batch
+
+    def _reserve(self, module: ModuleNode) -> None:
+        """Hold a module out of later batches, and charge its estimate."""
+        self._seen.add(module.path)
+        self._reserved[module.path] = self._estimate_micros(module)
+        self._spent_micros += self._reserved[module.path]
+
     def record(self, module: ModuleNode, *, findings: int, spent_usd: float) -> None:
         """Report the outcome of reading a module, which steers what comes next.
 
         Idempotent per module: a caller that records twice does not pay twice.
         """
-        if module.path in self._seen:
+        if module.path in self._recorded:
             return
+        self._recorded.add(module.path)
         self._seen.add(module.path)
+        # A reserved module was charged an estimate when it was handed out;
+        # replace it with what it actually cost rather than charging twice.
+        self._spent_micros -= self._reserved.pop(module.path, 0)
         self._spent_micros += round(spent_usd * MICRO_USD)
         self.coverage_analysed.append(module.path)
         if findings > 0:
