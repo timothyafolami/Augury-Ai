@@ -9,15 +9,27 @@ recorded.
 Nothing here simulates the defect. The function under measurement is the
 function under review; only the concurrency is supplied.
 
+Only InsufficientFunds is caught. An earlier version caught everything, so a
+`debit` that raised on every call measured 100.0 -- a healthier-looking number
+than the defect's 90.0, from code that could not debit at all. A broken
+function must fail the experiment and resolve to Broken, not produce a
+flattering measurement.
+
 The last line printed is the measurement, in currency units remaining.
 """
 
 import asyncio
+import os
 import sys
 from decimal import Decimal
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "repo"))
+# The repository under measurement. Overridable so the same experiment can be
+# run against a remediated copy: an experiment that reports the same number
+# either way is not measuring the defect, and tests/test_experiments_
+# discriminate.py proves each one does by pointing this at the fixed version.
+REPO = Path(os.environ.get("AUGURY_CASE_REPO", Path(__file__).resolve().parent.parent / "repo"))
+sys.path.insert(0, str(REPO))
 
 from sqlalchemy import select  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
@@ -54,7 +66,8 @@ async def main() -> None:
         async with sessions() as session:
             try:
                 await debit(session, 1, EACH)
-            except (InsufficientFunds, Exception):
+            except InsufficientFunds:
+                # A refused debit is a correct outcome, not a failure.
                 return
 
     await asyncio.gather(*(take() for _ in range(DEBITS)))
