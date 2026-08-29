@@ -84,5 +84,12 @@
       "verification": "load",
       "expected_metric": "worker_saturation"
     }
-  ]
+  ],
+  "experiment_conditions": {
+    "queries_per_request": "one GET /orders listing for a customer with 50 orders of 3 line items each",
+    "final_balance": "a wallet holding 100.00, with 10 concurrent debits of 10.00",
+    "http_status": "one orders listing issued while the database is unreachable",
+    "retry_amplification": "20 concurrent charges against a gateway returning 503 to everything",
+    "worker_saturation": "4 concurrent shipping quotes against a provider that accepts the connection and never answers, measured after 8 seconds"
+  }
 }
