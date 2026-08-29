@@ -159,3 +159,90 @@ def test_a_locator_over_a_checkout_resolves_across_languages(tmp_path) -> None: 
     assert locate_in("b.go", "wanted") == 5
     assert locate_in("missing.py", "wanted") is None
     assert locate_in("a.txt", "wanted") is None
+
+
+# -- ambiguity, hostile input, and the node types the table promises --------
+
+
+def test_two_definitions_of_one_name_resolve_to_neither() -> None:
+    """Ambiguity is unconfirmed, and unconfirmed means None.
+
+    This locator was added to make lines more accurate. On a shadowed or
+    overloaded name it returned the first match, so a specialist that named
+    line 47 correctly had it replaced by line 2 -- with the authority of "the
+    parser confirmed it". Worse than the guess it replaced.
+    """
+    source = (
+        "class A:\n    def close(self):\n        pass\n\n\n"
+        "class B:\n    def close(self):\n        pass\n"
+    )
+    assert locate(source, "close", Language.PYTHON) is None
+
+
+def test_a_qualifier_picks_the_right_one_of_two() -> None:
+    source = (
+        "class A:\n    def close(self):\n        pass\n\n\n"
+        "class B:\n    def close(self):\n        pass\n"
+    )
+    assert locate(source, "B.close", Language.PYTHON) == 7
+    assert locate(source, "A.close", Language.PYTHON) == 2
+
+
+def test_a_qualifier_picks_the_right_one_of_two_in_java() -> None:
+    source = (
+        "class Pool {\n    void close() { }\n}\n\nclass Connection {\n    void close() { }\n}\n"
+    )
+    assert locate(source, "Connection.close", Language.JAVA) == 6
+    assert locate(source, "Pool.close", Language.JAVA) == 2
+    # And without the qualifier, two matches means neither.
+    assert locate(source, "close", Language.JAVA) is None
+
+
+TYPE_CASES: list[tuple[Language, str, str, int]] = [
+    (Language.GO, "package m\n\ntype Pool struct{}\n", "Pool", 3),
+    (Language.RUST, "struct Pool {}\n", "Pool", 1),
+    (Language.RUST, "enum Mode { A }\n", "Mode", 1),
+    (Language.RUST, "trait Close { fn c(&self); }\n", "Close", 1),
+    (Language.CPP, "class Pool {\n public:\n  int x;\n};\n", "Pool", 1),
+    (Language.CPP, "struct Item {\n  int y;\n};\n", "Item", 1),
+    (Language.JAVA, "class Pool { }\n", "Pool", 1),
+]
+
+
+@pytest.mark.parametrize(("language", "source", "symbol", "line"), TYPE_CASES)
+def test_every_declared_definition_node_can_actually_resolve(
+    language: Language, source: str, symbol: str, line: int
+) -> None:
+    """DEFINITION_NODES advertised seven node types that could never match.
+
+    Type-introducing grammar nodes name themselves with a `type_identifier`,
+    which the unwrap loop did not accept, so Go type declarations and every
+    Rust and C++ type returned None while the table claimed support.
+    """
+    assert locate(source, symbol, language) == line
+
+
+def test_source_that_defeats_the_python_parser_returns_none_not_an_exception() -> None:
+    """A deeply chained expression raises RecursionError, not SyntaxError.
+
+    It propagated out of to_report and destroyed a review that had already been
+    paid for, at the last step, after every model call was spent.
+    """
+    assert locate("TOTAL = 1" + "+1" * 60_000 + "\n", "wanted", Language.PYTHON) is None
+
+
+def test_the_locator_will_not_read_outside_its_root(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The path comes from the model, and `root / path` honours an absolute one.
+
+    The MCP server fixes a root and refuses anything outside it; the locator is
+    then handed model-authored paths and must enforce the same boundary.
+    """
+    from augury.core.cartography.symbols import locator_for
+
+    (tmp_path / "secret.py").write_text("\n\ndef token():\n    pass\n")
+    root = tmp_path / "repo"
+    root.mkdir()
+    locate_in = locator_for(root)
+
+    assert locate_in("../secret.py", "token") is None
+    assert locate_in(str(tmp_path / "secret.py"), "token") is None
