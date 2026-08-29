@@ -11,6 +11,7 @@ dependencies = [
     "rich>=13.9",
     "tree-sitter>=0.26.0",
     "tree-sitter-language-pack>=1.15.8",
+    "pyyaml>=6.0.3",
 ]
 
 [project.optional-dependencies]
@@ -60,3 +61,8 @@ mypy_path = "src"
 python_version = "3.12"
 # Same reason as ruff's exclusion: these are inputs under review, not our code.
 exclude = ["^eval/cases/", "^tests/fixtures/"]
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20260815",
+]
