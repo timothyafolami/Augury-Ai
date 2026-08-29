@@ -20,9 +20,12 @@ from augury.agents.augury import AuguryReviewer
 from augury.agents.baseline import BaselineReviewer
 from augury.core.adapters.provider import model_from
 from augury.core.cartography import Cartographer
+from augury.core.cartography.languages import EXTENSIONS
 from augury.core.findings import Report
+from augury.core.scheduling import Budget
 from augury.core.scoring import Score
 from augury.core.settings import Settings, SettingsError, load_settings
+from augury.core.survey import Surveyor
 from augury.core.trajectory import Trajectory
 from augury.evaluation.cases import Case, load_cases
 from augury.evaluation.runner import run_arm
@@ -56,13 +59,85 @@ def cases() -> None:
 
 
 @app.command()
+def survey(
+    path: str = typer.Option(..., help="Repository to survey"),
+    scope: str = typer.Option("", help="Comma-separated directories to limit the map to"),
+) -> None:
+    """Read a repository's deployment and structure. Free, and needs no key.
+
+    Everything here is deterministic: the compose file is a declaration, the
+    import graph is arithmetic. Run it before paying for a review, because it
+    is what tells you which directory is the service, what each one runs, and
+    how much of the repository a request can actually reach.
+    """
+    root = Path(path).expanduser().resolve()
+    if not root.is_dir():
+        _fail(f"--path must be a directory: {root}")
+
+    found = Surveyor(root).survey()
+    limits = tuple(part.strip() for part in scope.split(",") if part.strip())
+    entrypoints = tuple({e for service in found.services for e in service.entrypoints})
+
+    try:
+        repo = Cartographer(root, scope=limits, entrypoints=entrypoints).map()
+    except ValueError as exc:
+        _fail(str(exc))
+
+    if found.services:
+        services = Table("service", "built from", "ports", "command")
+        for service in found.services:
+            services.add_row(
+                service.name,
+                service.source_root or ".",
+                ", ".join(service.ports) or "-",
+                (service.command[:70] or "-"),
+            )
+        console.print(services)
+
+    if found.backing:
+        backing = Table("depends on", "kind", "image")
+        for item in found.backing:
+            backing.add_row(item.name, item.kind, item.image)
+        console.print(backing)
+
+    languages: dict[str, int] = {}
+    for module in repo.modules:
+        name = EXTENSIONS[Path(module.path).suffix.lower()].value
+        languages[name] = languages.get(name, 0) + 1
+
+    reached = [m for m in repo.modules if m.depth is not None]
+    console.print(
+        f"\n{len(repo.modules)} modules, {sum(m.loc for m in repo.modules):,} lines, "
+        f"{dict(sorted(languages.items()))}"
+    )
+    console.print(
+        f"{len(reached)} reachable from an entrypoint, "
+        f"{len(repo.unreachable)} not, {len(repo.unparsed)} unparsed"
+    )
+    if repo.unreachable:
+        console.print("\n[bold]no request reaches these[/bold] (first 10):")
+        for unreached in repo.unreachable[:10]:
+            console.print(f"  {unreached}")
+
+
+@app.command()
 def review(
-    case: str = typer.Option(..., help="Case id, e.g. B01"),
+    case: str = typer.Option("", help="Case id, e.g. B01"),
+    path: str = typer.Option("", help="Any repository to review, instead of a case"),
+    scope: str = typer.Option("", help="Comma-separated directories to limit the review to"),
+    budget: float = typer.Option(0.25, min=0.0, help="Ceiling on what this review may spend"),
     arm: str = typer.Option("augury", help="baseline or augury"),
     prove: bool = typer.Option(False, help="Run the case's experiments against the claims"),
     trajectory: str = typer.Option("", help="Write every step to this JSONL file"),
 ) -> None:
-    """Review one case with one arm and print what it found."""
+    """Review a case, or any repository, and print what it found."""
+    if case and path:
+        _fail("Give --case or --path, not both.")
+    if not case and not path:
+        _fail("Give --case for a seeded fixture, or --path for your own repository.")
+    if path:
+        _review_repository(path, scope, budget, arm, trajectory)
+        return
     chosen = _case(case)
     reviewer = _arm(arm)
     settings = _settings()
@@ -86,6 +161,56 @@ def review(
         # printed "untested" while the command reported success.
         report = asyncio.run(_prove(chosen, report))
     _print_findings(report)
+
+
+def _review_repository(path: str, scope: str, budget_usd: float, arm: str, trajectory: str) -> None:
+    """Review a repository that ships no answer key.
+
+    The survey runs first and for nothing: it says which directories hold
+    services and where each one's code starts, and those entrypoints are what
+    turn a flat file list into a walk outward along the request path.
+    """
+    root = Path(path).expanduser().resolve()
+    if not root.is_dir():
+        _fail(f"--path must be a directory: {root}")
+
+    found = Surveyor(root).survey()
+    limits = tuple(part.strip() for part in scope.split(",") if part.strip())
+    entrypoints = tuple({e for service in found.services for e in service.entrypoints})
+    try:
+        repo = Cartographer(root, scope=limits, entrypoints=entrypoints).map()
+    except ValueError as exc:
+        _fail(str(exc))
+
+    console.print(
+        f"{len(repo.modules)} modules, {len(repo.unreachable)} of them reached by "
+        f"no entrypoint. Budget ${budget_usd:.2f}."
+    )
+
+    settings = _settings()
+    model = model_from(settings)
+    reviewer = _arm(arm)
+    recording = Trajectory(Path(trajectory)) if trajectory else None
+
+    async def run() -> Report:
+        # The baseline's ceiling is the prompt, not the money: it sends the
+        # repository in one call and drops whatever does not fit. Handing it a
+        # dollar budget would imply a knob it does not have.
+        built = (
+            AuguryReviewer(model, budget=Budget(usd=budget_usd), trajectory=recording)
+            if reviewer is AuguryReviewer
+            else BaselineReviewer(model, trajectory=recording)
+        )
+        result: Report = await built.review(repo, root)
+        return result
+
+    report = asyncio.run(run())
+    _print_findings(report)
+    if report.coverage is not None:
+        console.print(
+            f"read {len(report.coverage.analysed)} of {len(repo.modules)} modules, "
+            f"stopped because {report.coverage.stopped_because}"
+        )
 
 
 @app.command()
