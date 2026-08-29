@@ -42,6 +42,16 @@ PRICING: dict[str, Pricing] = {
     # Anthropic
     "claude-sonnet-4-5": Pricing(usd_per_1m_input=3.00, usd_per_1m_output=15.00),
     "claude-haiku-4-5": Pricing(usd_per_1m_input=1.00, usd_per_1m_output=5.00),
+    # DeepSeek, at PEAK rates. It bills half off-peak (outside 01:00-04:00 and
+    # 06:00-10:00 UTC on weekdays), and a cost that is sometimes half what was
+    # reported is a cost nobody can plan against. The number here is the one
+    # that is never an underestimate.
+    #
+    # Input is the cache-miss rate for the same reason: a cache hit is cheaper
+    # and is not something this can predict per call.
+    "deepseek-v4-flash": Pricing(usd_per_1m_input=0.44, usd_per_1m_output=1.32),
+    "deepseek-v4-pro": Pricing(usd_per_1m_input=1.32, usd_per_1m_output=3.96),
+    "deepseek-v4-flash-vision-exp": Pricing(usd_per_1m_input=0.44, usd_per_1m_output=1.32),
     # Test doubles
     "a-model": Pricing(usd_per_1m_input=1.00, usd_per_1m_output=1.00),
 }
