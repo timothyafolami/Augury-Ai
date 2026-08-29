@@ -17,6 +17,7 @@ from typing import cast
 
 from augury.core.adapters.base import ChatModel
 from augury.core.cartography import RepoMap
+from augury.core.cartography.symbols import locator_for
 from augury.core.drafts import DraftReport, to_report
 from augury.core.findings import Report
 from augury.core.metrics import describe, vocabulary
@@ -83,6 +84,8 @@ class BaselineReviewer:
             model_id=self._model.model_id,
             usd=spent.usd,
             seconds=time.monotonic() - started,
+            # The specialist names the symbol; the parser supplies the line.
+            locator=locator_for(root),
         )
         return report.model_copy(
             update={
