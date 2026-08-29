@@ -177,3 +177,46 @@ async def test_a_review_without_a_trajectory_still_works(tmp_path: Path) -> None
     report = await AuguryReviewer(model()).review(Cartographer(root).map(), root)
 
     assert report is not None
+
+
+# -- redaction must fail closed --------------------------------------------
+# An adversarial review found the private-key rule matched only the BEGIN
+# header, so re.sub replaced that one line and published the key body with the
+# marker that secret scanners key on removed. Strictly worse than not matching:
+# the leak became complete and undetectable by tooling.
+#
+# These assert on the ABSENCE OF THE SECRET, never on the presence of the word
+# REDACTED, because the PEM case passed the latter check while leaking.
+
+
+PRIVATE_KEY = """-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAvR8xN2kQwJ4dLm3pYzT1sB7cF9gH0jK2lM4nO6pQ8rS1tU3vW
+5xY7zA9bC1dE3fG5hI7jK9lM1nO3pQ5rS7tU9vW1xY3zA5bC7dE9fG1hI3jK5lM7n
+-----END RSA PRIVATE KEY-----"""
+
+
+def test_a_private_key_body_is_removed_not_just_its_header() -> None:
+    redacted = redact(f"found in deploy/key.pem:\n{PRIVATE_KEY}\n")
+
+    assert "MIIEowIBAAKCAQEAvR8xN2kQwJ4dLm3pYzT1sB7cF9gH0jK2lM4nO6pQ8rS1tU3vW" not in redacted
+    assert "5xY7zA9bC1dE3fG5hI7jK9lM1nO3pQ5rS7tU9vW1xY3zA5bC7dE9fG1hI3jK5lM7n" not in redacted
+
+
+@pytest.mark.parametrize(
+    ("secret", "what"),
+    [
+        ("postgres://admin:S3cr3tP4ssw0rd@db.internal:5432/orders", "database URI password"),
+        ("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "AWS secret access key"),
+        ("github_pat_11ABCDEFG0abcdefghijklABCDEFGHIJKLMNOPQRSTUVWXYZ0123", "fine-grained PAT"),
+        ("xoxb-123456789012-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx", "Slack bot token"),
+        ("AIzaSyD-1234567890abcdefghijklmnopqrstuvw", "Google API key"),
+        ("gho_16C7e42F292c6912E7710c838347Ae178B4a12", "GitHub OAuth token"),
+        ("PASSWORD=hunter2correcthorsebatterystaple", "a password assignment"),
+    ],
+)
+def test_the_shapes_a_reviewed_repository_actually_contains(secret: str, what: str) -> None:
+    """Case B01 is itself a Postgres service, so a connection string in a
+    reviewed file is the expected case rather than a hypothetical."""
+    body = secret.split("://")[-1].split("=")[-1]
+
+    assert body not in redact(f"in app/config.py: {secret}"), f"leaked a {what}"
