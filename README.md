@@ -82,46 +82,48 @@ Case **B01**: a seventeen-module orders service, five seeded defects each
 traced to a lab topic, each reading correctly line by line, plus a loud
 `FIXME: this is slow` on code that is fine.
 
-Model `openai/gpt-oss-120b` on Groq, temperature 0.
+**Eight seeds per arm**, every prediction put to the case's own experiments,
+`openai/gpt-oss-120b` on Groq at temperature 0.
 
-Three seeds per arm, every prediction put to the case's own experiments.
+| metric | baseline | augury | verdict |
+|---|---|---|---|
+| seeded recall, mean | 0.850 | 0.800 | no difference (permutation p = 0.63) |
+| seeded recall, spread | 0.600 - 1.000 | **0.800 - 0.800** | see below |
+| hit rate | 0.480 (12/25) | 0.703 (26/37) | suggestive, not significant (Fisher p = 0.11) |
+| prediction coverage | 25 tested | **37 tested** | |
+| cost, eight seeds | $0.025 | $0.228 (9.1x) | |
 
-| metric | baseline | augury |
-|---|---|---|
-| seeded recall, mean | 0.867 | **1.000** |
-| seeded recall, range | **0.600 - 1.000** | **1.000 - 1.000** |
-| hit rate | 0.571 (7 tested) | 0.500 (10 tested) |
-| prediction coverage | 0.64 | 0.42 |
-| cost, three seeds | $0.008 | $0.079 (10.5x) |
+**The pipeline does not find more defects.** The means differ by 0.05 and a
+permutation test over all 12,870 relabellings puts that at p = 0.63. There is
+nothing there, and eight seeds is enough to say so.
 
-The baseline is a single strong prompt containing the whole repository, asked
-for exactly the same thing including a prediction. It is not a strawman, and
-it is not beaten on either headline rate.
+**Its predictions are right more often, and that is not yet proven.** 0.703
+against 0.480 is the difference the whole project is about, and Fisher's exact
+test puts it at p = 0.11. That is suggestive and it is not significance. It is
+reported as suggestive.
 
-**What separates them is consistency, not average quality.** Across three
-seeds the baseline found 5 of 5, 5 of 5, then 3 of 5. Augury found 5 of 5
-every time. A reviewer that occasionally misses two fifths of what is there is
-materially worse than one that does not, even when their means are close, and
-the mean is what a single run would have shown you.
+**The one clean separation is determinism.** Across eight seeds the baseline
+returned three different answers (0.6, 0.8, 1.0); the pipeline returned exactly
+0.800 eight times out of eight. Under the baseline's own observed distribution,
+eight identical draws has probability 0.004. A review you can re-run and get
+the same answer from is worth something in CI, and it is the only property here
+that survives its own statistics.
 
-On hit rate the two are **not distinguishable**: 0.571 against 0.500 over seven
-and ten tested predictions. Neither denominator supports a claim.
+Both arms miss exactly one defect and **they miss different ones**: the
+baseline misses the N+1, whose loop and query live in separate files; the
+pipeline misses the retry storm. Neither is better. They fail differently.
 
-Recall is formally **inconclusive** too, because the ranges touch at 1.000.
-`SweepResult.compare` returns that verdict automatically whenever ranges
-overlap, so an unsupported win cannot be published by accident.
-
-See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for how each of these numbers
-moved, and what failed to produce it.
-
----
+Two earlier claims from this same comparison were withdrawn -- a consistency
+claim that turned out to be substring matching, and a hit-rate claim measured
+at a third of the coverage. Both are in
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md) with what produced them.
 
 ## Run it
 
 ```bash
 make install
 cp .env.example .env      # add GROQ_API_KEY
-make check                # lint, types, 311 tests
+make check                # lint, types, 388 tests
 ```
 
 Full instructions, including reproducing the published numbers with no API key,
