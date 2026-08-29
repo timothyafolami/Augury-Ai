@@ -29,17 +29,36 @@ from augury.core.adapters.base import Usage
 # must not be published along with it.
 _SECRETS = re.compile(
     r"""(
+        # A private key is matched whole. Matching only the BEGIN line replaced
+        # the header and published the body -- strictly worse than no match,
+        # because the marker every secret scanner keys on had been removed.
+        -----BEGIN[A-Z\ ]*PRIVATE\ KEY-----.*?-----END[A-Z\ ]*PRIVATE\ KEY-----
+
         # Character classes include _ and -: real keys contain them, and a
-        # class without them matched only up to the first underscore and then
-        # fell short of the length floor, silently publishing the key.
-        gsk_[A-Za-z0-9\-_]{20,}
+        # class without them matched only to the first underscore and then fell
+        # short of the length floor, silently publishing the key.
+        | gsk_[A-Za-z0-9\-_]{20,}
         | sk-[A-Za-z0-9\-_]{20,}
-        | ghp_[A-Za-z0-9\-_]{20,}
+        | gh[opsu]_[A-Za-z0-9\-_]{20,}
+        | github_pat_[A-Za-z0-9\-_]{20,}
+        | xox[baprs]-[A-Za-z0-9\-]{10,}
         | AKIA[0-9A-Z]{16}
+        | AIza[A-Za-z0-9\-_]{30,}
         | eyJ[A-Za-z0-9\-_]{10,}\.[A-Za-z0-9\-_]{10,}\.[A-Za-z0-9\-_]{10,}
-        | -----BEGIN[ A-Z]*PRIVATE\ KEY-----
+
+        # The password inside a connection string. Case B01 is itself a
+        # Postgres service, so this is the expected shape in a reviewed file
+        # rather than a hypothetical one.
+        | (?<=://)[^:@/\s]+:[^@/\s]+(?=@)
+
+        # A secret being assigned. Deliberately broad: this file is committed
+        # and handed to judges, so redaction fails closed.
+        | (?i:password|secret|passwd|api[_-]?key|access[_-]?token)\s*[=:]\s*\S+
+
+        # An AWS secret access key has no prefix to key on, only its shape.
+        | (?<![A-Za-z0-9/+=])[A-Za-z0-9/+=]{40}(?![A-Za-z0-9/+=])
     )""",
-    re.VERBOSE,
+    re.VERBOSE | re.DOTALL,
 )
 
 
