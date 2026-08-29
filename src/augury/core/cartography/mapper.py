@@ -20,6 +20,29 @@ from augury.core.cartography.model import ModuleNode, RepoMap
 # becoming replacement-character soup that is parsed and then tokenised at cost.
 MAX_SOURCE_BYTES = 256 * 1024
 
+# Files that set the conditions source code runs under. A pool size is only
+# wrong relative to a worker count, and the worker count lives here. Sent with
+# every module, so this list stays short and each entry is trimmed.
+CONTEXT_FILES = (
+    "Dockerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "compose.yml",
+    "compose.yaml",
+    "requirements.txt",
+    "pyproject.toml",
+    "package.json",
+    "go.mod",
+    "Cargo.toml",
+    "pom.xml",
+    "gunicorn.conf.py",
+    "uvicorn.json",
+    "Procfile",
+)
+
+# Enough to carry a CMD line and a service block, not a whole manifest.
+MAX_CONTEXT_CHARS = 4_000
+
 EXCLUDED_DIRS = frozenset(
     {
         ".venv",
@@ -98,7 +121,25 @@ class Cartographer:
             modules=self._with_fan_in(nodes),
             unparsed=unparsed,
             skipped=skipped,
+            context=self._context(),
         )
+
+    def _context(self) -> dict[str, str]:
+        """Deployment configuration, trimmed.
+
+        Only the named files: this is sent with every module, so anything here
+        is paid for many times over and earns its place only by changing how
+        the module reads. A .env is never collected -- context reaches a model
+        and a committed recording, and a secret belongs in neither.
+        """
+        found: dict[str, str] = {}
+        for name in CONTEXT_FILES:
+            path = self._root / name
+            if not path.is_file() or path.is_symlink():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            found[name] = text[:MAX_CONTEXT_CHARS]
+        return found
 
     def _refuse(self, path: Path) -> str | None:
         """Why this file will not be read, or None to read it.
