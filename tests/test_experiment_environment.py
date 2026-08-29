@@ -128,3 +128,46 @@ def test_a_slow_daemon_is_treated_as_down_rather_than_hanging_the_review() -> No
         raise subprocess.TimeoutExpired(cmd="docker", timeout=5.0)
 
     assert not docker_is_up(probe=hangs)
+
+
+def test_a_scope_inside_a_build_context_still_finds_its_service() -> None:
+    """`--scope backend/src/services` is still the `api` image.
+
+    Matching required the scope to equal the build context, so reviewing any
+    subdirectory of a service fell back to this machine -- and reported that
+    no service builds from the reviewed directory, for a repository where one
+    plainly does. Narrowing the scope is the normal way to run this.
+    """
+    chosen = choose_environment(
+        root=Path("/repo"),
+        scope=("backend/src/services",),
+        survey=_survey(),
+        docker_available=True,
+    )
+
+    assert chosen.kind == "compose"
+    assert chosen.service == "api"
+
+
+def test_a_scope_outside_every_build_context_still_falls_back() -> None:
+    """A directory no service is built from has no image to borrow."""
+    chosen = choose_environment(
+        root=Path("/repo"),
+        scope=("docs",),
+        survey=_survey(),
+        docker_available=True,
+    )
+
+    assert chosen.kind == "local"
+
+
+def test_a_sibling_with_a_shared_prefix_is_not_a_match() -> None:
+    """`backend-tools` is not inside `backend`, however it sorts."""
+    chosen = choose_environment(
+        root=Path("/repo"),
+        scope=("backend-tools",),
+        survey=_survey(),
+        docker_available=True,
+    )
+
+    assert chosen.kind == "local"
