@@ -76,18 +76,40 @@ unsettled prediction proves nothing.
 
 ## The codebase
 
+Some of the blocks below are deployment configuration rather than source, and
+are labelled as such. They set the conditions the code runs under. A pool size
+is not wrong on its own; it is wrong relative to a worker count, and the worker
+count is in one of those blocks rather than in the module you are reading.
+
 {repository}
 
 ## Respond with
 
 A list of findings. For each:
 
-- `path`, `line`, `symbol`: where it is
+- `path`: the file, exactly as given above
+- `line`: where it starts
+- `symbol`: the function, class or configuration key involved
 - `layer`: one of concurrency, network, data, distributed, failure,
   observability, security, craft
 - `mechanism`: why this fails, in terms of the thing that actually breaks
 - `severity`: high, medium or low
 - `remediation`: the change, stated as a change and not as advice
-- `arithmetic`: how you derived the threshold
-- `prediction`: metric, comparator (at_least, at_most, between), value, upper
-  (for a range), unit, condition. Omit entirely if you cannot derive one.
+- `arithmetic`: how you derived the threshold below, showing the numbers
+- `prediction`: the falsifiable claim, as an object:
+  - `metric`: what would be measured, e.g. `http_req_duration_p99`,
+    `queries_per_request`, `active_connections`, `final_balance`
+  - `comparator`: `at_least`, `at_most`, or `between`
+  - `value`: the threshold, or the lower bound when the comparator is `between`
+  - `upper`: the upper bound for `between`, otherwise `null`
+  - `unit`: `ms`, `s`, `queries`, `rows`, `x`, `rps`, `count`
+  - `condition`: the circumstance it holds under, e.g. `rate=250rps`,
+    `50 rows`, `two concurrent writers`
+
+  Set `prediction` to `null` only when you genuinely cannot derive a number
+  from the mechanism. A finding whose arithmetic you have already worked out
+  above has a prediction; write it down.
+
+  A threshold of zero is not a prediction, because every measurement of a
+  magnitude is at least zero. Neither is a range spanning more than about a
+  hundredfold. Both will be rejected.
