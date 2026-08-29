@@ -51,6 +51,7 @@ FINDS_THE_DEFECT: dict[str, Any] = {
                 "metric": "http_req_duration_p99",
                 "comparator": "at_least",
                 "value": 1000.0,
+                "upper": None,
                 "unit": "ms",
                 "condition": "rate=250rps",
             },
@@ -68,6 +69,8 @@ FINDS_SOMETHING_ELSE: dict[str, Any] = {
             "mechanism": "the health endpoint could be documented better",
             "severity": "low",
             "remediation": "add a docstring",
+            "arithmetic": "",
+            "prediction": None,
         }
     ]
 }
