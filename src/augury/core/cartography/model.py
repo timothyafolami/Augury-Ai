@@ -41,6 +41,12 @@ class ModuleNode(BaseModel):
         description="External imports no detector recognised. 'No signal' is a "
         "claim about the code; this distinguishes it from a gap in our table.",
     )
+    external: frozenset[str] = Field(
+        default_factory=frozenset,
+        description="Third-party packages this module imports. What a "
+        "specialist needs to be told the installed version of, rather than "
+        "recall one.",
+    )
     fan_in: int = Field(default=0, ge=0, description="How many modules import this one")
     depth: int | None = Field(
         default=None,
