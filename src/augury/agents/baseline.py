@@ -75,14 +75,23 @@ class BaselineReviewer:
 
         Silently truncating would overstate what this arm actually saw, which
         is the one thing that would make the comparison unfair in our favour.
+
+        The deployment configuration goes in first, ahead of any module. Half
+        the defect taxonomy is a number in the source read against a number in
+        the Dockerfile, and for a while this arm was asked for that arithmetic
+        without being given the second number while the other arm was. That is
+        not a fair comparison, and it was not even a budget constraint: this
+        prompt uses about a seventh of what it is allowed.
         """
         ordered = sorted(repo.modules, key=lambda m: (-m.fan_in, -len(m.signals), m.path))
-        included: list[str] = []
+        included: list[str] = [
+            f"### {name}\n```\n{text}\n```" for name, text in repo.context.items()
+        ]
         skipped: dict[str, str] = {
             **{path: "unparsed" for path in repo.unparsed},
             **dict(repo.skipped),
         }
-        used = 0
+        used = sum(len(block) for block in included)
 
         for module in ordered:
             remaining = self._budget - used
