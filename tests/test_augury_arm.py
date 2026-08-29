@@ -133,7 +133,24 @@ async def test_the_specialist_brief_reaches_the_prompt(tmp_path: Path) -> None:
 
 
 async def test_triage_choosing_nobody_costs_nothing_further(tmp_path: Path) -> None:
+    """Only where triage runs at all.
+
+    A module whose signals allow one specialist skips triage entirely -- there
+    is nothing to narrow and the call would buy nothing -- so this needs a
+    module with two possible layers for triage to have a decision to make.
+    """
     root = make_repo(tmp_path)
+    (root / "app" / "both.py").write_text(
+        "import sqlalchemy"
+        + chr(10)
+        + "import httpx"
+        + chr(10) * 3
+        + "def fetch():"
+        + chr(10)
+        + "    return httpx"
+        + chr(10)
+    )
+    (root / "app" / "db.py").unlink()
     stub = model(TriageDecision={"specialists": [], "reasoning": "nothing here"})
 
     report = await AuguryReviewer(stub).review(Cartographer(root).map(), root)
