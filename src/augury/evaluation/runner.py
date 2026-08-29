@@ -57,7 +57,7 @@ async def run_arm(
             _note(case, exc)
 
         if prove and not failed:
-            report = await _measure(case, report)
+            report = await measure(case, report)
 
         results.append(
             score(
@@ -91,7 +91,7 @@ def _note(case: Case, exc: Exception) -> None:
     print(f"  {case.id}: review failed: {type(exc).__name__}: {exc}")
 
 
-async def _measure(case: Case, report: Report) -> Report:
+async def measure(case: Case, report: Report) -> Report:
     """Put every falsifiable finding to the case's own experiment.
 
     One experiment per metric, run once and shared: twenty findings about the
