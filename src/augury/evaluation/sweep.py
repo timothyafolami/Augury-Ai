@@ -23,6 +23,7 @@ class SweepResult(BaseModel):
 
     arm: str
     seeds: int
+    failed: int
 
     recall_mean: float | None
     recall_low: float | None
@@ -88,16 +89,23 @@ def summarise(scores: list[Score]) -> SweepResult:
 
     pooled = aggregate(scores)
 
+    failures = sum(1 for entry in scores if entry.failed)
+    # A run in which every review crashed has no recall. Reporting 0.000 for it
+    # would be a fabricated result, and its zero spread is the same signature a
+    # perfectly steady arm produces.
+    completed = failures < len(scores)
+
     return SweepResult(
         arm=arms.pop(),
         seeds=len(by_seed),
+        failed=failures,
         hits=pooled.hits,
         tested=pooled.tested,
         experiments=pooled.experiments,
         hit_rate=pooled.hit_rate,
-        recall_mean=fmean(recalls) if recalls else None,
-        recall_low=min(recalls) if recalls else None,
-        recall_high=max(recalls) if recalls else None,
+        recall_mean=fmean(recalls) if recalls and completed else None,
+        recall_low=min(recalls) if recalls and completed else None,
+        recall_high=max(recalls) if recalls and completed else None,
         precision_mean=fmean(precisions) if precisions else None,
         usd_mean=fmean(run.usd for run in per_seed),
         seconds_mean=fmean(run.seconds for run in per_seed),
