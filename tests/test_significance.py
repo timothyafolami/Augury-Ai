@@ -11,15 +11,18 @@ from augury.evaluation.significance import fisher_exact, permutation_p
 
 
 def test_a_clear_difference_is_significant() -> None:
-    assert fisher_exact(hits_a=30, tested_a=30, hits_b=0, tested_b=30) < 0.001
+    probability = fisher_exact(hits_a=30, tested_a=30, hits_b=0, tested_b=30)
+
+    assert probability is not None
+    assert probability < 0.001
 
 
 def test_a_suggestive_difference_is_not_dressed_up_as_significant() -> None:
     """26 of 37 against 12 of 25 is the real observed comparison. It looks
     like a win and does not reach the threshold."""
-    assert fisher_exact(hits_a=26, tested_a=37, hits_b=12, tested_b=25) == pytest.approx(
-        0.111, abs=0.01
-    )
+    probability = fisher_exact(hits_a=26, tested_a=37, hits_b=12, tested_b=25)
+
+    assert probability == pytest.approx(0.111, abs=0.01)
 
 
 def test_identical_rates_are_not_a_difference() -> None:
