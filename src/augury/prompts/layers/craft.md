@@ -10,8 +10,8 @@ of naming or structure.
 Specifically look for:
 
 - Broad exception handlers that return a default, an empty collection or None.
-  For each, say what the caller now believes and predict what the endpoint
-  returns when the dependency is down: status code, body, and latency.
+  For each, say what the caller now believes and predict `http_status` when the
+  dependency is down, and the `http_req_duration_p99` the caller waits.
 - Errors that are logged and then swallowed, which is the same defect with a
   paper trail nobody reads.
 - Functions whose failure mode is not expressible in their return type, so the
