@@ -26,6 +26,7 @@ IMPORT_NODES: dict[Language, frozenset[str]] = {
     Language.RUST: frozenset({"use_declaration"}),
     Language.JAVA: frozenset({"import_declaration"}),
     Language.TYPESCRIPT: frozenset({"import_statement", "call_expression"}),
+    Language.TSX: frozenset({"import_statement", "call_expression"}),
     Language.JAVASCRIPT: frozenset({"import_statement", "call_expression"}),
     Language.CPP: frozenset({"preproc_include"}),
 }
@@ -43,6 +44,7 @@ NAME_NODES: dict[Language, frozenset[str]] = {
     Language.RUST: frozenset({"scoped_identifier", "identifier", "crate"}),
     Language.JAVA: frozenset({"scoped_identifier"}),
     Language.TYPESCRIPT: frozenset({"string"}),
+    Language.TSX: frozenset({"string"}),
     Language.JAVASCRIPT: frozenset({"string"}),
     Language.CPP: frozenset({"system_lib_string", "string_literal"}),
 }
