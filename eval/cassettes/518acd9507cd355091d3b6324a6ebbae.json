@@ -1,3 +1,22 @@
 {
-  "findings": []
+  "findings": [
+    {
+      "path": "app/repositories/orders.py",
+      "line": 18,
+      "layer": "data",
+      "symbol": "list_for_customer",
+      "mechanism": "The SELECT filters on `customer_id` and orders by `created_at DESC` without a supporting index, causing a sequential scan of the orders table for each request. This violates the principle that hot predicates must be indexed, leading to high latency at scale (Reference: Correctness and cost at the database boundary).",
+      "severity": "medium",
+      "remediation": "Create a composite index on the orders table covering (customer_id, created_at DESC).",
+      "arithmetic": "Assuming the orders table holds ~1,000,000 rows and the DB scans ~0.0002 ms per row, a full scan costs 1,000,000 × 0.0002 ms ≈ 200 ms. With 50 orders returned, the query still scans the whole table, so the 99th‑percentile latency exceeds 200 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 200.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "customer has 50 orders"
+      }
+    }
+  ]
 }
