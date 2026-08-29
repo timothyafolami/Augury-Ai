@@ -37,6 +37,72 @@ distinguishes either of them from a review nobody can check.
 
 ---
 
+## Point it at your own service
+
+```bash
+augury survey --path /path/to/repo --scope backend
+```
+
+Free, no API key, a few seconds. It reads `docker-compose.yml` first, so before
+spending anything it can tell you which directories hold services, what each
+one runs, what they depend on, and how much of the repository a request can
+actually reach. On a real 1,137-module service:
+
+```
+| api              | backend        | 10000     | -                                        |
+| worker_default   | backend        | -         | celery -A src.tasks.celery_app worker    |
+|                  |                |           |   -Q default --concurrency=1             |
+| beat             | backend        | -         | celery -A src.tasks.celery_app beat      |
+
+depends on: redis (cache or queue), qdrant (vector store)
+
+261 modules, 35,380 lines
+173 reachable from an entrypoint, 88 not, 0 unparsed
+
+schema — 6 findings in the migrations
+dependencies — 6 findings
+```
+
+That `--concurrency=1` is a capacity ceiling that appears in **no source file**.
+Only the deployment declares it.
+
+Then, when you want the model involved:
+
+```bash
+augury review --path /path/to/repo --scope backend --budget 0.25   # ranked table
+augury report --path /path/to/repo --scope backend --out review.md # a document
+```
+
+`report` is for a codebase where a findings table is the wrong artefact. It
+writes what the service is, what its deployment declares, what its schema and
+dependencies say, the findings in rank order, and -- the section most reports
+omit -- how much was never looked at.
+
+---
+
+## Where the interesting part is
+
+The pipeline exists for repositories too large to put in one prompt. That is
+worth stating precisely, because it is also the reason the evaluation below
+cannot demonstrate it.
+
+On the 1,137-module service above, the baseline arm -- one prompt containing
+the whole repository, which is what most AI review tools are -- reaches this
+much of it:
+
+```
+modules the baseline can see    8
+modules it had to drop       1130   did not fit in one prompt
+                              0.7%
+```
+
+One prompt is one prompt. The seeded cases in `eval/` are 3 to 23 modules,
+where the baseline sees everything, so the published comparison measures the
+two arms in the one regime where the architecture cannot help. That is a real
+limitation of the evaluation and it is not fixed by running it again.
+
+---
+
 ## Who this is for
 
 The engineer on call for a service they did not fully write.
