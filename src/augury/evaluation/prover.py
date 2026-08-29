@@ -26,8 +26,29 @@ from augury.evaluation.cases import Case
 DEFAULT_TIMEOUT = 120.0
 
 
+def applies_to(prediction: Prediction, *, path: str, locations: tuple[str, ...]) -> bool:
+    """Whether this case's experiment can settle a claim about this file.
+
+    An experiment measures one defect in one place. A claim about a different
+    file is not settled by it, however right the metric name is: an arm
+    predicting `queries_per_request` about five unrelated files was scored a
+    perfect hit rate from a single run on a sixth, and one of those files was
+    the case's deliberate decoy.
+    """
+    return path in locations
+
+
 class Prover:
     """Runs a case's own experiment for one prediction."""
+
+    def locations_for(self, metric: str) -> tuple[str, ...]:
+        """The files a metric's experiment is about, from the case manifest."""
+        return tuple(
+            location
+            for defect in self._case.defects
+            if defect.expected_metric == metric
+            for location in defect.locations
+        )
 
     def __init__(self, case: Case, *, timeout: float = DEFAULT_TIMEOUT) -> None:
         self._case = case
