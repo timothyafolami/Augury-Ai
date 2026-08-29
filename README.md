@@ -166,11 +166,57 @@ and against more than one remediation, because passing against one is how
 ```bash
 make install
 cp .env.example .env      # add GROQ_API_KEY
-make check                # lint, types, 422 tests
+make check                # lint, types, 443 tests
 ```
 
 Full instructions, including reproducing the published numbers with no API key,
 are in [`docs/REPRODUCE.md`](docs/REPRODUCE.md).
+
+### On a repository of your own
+
+```bash
+augury mcp --root /path/to/your/repo
+```
+
+Serves the reviewer over the Model Context Protocol on stdio, so it runs inside
+whatever agent you already use rather than only behind this CLI. Three tools:
+
+| tool | cost | needs a key |
+|---|---|---|
+| `augury_map` | free | no |
+| `augury_explain` | free | no |
+| `augury_review` | reports what it spent | yes |
+
+Mapping is deterministic and the layer briefs are files on disk, so two of the
+three cost nothing — you can see what a review would cover, and what it would
+cost, before buying one. The root is fixed by whoever launches the server
+rather than chosen per call: the client is driven by a language model, and a
+model that can name any path can read any file on the machine.
+
+The stdio protocol is implemented directly rather than via the `mcp` SDK. It is
+about forty lines of JSON-RPC framing, it adds no dependency to a project a
+judge has to install offline, and it made the handler a pure request-to-response
+function that [`tests/test_mcp_server.py`](tests/test_mcp_server.py) exercises
+without a subprocess.
+
+---
+
+## Pointed at code nobody seeded
+
+Every number under **Results** comes from cases where this project planted the
+defects. So it was also run once against a repository it had never seen — 533
+modules, six languages, a five-cent budget. It read 14 files, spent $0.0501, and
+returned 10 findings. Scored by hand against the source: **four correct, two
+true but blind to what the code was for, one confidently false, three needing an
+experiment nobody has written.**
+
+The false one is the reason that run is worth publishing. It carried a metric, a
+comparator, a value, a unit and a runnable condition; it passed the
+falsifiability gate cleanly; and it was wrong. The gate makes a claim checkable,
+not true — which is the same thing the evaluation says, arrived at from the
+other direction.
+
+[`docs/FIELD_RUN.md`](docs/FIELD_RUN.md) has every finding and how it was scored.
 
 ---
 
