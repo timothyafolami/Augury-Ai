@@ -51,7 +51,8 @@ async def run_arm(
                 case=case.id,
                 arm=arm,
                 seed=seed,
-                detected=case.detected_by(report),
+                seeded=len(case.defects),
+                found=len(case.found_by(report)),
                 failed=failed,
             )
         )
