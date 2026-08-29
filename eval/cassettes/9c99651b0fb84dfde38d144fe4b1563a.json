@@ -2,20 +2,20 @@
   "findings": [
     {
       "path": "app/handlers/webhook.py",
-      "line": 9,
+      "line": 7,
       "layer": "data",
       "symbol": "record_delivery",
-      "mechanism": "Read‑modify‑write without SELECT FOR UPDATE (or atomic UPDATE) causes a lost‑update anomaly under READ COMMITTED isolation, as described in the reference material.",
+      "mechanism": "Read-modify-write without SELECT ... FOR UPDATE or atomic UPDATE leads to lost updates under READ COMMITTED isolation.",
       "severity": "high",
-      "remediation": "Wrap the increment in a SELECT FOR UPDATE or replace the read‑modify‑write with an atomic UPDATE statement (e.g., UPDATE shipment SET delivery_count = delivery_count + 1, status='delivered' WHERE id=:id) and commit within the same transaction, or run at SERIALIZABLE isolation.",
-      "arithmetic": "Assume initial delivery_count=0. Two concurrent calls each execute SELECT, read 0, compute 0+1=1, and commit. The second commit overwrites the first, leaving delivery_count=1. Expected final count=2, but observed ≤1.",
+      "remediation": "Use SELECT ... FOR UPDATE on the Shipment row or replace the increment with an atomic UPDATE statement (e.g., UPDATE shipment SET delivery_count = delivery_count + 1) and run in SERIALIZABLE isolation.",
+      "arithmetic": "Starting delivery_count=0. With 3 concurrent calls, each reads 0, increments to 1, commits. Final delivery_count = 1 (lost 2 updates).",
       "prediction": {
         "metric": "final_balance",
         "comparator": "at_most",
         "value": 1.0,
         "upper": null,
-        "unit": "count",
-        "condition": "two concurrent writers"
+        "unit": "x",
+        "condition": "3 concurrent writers"
       }
     }
   ]
