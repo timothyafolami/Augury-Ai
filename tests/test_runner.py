@@ -3,6 +3,10 @@
 Every arm sees identical cases and is scored by identical code. That is the
 only thing that makes two rows in the results table comparable, so it is
 enforced here rather than promised in prose.
+
+These tests build their own fixture case rather than using the shipped ones:
+adding a real case should never break the runner's tests, and a test that
+depends on the current case set is measuring the case set.
 """
 
 import json
@@ -14,7 +18,7 @@ from pydantic import BaseModel
 
 from augury.core.adapters.base import Usage
 from augury.core.scoring import aggregate
-from augury.evaluation.cases import load_cases
+from augury.evaluation.cases import Case, load_cases
 from augury.evaluation.runner import run_arm
 
 
@@ -59,6 +63,12 @@ FINDS_THE_DEFECT: dict[str, Any] = {
     ]
 }
 
+def fixture_cases() -> list[Case]:
+    """One case seeding one defect, built here so the shipped set can grow."""
+    root = Path(__file__).parent / "fixtures" / "runner-case"
+    return load_cases(root)
+
+
 FINDS_SOMETHING_ELSE: dict[str, Any] = {
     "findings": [
         {
@@ -79,16 +89,16 @@ FINDS_SOMETHING_ELSE: dict[str, Any] = {
 async def test_scores_every_case_and_labels_the_arm(tmp_path: Path) -> None:
     model = ScriptedModel(FINDS_THE_DEFECT)
 
-    scores = await run_arm("baseline", model, load_cases())
+    scores = await run_arm("baseline", model, fixture_cases())
 
     assert scores
     assert {s.arm for s in scores} == {"baseline"}
-    assert {s.case for s in scores} == {case.id for case in load_cases()}
+    assert {s.case for s in scores} == {case.id for case in fixture_cases()}
 
 
 async def test_records_whether_the_seeded_defect_was_found() -> None:
-    found = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), load_cases())
-    missed = await run_arm("baseline", ScriptedModel(FINDS_SOMETHING_ELSE), load_cases())
+    found = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), fixture_cases())
+    missed = await run_arm("baseline", ScriptedModel(FINDS_SOMETHING_ELSE), fixture_cases())
 
     assert all(s.found == s.seeded for s in found)
     assert all(s.found == 0 for s in missed)
@@ -96,7 +106,7 @@ async def test_records_whether_the_seeded_defect_was_found() -> None:
 
 async def test_detection_rate_survives_aggregation() -> None:
     """It is the one metric a reviewer cannot improve by saying less."""
-    scores = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), load_cases())
+    scores = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), fixture_cases())
 
     assert aggregate(scores).detection_rate == 1.0
 
@@ -109,20 +119,20 @@ async def test_a_case_that_raises_is_recorded_rather_than_ending_the_sweep() -> 
         async def structured[T: BaseModel](self, *, prompt: str, schema: type[T]) -> T:
             raise RuntimeError("provider said no")
 
-    scores = await run_arm("baseline", Failing({}), load_cases())
+    scores = await run_arm("baseline", Failing({}), fixture_cases())
 
     assert all(s.failed for s in scores)
     assert all(s.total_findings == 0 for s in scores)
 
 
 async def test_the_seed_is_carried_onto_every_score() -> None:
-    scores = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), load_cases(), seed=7)
+    scores = await run_arm("baseline", ScriptedModel(FINDS_THE_DEFECT), fixture_cases(), seed=7)
 
     assert {s.seed for s in scores} == {7}
 
 
 @pytest.mark.parametrize("arm", ["baseline", "augury"])
 async def test_the_arm_name_is_recorded_verbatim(arm: str) -> None:
-    scores = await run_arm(arm, ScriptedModel(FINDS_THE_DEFECT), load_cases())
+    scores = await run_arm(arm, ScriptedModel(FINDS_THE_DEFECT), fixture_cases())
 
     assert aggregate(scores).arm == arm
