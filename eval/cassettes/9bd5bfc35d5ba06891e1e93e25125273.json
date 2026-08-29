@@ -3,5 +3,5 @@
     "data",
     "security"
   ],
-  "reasoning": "data: review the database engine creation, session factory, and connection pooling; security: review handling of the DATABASE_URL environment variable and any exposure of credentials or connection settings."
+  "reasoning": "data: defines the database engine and async session lifecycle; security: obtains the DB URL from environment variables and configures connection pooling, which may affect credential exposure and access control."
 }
