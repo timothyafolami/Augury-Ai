@@ -21,21 +21,26 @@ predictions are recorded as untested rather than counted:
 
 | metric | baseline | augury | |
 |---|---|---|---|
-| seeded recall | 0.800 | 0.800 | tied |
-| falsifiable precision | **0.909** | 0.583 | baseline, clearly |
-| hit rate | 0.833 (25/30) | **1.000** (30/30) | Fisher p = 0.052 |
+| seeded recall (audited) | 0.700 | 0.800 | one observation |
+| falsifiable precision | **0.909** | 0.667 | baseline, clearly |
+| hit rate | 0.833 (5/6) | **1.000** (5/5) | not measured |
+| prediction coverage | 0.600 | 0.429 | graded on fewer of its own claims |
 | cost | $0.0017 | $0.0083 | 5.0x |
 
 The thesis as stated -- that the pipeline reviews code *better* -- is not
-supported. Recall is tied: it finds the same defects. It states markedly fewer
+supported. It finds the same defects. It states markedly fewer
 testable claims than the baseline. It costs five times as much.
 
-What it does do is be right more often about the claims it does make. Thirty of
-thirty tested predictions came back hits, against twenty-five of thirty. At
-these denominators that is p = 0.052, which is *suggestive, not significant*,
-and one sweep on the wrong side of every conventional threshold is not a
-finding. I am reporting it because it is the direction the evidence points,
-not because I believe it yet.
+What it does do is be right more often about the claims it does make -- by one
+experiment. Five of five against five of six. There is no p-value beside that
+because the repeats are not independent and the harness now refuses to compute
+one, which is the correct behaviour and also the end of the only result this
+project ever had that pointed at the pipeline.
+
+An earlier version of this paragraph said thirty of thirty against twenty-five
+of thirty, p = 0.052, suggestive. Every number in that sentence was an
+artefact: replay serves five repeats from one recording, and the significance
+test was the one place the independence guard had not been added.
 
 **And an earlier version of this table was unfair.** Falsifiable precision read
 0.778 against 0.833 -- favouring the pipeline -- because the analyst prompt was
