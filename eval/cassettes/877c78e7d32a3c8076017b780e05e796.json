@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "security"
+  ],
+  "reasoning": "Contains token verification with intensive hashing and potential DoS vectors, which falls under security review."
+}
