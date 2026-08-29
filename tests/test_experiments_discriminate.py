@@ -107,13 +107,26 @@ def test_an_experiment_gives_the_same_answer_twice(case: Case, script: Path) -> 
     )
 
 
-@pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
-def test_every_seeded_defect_has_an_experiment_that_can_settle_it(case: Case) -> None:
+# Every case, not only the ones shipping experiments. The old filter excluded a
+# case with no experiments directory from this check entirely, which is how
+# A04's single unmeasurable defect went unremarked: the exemption was a
+# property of the directory layout rather than a decision anyone wrote down.
+@pytest.mark.parametrize("case", load_cases(), ids=lambda c: c.id)
+def test_every_seeded_defect_is_settled_or_says_why_not(case: Case) -> None:
     """A defect whose metric has no experiment can never be proved, and its
-    predictions are permanently Broken."""
+    predictions are permanently untested.
+
+    That is allowed, and it has to be declared. `unmeasurable_because` makes
+    the omission a sentence someone had to write rather than a gap a reader has
+    to notice.
+    """
     available = {script.stem for script in experiments(case.repo.parent)}
 
     for defect in case.defects:
-        assert defect.expected_metric in available, (
-            f"{case.id}/{defect.id} expects {defect.expected_metric}, which no experiment measures"
+        if defect.expected_metric in available:
+            continue
+        assert len(defect.unmeasurable_because.split()) >= 8, (
+            f"{case.id}/{defect.id} expects {defect.expected_metric}, which no experiment "
+            "measures, and gives no reason. Add an experiment, or state in "
+            "`unmeasurable_because` why one cannot exist."
         )
