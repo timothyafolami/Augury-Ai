@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "data"
+  ],
+  "reasoning": "The file queries the Courier model via SQLAlchemy, which is data-layer logic."
+}
