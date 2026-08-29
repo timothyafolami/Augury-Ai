@@ -130,11 +130,31 @@ Augury, on case B01.
 ## Reproduce the published comparison
 
 ```bash
-make evaluate           # both arms, three seeds each, with proving
+make evaluate           # both arms, five repeats each, with proving
 ```
 
 About 4 minutes and $0.09 total. Prints the table in the README, with the
-per-seed spread beside every mean.
+per-repeat spread beside every mean.
+
+### Or without an API key at all
+
+```bash
+make eval-replay        # same command, served from the committed recordings
+```
+
+Every model call comes from `eval/cassettes/`. Nothing reaches the network,
+nothing is spent, and it takes seconds. If a recording is missing the run stops
+and names the call rather than quietly falling through to a provider.
+
+**Be precise about what this does and does not reproduce.** It reproduces the
+pipeline, the routing, the findings, the predictions and the grading, exactly.
+It does not reproduce the spread between repeats: the cassette keys on
+(model, prompt, schema), all five repeats send byte-identical prompts, so all
+five collapse to one recording and the replayed table shows zero spread. The
+spread in the published table is provider nondeterminism at temperature 0,
+which is by definition not something a recording contains. The reported cost is
+`$0.00` because that is what the replaying process spent; the costs in the
+README were measured while recording.
 
 **A difference smaller than the spread is reported as `inconclusive`.** That is
 not editorial caution, it is what `SweepResult.compare` returns; there is no
@@ -157,9 +177,11 @@ property of the socket queue. It is 3.0 now, which is also the arithmetic:
 twenty clients, three attempts each, sixty arrivals.
 
 The **reviews are not**. Both arms were observed changing their answer between
-runs at temperature 0: over eight seeds the baseline returned three different
-answers on the same case with nothing changed. Expect your recall to land inside the published
-range rather than on the published mean, and expect the hit-rate numbers, which
+repeats at temperature 0: over eight seeds the baseline returned three different
+answers on the same case with nothing changed. Note that the repeats vary nothing about the input -- the seed is a label, not
+a parameter, which `tests/test_what_a_seed_varies.py` pins -- so the range
+between them is the provider disagreeing with itself. Expect your recall to
+land inside the published range rather than on the published mean, and expect the hit-rate numbers, which
 rest on single-digit denominators, to move more than that.
 
 Where a rate rests on too few measurements to be a rate, the harness reports
