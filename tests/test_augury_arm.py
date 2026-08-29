@@ -37,6 +37,13 @@ class RoutingModel:
     def usage(self) -> Usage:
         return self._usage
 
+    async def call(self, *, prompt: str, schema: type[BaseModel]):  # type: ignore[no-untyped-def]
+        from augury.core.adapters.base import Completion
+
+        before = self.usage
+        result = await self.structured(prompt=prompt, schema=schema)
+        return Completion(result=result, usage=self.usage - before, retries=0)
+
     def prompts_for(self, schema: str) -> list[str]:
         return [prompt for name, prompt in self.prompts if name == schema]
 
