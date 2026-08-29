@@ -1,0 +1,110 @@
+"""The pipeline arm: schedule, triage, specialise, refine.
+
+Its claim over a single prompt is not a bigger model. It is that it chooses
+what to read under a budget, routes each file only to specialists that can say
+something about it, gives each specialist the practice-lab knowledge that
+defines its concern, and refuses to publish a claim it cannot make testable.
+
+Everything expensive here is a deliberate purchase, and every purchase is
+recorded so the report can be honest about what it bought.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from pathlib import Path
+
+from augury.agents.triage import Triage
+from augury.core.adapters.base import ChatModel
+from augury.core.cartography import ModuleNode, RepoMap
+from augury.core.cartography.languages import EXTENSIONS
+from augury.core.drafts import DraftReport, to_report
+from augury.core.findings import Report
+from augury.core.layers import Layer
+from augury.core.scheduling import Budget, Scheduler
+from augury.prompts import render
+
+# One file is read once per specialist, so a very long file is trimmed rather
+# than allowed to dominate the budget it shares with every other module.
+MAX_SOURCE_CHARS = 40_000
+
+# Triage, plus the specialists it typically selects. Used only to forecast a
+# read before paying for it; actual spend is always measured.
+TYPICAL_CALLS_PER_MODULE = 3
+
+
+class AuguryReviewer:
+    """Reviews a repository by choosing what to read and who should read it."""
+
+    def __init__(self, model: ChatModel, *, budget: Budget | None = None) -> None:
+        self._model = model
+        self._triage = Triage(model)
+        # One triage call plus a specialist call each. Declared so the budget
+        # is a ceiling on what this arm actually spends, not on a fiction.
+        self._budget = budget or Budget(calls_per_module=TYPICAL_CALLS_PER_MODULE)
+
+    async def review(self, repo: RepoMap, root: Path) -> Report:
+        started = time.monotonic()
+        opening = self._model.usage
+        plan = Scheduler(repo, self._budget)
+        drafts: list[DraftReport] = []
+
+        while (module := plan.next()) is not None:
+            before = self._model.usage
+            findings = await self._review_module(module, root)
+            drafts.append(findings)
+            plan.record(
+                module,
+                findings=len(findings.findings),
+                spent_usd=(self._model.usage - before).usd,
+            )
+
+        spent = self._model.usage - opening
+        report = to_report(
+            DraftReport(findings=[f for draft in drafts for f in draft.findings]),
+            model_id=self._model.model_id,
+            usd=spent.usd,
+            seconds=time.monotonic() - started,
+        )
+        return report.model_copy(update={"coverage": plan.coverage})
+
+    async def _review_module(self, module: ModuleNode, root: Path) -> DraftReport:
+        source = self._read(root / module.path)
+        language = EXTENSIONS[Path(module.path).suffix.lower()].value
+
+        chosen = await self._triage.route(module, source, language)
+        if not chosen:
+            return DraftReport()
+
+        # Specialists are independent by construction: each reads for its own
+        # concern only. Running them concurrently costs the same and takes the
+        # time of the slowest rather than the sum.
+        results = await asyncio.gather(
+            *(self._ask(layer, module, source, language) for layer in chosen)
+        )
+        return DraftReport(findings=[f for result in results for f in result.findings])
+
+    async def _ask(
+        self, layer: Layer, module: ModuleNode, source: str, language: str
+    ) -> DraftReport:
+        return await self._model.structured(
+            prompt=render(
+                "analyst",
+                layer_name=layer.name,
+                layer_brief=layer.brief,
+                corpus=layer.brief,
+                path=module.path,
+                language=language,
+                fan_in=module.fan_in,
+                source=source,
+            ),
+            schema=DraftReport,
+        )
+
+    @staticmethod
+    def _read(path: Path) -> str:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if len(text) <= MAX_SOURCE_CHARS:
+            return text
+        return text[:MAX_SOURCE_CHARS] + "\n... truncated ...\n"
