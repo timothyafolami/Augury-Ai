@@ -24,6 +24,7 @@ from augury.core.findings import Report
 from augury.core.layers import Layer
 from augury.core.metrics import vocabulary
 from augury.core.scheduling import Budget, Scheduler
+from augury.core.trajectory import Trajectory
 from augury.evaluation.reconcile import reconcile
 from augury.prompts import render
 
@@ -39,9 +40,16 @@ TYPICAL_CALLS_PER_MODULE = 3
 class AuguryReviewer:
     """Reviews a repository by choosing what to read and who should read it."""
 
-    def __init__(self, model: ChatModel, *, budget: Budget | None = None) -> None:
+    def __init__(
+        self,
+        model: ChatModel,
+        *,
+        budget: Budget | None = None,
+        trajectory: Trajectory | None = None,
+    ) -> None:
         self._model = model
-        self._triage = Triage(model)
+        self._trace = trajectory
+        self._triage = Triage(model, trajectory=trajectory)
         # One triage call plus a specialist call each. Declared so the budget
         # is a ceiling on what this arm actually spends, not on a fiction.
         self._budget = budget or Budget(calls_per_module=TYPICAL_CALLS_PER_MODULE)
@@ -52,8 +60,26 @@ class AuguryReviewer:
         opening = self._model.usage
         plan = Scheduler(repo, self._budget)
         drafts: list[DraftReport] = []
+        self._record(
+            "cartographer",
+            "mapped",
+            {
+                "modules": len(repo.modules),
+                "unparsed": len(repo.unparsed),
+                "context_files": sorted(repo.context),
+            },
+        )
 
         while (module := plan.next()) is not None:
+            self._record(
+                "scheduler",
+                "selected",
+                {
+                    "path": module.path,
+                    "fan_in": module.fan_in,
+                    "signals": sorted(s.value for s in module.signals),
+                },
+            )
             before = self._model.usage
             findings = await self._review_module(module, root, context)
             drafts.append(findings)
@@ -63,6 +89,7 @@ class AuguryReviewer:
                 spent_usd=(self._model.usage - before).usd,
             )
 
+        self._record("scheduler", "stopped", plan.coverage.model_dump())
         spent = self._model.usage - opening
         report = to_report(
             DraftReport(findings=[f for draft in drafts for f in draft.findings]),
@@ -90,24 +117,36 @@ class AuguryReviewer:
         # failure concern at once, and each will raise it honestly.
         return reconcile(DraftReport(findings=[f for result in results for f in result.findings]))
 
+    def _record(self, agent: str, action: str, detail: dict[str, object]) -> None:
+        if self._trace is not None:
+            self._trace.record(agent=agent, action=action, detail=detail)
+
     async def _ask(
         self, layer: Layer, module: ModuleNode, source: str, language: str, context: str
     ) -> DraftReport:
-        return await self._model.structured(
-            prompt=render(
-                "analyst",
-                layer_name=layer.name,
-                layer_brief=layer.brief,
-                corpus=layer.brief,
-                path=module.path,
-                language=language,
-                fan_in=module.fan_in,
-                source=source,
-                context=context,
-                metrics=vocabulary(),
-            ),
-            schema=DraftReport,
+        prompt = render(
+            "analyst",
+            layer_name=layer.name,
+            layer_brief=layer.brief,
+            corpus=layer.brief,
+            path=module.path,
+            language=language,
+            fan_in=module.fan_in,
+            source=source,
+            context=context,
+            metrics=vocabulary(),
         )
+        before = self._model.usage
+        result = await self._model.structured(prompt=prompt, schema=DraftReport)
+        if self._trace is not None:
+            self._trace.record_call(
+                agent=f"analyst:{layer.name}",
+                prompt=prompt,
+                response=result.model_dump(),
+                usage=self._model.usage - before,
+                retries=getattr(self._model, "retries", 0),
+            )
+        return result
 
     @staticmethod
     def _read(path: Path) -> str:
