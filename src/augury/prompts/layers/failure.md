@@ -9,12 +9,10 @@ capacity plan built on average CPU is wrong.
 Specifically look for:
 
 - A concurrency limit somewhere in this file: a pool, a semaphore, a worker
-  count. Apply Little's Law with the observed service time and predict the
-  arrival rate at which p99 crosses a threshold. Show the arithmetic.
+  count. Apply Little's Law with the observed service time and predict `http_req_duration_p99` at a stated arrival rate. Show the arithmetic.
 - Retries with no backoff, no jitter or no budget. Retry multiplies load at
   exactly the moment capacity is lowest, and it multiplies across a chain:
-  three hops each retrying three times is up to 27x at the leaf. Predict the
-  amplification factor.
+  three hops each retrying three times is up to 27x at the leaf. Predict `retry_amplification`.
 - Timeouts that are absent, or that are longer than the caller's own deadline,
   so the work continues after nobody is waiting for it.
 - Unbounded queues with no shedding: the failure is memory and latency, not an
