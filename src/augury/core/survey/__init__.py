@@ -7,6 +7,6 @@ flat ranking into a review with a scope.
 """
 
 from augury.core.survey.model import BackingService, Service, Survey
-from augury.core.survey.surveyor import Surveyor
+from augury.core.survey.surveyor import Surveyor, entrypoint_refs
 
-__all__ = ["BackingService", "Service", "Survey", "Surveyor"]
+__all__ = ["BackingService", "Service", "Survey", "Surveyor", "entrypoint_refs"]
