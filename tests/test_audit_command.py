@@ -114,3 +114,39 @@ def test_review_needs_one_of_them(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "--case" in result.output or "--path" in result.output
+
+
+MIGRATION = """
+from alembic import op
+import sqlalchemy as sa
+
+
+def upgrade():
+    op.add_column('users', sa.Column('email', sa.Text(), nullable=False))
+
+
+def downgrade():
+    op.drop_column('users', 'email')
+"""
+
+
+def test_survey_reports_schema_defects_the_migrations_carry(tmp_path: Path) -> None:
+    """Deterministic and free, so there is no reason to withhold them."""
+    repo = _repo(tmp_path)
+    versions = repo / "backend" / "alembic" / "versions"
+    versions.mkdir(parents=True)
+    (versions / "0001_email.py").write_text(MIGRATION)
+
+    result = CliRunner().invoke(app, ["survey", "--path", str(repo), "--scope", "backend"])
+
+    assert result.exit_code == 0, result.output
+    assert "not-null-without-default" in result.output
+    assert "users" in result.output
+
+
+def test_survey_says_nothing_about_schema_when_there_are_no_migrations(
+    tmp_path: Path,
+) -> None:
+    result = CliRunner().invoke(app, ["survey", "--path", str(_repo(tmp_path))])
+
+    assert "not-null-without-default" not in result.output
