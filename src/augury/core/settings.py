@@ -66,6 +66,18 @@ class Settings(BaseModel):
     record: bool = False
     cassette_dir: Path | None = None
 
+    @property
+    def repeats_are_independent(self) -> bool:
+        """Whether repeating a run produces a genuinely new observation.
+
+        False whenever cassettes are in play. Replay serves every repeat from
+        one recording; recording writes a cassette on the first repeat and
+        serves the rest from it. Both collapse five runs into one observation,
+        and a guard written only for replay let a record run publish
+        "permutation p = 0.0079" from five copies of the same number.
+        """
+        return not (self.replay_only or self.record)
+
 
 def load_settings() -> Settings:
     """Read the environment, refusing anything that cannot produce a real run."""
