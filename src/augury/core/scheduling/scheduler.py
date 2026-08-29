@@ -30,6 +30,13 @@ class Budget(BaseModel):
 
     usd: float = Field(default=5.0, gt=0)
     usd_per_1k_loc: float = Field(default=0.02, gt=0)
+    calls_per_module: int = Field(
+        default=1,
+        ge=1,
+        description="How many times an arm reads one module. A pipeline that "
+        "triages and then asks several specialists reads it several times, and "
+        "a ceiling that assumed one read would be no ceiling at all.",
+    )
 
 
 class Coverage(BaseModel):
@@ -142,7 +149,8 @@ class Scheduler:
         return self._spent_micros + self._estimate_micros(module) <= self._budget_micros
 
     def _estimate_micros(self, module: ModuleNode) -> int:
-        return round(module.loc / 1000 * self._budget.usd_per_1k_loc * MICRO_USD)
+        per_read = module.loc / 1000 * self._budget.usd_per_1k_loc
+        return round(per_read * self._budget.calls_per_module * MICRO_USD)
 
     def _value(self, module: ModuleNode) -> float:
         blast_radius = 1.0 + module.fan_in
