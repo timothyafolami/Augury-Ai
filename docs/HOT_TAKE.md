@@ -21,17 +21,28 @@ predictions are recorded as untested rather than counted:
 
 | metric | baseline | augury | |
 |---|---|---|---|
-| seeded recall | 0.760 | 0.760 | permutation p = 1.00 |
-| hit rate | 0.893 (25/28) | 0.757 (28/37) | Fisher p = 0.21 |
-| cost | $0.036 | $0.216 | 6.0x |
+| seeded recall | 0.800 | 0.800 | tied |
+| falsifiable precision | **0.909** | 0.583 | baseline, clearly |
+| hit rate | 0.833 (25/30) | **1.000** (30/30) | Fisher p = 0.052 |
+| cost | $0.0017 | $0.0083 | 5.0x |
 
-No detectable difference on either metric, at six times the cost. The thesis is
-not supported.
+The thesis as stated -- that the pipeline reviews code *better* -- is not
+supported. Recall is tied: it finds the same defects. It states markedly fewer
+testable claims than the baseline. It costs five times as much.
 
-Not disproved either: twenty-eight and thirty-seven tested predictions cannot
-resolve a gap that size, and the point estimate that does exist favours the
-baseline. The study is underpowered and the honest report of an underpowered
-study is that it did not answer the question.
+What it does do is be right more often about the claims it does make. Thirty of
+thirty tested predictions came back hits, against twenty-five of thirty. At
+these denominators that is p = 0.052, which is *suggestive, not significant*,
+and one sweep on the wrong side of every conventional threshold is not a
+finding. I am reporting it because it is the direction the evidence points,
+not because I believe it yet.
+
+**And an earlier version of this table was unfair.** Falsifiable precision read
+0.778 against 0.833 -- favouring the pipeline -- because the analyst prompt was
+told exactly what the falsifiability validator rejects and the baseline prompt
+was not, and a rejected prediction lands in that metric's denominator. Told the
+same rules, the numbers above reverse. Three further asymmetries pointed the
+same way. Two of the tests written to catch that were instead enforcing it.
 
 I could have shipped a version of this that appeared to work. Three separate
 times I had a table that showed one, and each time the apparatus was wrong
@@ -47,9 +58,13 @@ experiment, and it was the last thing anybody checked.**
 Every published number in this project was wrong at least once. Never because
 the scoring arithmetic was wrong — I could have unit-tested that all week:
 
-- **A rate over the wrong denominator.** Falsifiable precision excluded the
-  findings the pipeline had dropped, so any architecture with a filter scored
-  near 1.0 by construction and the baseline near 0.
+- **A rate over the wrong denominator, twice.** Falsifiable precision first
+  excluded the findings the pipeline had dropped, so any architecture with a
+  filter scored near 1.0 by construction and the baseline near 0. Fixing that
+  introduced the opposite error: a dropped finding was counted once as a
+  finding and once as dropped, so a malformed prediction cost twice what an
+  absent one did -- and only one arm had been told how to avoid malformed
+  ones.
 - **A matcher that scored `except` as a mention of `exception`.** When I fixed
   it, it then refused `leaks` as a mention of `leak` — and recall *inverted*:
   a review describing every defect correctly scored 0.000, while four findings
