@@ -133,6 +133,26 @@ def _validate(draft: DraftPrediction | None) -> tuple[Prediction | None, str | N
     try:
         return Prediction(**draft.model_dump()), None
     except ValidationError as exc:
-        return None, "; ".join(
-            f"{'.'.join(str(p) for p in error['loc'])}: {error['msg']}" for error in exc.errors()
-        )
+        return None, why_it_failed(exc)
+
+
+# What Pydantic puts in front of a message raised by a validator. It names the
+# library that noticed, which is not what the reader needs to know.
+_LIBRARY_PREFIX = "Value error, "
+
+
+def why_it_failed(exc: ValidationError) -> str:
+    """A rejected prediction's reason, as a sentence rather than a dump.
+
+    A rule about the whole model -- "the upper bound must exceed the lower" --
+    has no field to name, so `loc` is empty and joining it produced a leading
+    colon with nothing before it. Printed dozens of times on one run.
+    """
+    said: list[str] = []
+    for error in exc.errors():
+        message = str(error["msg"])
+        if message.startswith(_LIBRARY_PREFIX):
+            message = message[len(_LIBRARY_PREFIX) :]
+        where = ".".join(str(part) for part in error["loc"])
+        said.append(f"{where}: {message}" if where else message)
+    return "; ".join(said)
