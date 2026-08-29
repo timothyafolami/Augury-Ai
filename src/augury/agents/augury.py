@@ -19,13 +19,19 @@ from typing import cast
 from augury.agents.triage import Triage
 from augury.core.adapters.base import ChatModel
 from augury.core.cartography import ModuleNode, RepoMap
-from augury.core.cartography.languages import EXTENSIONS
+from augury.core.cartography.languages import EXTENSIONS, Language
 from augury.core.cartography.symbols import locator_for
 from augury.core.drafts import DraftReport, to_report
-from augury.core.findings import Report
+from augury.core.findings import Dropped, Report
+from augury.core.indexes import indexed_columns, withdraw_false_index_claims
+from augury.core.languages import brief_for
 from augury.core.layers import Layer
 from augury.core.metrics import describe, vocabulary
+from augury.core.priority import rank
+from augury.core.reachability import cap_severity
+from augury.core.repetition import collapse
 from augury.core.scheduling import Budget, Scheduler
+from augury.core.schema import read_migrations
 from augury.core.trajectory import Trajectory
 from augury.evaluation.reconcile import reconcile
 from augury.prompts import render
@@ -103,7 +109,45 @@ class AuguryReviewer:
             # The specialist names the symbol; the parser supplies the line.
             locator=locator_for(root),
         )
-        return report.model_copy(update={"coverage": plan.coverage})
+        # Two passes over the finished report, both deterministic.
+        #
+        # Severity is capped by whether a request reaches the code, because the
+        # specialist is told "high, medium or low" and nothing else, and on a
+        # real service answered "high" 92 times out of 141. Lowered only: it
+        # read the source and the import graph did not.
+        #
+        # Then findings saying one sentence about many files are collapsed. A
+        # missing correlation id is a property of a service, and reporting it
+        # once per handler put sixteen copies of one observation into a list
+        # somebody has to triage.
+        depths = {module.path: module.depth for module in repo.modules}
+        has_entry = any(module.depth is not None for module in repo.modules)
+        anchored = [
+            cap_severity(finding, depth=depths.get(finding.path), has_entrypoints=has_entry)
+            for finding in report.findings
+        ]
+
+        # A claim the migrations settle is not an open question. Withdrawn
+        # rather than silently dropped: the count belongs beside the findings,
+        # because a reviewer that quietly deletes its own output is one nobody
+        # can audit.
+        indexed = indexed_columns(read_migrations(root))
+        kept, withdrawn = withdraw_false_index_claims(anchored, indexed)
+
+        fan_in = {module.path: module.fan_in for module in repo.modules}
+        ordered = rank(collapse(kept), depths=depths, fan_in=fan_in)
+
+        return report.model_copy(
+            update={
+                "coverage": plan.coverage,
+                "findings": tuple(ordered),
+                "dropped": report.dropped
+                + tuple(
+                    Dropped(symbol=w.finding.symbol, path=w.finding.path, reason=w.reason)
+                    for w in withdrawn
+                ),
+            }
+        )
 
     async def _review_module(self, module: ModuleNode, root: Path, context: str) -> DraftReport:
         source = self._read(root / module.path)
@@ -137,6 +181,10 @@ class AuguryReviewer:
             corpus=layer.brief,
             path=module.path,
             language=language,
+            # How this concern actually appears in this runtime. The layer
+            # brief names the concern; without this the specialist supplies the
+            # runtime-specific half itself, differently each time.
+            language_brief=brief_for(Language(language)),
             fan_in=module.fan_in,
             source=source,
             context=context,
