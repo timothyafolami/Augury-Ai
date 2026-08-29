@@ -1,0 +1,6 @@
+{
+  "specialists": [
+    "data"
+  ],
+  "reasoning": "Defines the Wallet SQLAlchemy model with columns, foreign key, and numeric balance, which falls under data layer concerns."
+}
