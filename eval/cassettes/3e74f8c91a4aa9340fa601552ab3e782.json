@@ -2,5 +2,5 @@
   "specialists": [
     "data"
   ],
-  "reasoning": "Defines a SQLAlchemy ORM model with table columns and types, which is directly relevant to data handling."
+  "reasoning": "Defines a SQLAlchemy ORM model with columns, types, and a foreign key, which falls under data layer concerns."
 }
