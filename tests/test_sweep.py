@@ -76,3 +76,59 @@ def test_one_seed_is_reported_as_unrepeated() -> None:
 def test_mixing_arms_in_one_sweep_is_refused() -> None:
     with pytest.raises(ValueError, match="arm"):
         summarise([score(arm="a", seed=0, found=4), score(arm="b", seed=1, found=4)])
+
+
+# -- pooling is how a rate reaches its floor --------------------------------
+# A single run of B01 yields three or four distinct experiments, under the
+# floor of five, so every per-seed hit rate is correctly withheld. Averaging
+# withheld values gives nothing. The seeds have to be pooled.
+
+
+def measured(*, arm: str, seed: int, tested: int, hits: int, experiments: int) -> Score:
+    return Score(
+        case="B01",
+        arm=arm,
+        seed=seed,
+        model_id="stub",
+        seeded=5,
+        found=4,
+        total_findings=tested,
+        falsifiable=tested,
+        tested=tested,
+        experiments=experiments,
+        hits=hits,
+        broken=0,
+        dropped=0,
+        falsifiable_precision=1.0,
+        hit_rate=None,
+        prediction_coverage=1.0,
+        usd=0.01,
+        seconds=1.0,
+    )
+
+
+def test_hit_rate_is_pooled_across_seeds_not_averaged() -> None:
+    """Three seeds of four experiments is twelve measurements, and twelve is
+    a rate even though four is not."""
+    result = summarise(
+        [measured(arm="a", seed=s, tested=4, hits=3, experiments=4) for s in range(3)]
+    )
+
+    assert result.experiments == 12
+    assert result.hit_rate == pytest.approx(0.75)
+
+
+def test_a_sweep_too_small_to_pool_still_withholds_the_rate() -> None:
+    result = summarise([measured(arm="a", seed=0, tested=2, hits=2, experiments=2)])
+
+    assert result.hit_rate is None
+    assert (result.hits, result.tested) == (2, 2)
+
+
+def test_the_counts_behind_a_pooled_rate_are_reported() -> None:
+    """A rate without its denominator hides how much it rests on."""
+    result = summarise(
+        [measured(arm="a", seed=s, tested=4, hits=3, experiments=4) for s in range(3)]
+    )
+
+    assert (result.hits, result.tested, result.experiments) == (9, 12, 12)
