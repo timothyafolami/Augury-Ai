@@ -152,7 +152,7 @@ and against more than one remediation, because passing against one is how
 | `final_balance` | 90.0 | 0.0 |
 | `http_status` | 200 | 500 |
 | `queries_per_request` | 51 | 2 |
-| `retry_amplification` | 1.9 | 0.75 |
+| `retry_amplification` | 3.0 | 1.15 |
 | `worker_saturation` | 1.0 | 0.0 |
 | `duplicate_side_effects` | 3 | 1 |
 | `queue_depth` | 5000 | 32 |
