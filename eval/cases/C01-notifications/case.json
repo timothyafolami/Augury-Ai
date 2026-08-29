@@ -8,8 +8,14 @@
       "id": "C01-1",
       "lab_topic": "04-distributed/02-idempotency-keys-atomically",
       "defect": "record_delivery increments delivery_count on every call and never records the delivery_id it was given, so a courier redelivering the same webhook counts the parcel twice.",
-      "locations": ["app/handlers/webhook.py"],
-      "symbols": ["record_delivery", "delivery_count", "idempoten"],
+      "locations": [
+        "app/handlers/webhook.py"
+      ],
+      "symbols": [
+        "record_delivery",
+        "delivery_count",
+        "idempoten"
+      ],
       "verification": "differential",
       "expected_metric": "duplicate_side_effects",
       "notes": "The parameter that would make it idempotent is accepted and unused, which reads as deliberate."
@@ -18,8 +24,15 @@
       "id": "C01-2",
       "lab_topic": "05-failure/05-load-shedding-backpressure-and-bulkheads",
       "defect": "The inbox queue is unbounded, so when arrivals exceed the worker's service rate the backlog grows without limit. Nothing fails; memory and latency climb until something else does.",
-      "locations": ["app/queue/inbox.py"],
-      "symbols": ["_pending", "asyncio.Queue", "unbounded", "backpressure"],
+      "locations": [
+        "app/queue/inbox.py"
+      ],
+      "symbols": [
+        "_pending",
+        "asyncio.Queue",
+        "unbounded",
+        "backpressure"
+      ],
       "verification": "differential",
       "expected_metric": "queue_depth",
       "notes": "The comment argues for the choice, which is how it survived review."
@@ -28,8 +41,14 @@
       "id": "C01-3",
       "lab_topic": "02-network/02-connection-pooling-and-pool-exhaustion",
       "defect": "with_session closes the session only on the success path. Any exception from the work it runs leaks the connection, and the pool drains one request at a time.",
-      "locations": ["app/store/session.py"],
-      "symbols": ["with_session", "session.close", "leak"],
+      "locations": [
+        "app/store/session.py"
+      ],
+      "symbols": [
+        "with_session",
+        "session.close",
+        "leak"
+      ],
       "verification": "differential",
       "expected_metric": "active_connections",
       "notes": "Degrades slowly, so it survives every short test and appears under sustained partial failure."
@@ -38,11 +57,24 @@
       "id": "C01-4",
       "lab_topic": "03-data/06-finding-n-plus-1",
       "defect": "shipments_by_courier resolves the courier name per shipment, and name_for queries every time it is called, so query count scales with the number of shipments.",
-      "locations": ["app/reports.py", "app/cache/couriers.py"],
-      "symbols": ["shipments_by_courier", "name_for", "N+1"],
+      "locations": [
+        "app/reports.py",
+        "app/cache/couriers.py"
+      ],
+      "symbols": [
+        "shipments_by_courier",
+        "name_for",
+        "N+1"
+      ],
       "verification": "differential",
       "expected_metric": "queries_per_request",
       "notes": "The module is called cache and caches nothing, which is why reading either file alone shows nothing wrong."
     }
-  ]
+  ],
+  "experiment_conditions": {
+    "queries_per_request": "one shipments_by_courier report over 40 shipments carried by 2 couriers",
+    "duplicate_side_effects": "the same delivery webhook posted 3 times with one delivery_id",
+    "queue_depth": "200 events arriving while one worker serves them at 2ms each, measured after 200ms",
+    "active_connections": "20 pieces of work run through with_session, every one of them raising"
+  }
 }
