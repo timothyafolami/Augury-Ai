@@ -224,11 +224,11 @@ reproducible exactly, with no API key: `make eval-replay` prints these numbers.
 
 | metric | baseline | augury |
 |---|---|---|
-| seeded recall | 0.769 | 0.769 |
-| falsifiable precision | **0.769** | 0.615 |
-| hit rate | **1.000** (8/8) | 0.600 (3/5) |
-| experiments run | 8 | 5 |
-| prediction coverage | **0.800** | 0.438 |
+| seeded recall | 0.846 | 0.846 |
+| falsifiable precision | 0.667 | **0.690** |
+| hit rate | 0.750 (6/8) | **0.857** (6/7) |
+| experiments run | 8 | 7 |
+| prediction coverage | **0.667** | 0.400 |
 | experiments that broke | 1 | **0** |
 
 ```
@@ -236,10 +236,26 @@ hit rate  repeats not independent: p = n/a  not measured
 recall    repeats not independent: inconclusive
 ```
 
-Cost is not in that table because replay is free — that is what makes it
-reproducible without a key. On the recording run the baseline spent $0.0104 and
-the pipeline $0.0481, which is the ratio to plan against and the one number
-here nobody can check by re-running it.
+Cost is not in that table because replay is free, which is what makes it
+reproducible without a key. On the recording run the baseline spent $0.0108 and
+the pipeline $0.0582.
+
+**The pipeline arm leads for the first time, and one run of seven experiments
+is not a finding.** Read the two lines under the table before the two in it:
+the seeds are not independent, so nothing here is significant, and a hit rate
+over seven experiments moves by 0.14 if one of them changes its mind. The
+honest statement is that the gap reversed after the specialists were given the
+lab, not that the architecture won.
+
+**What changed was what the specialists know.** Three things landed together:
+the twenty-five mechanisms an audit found missing from the layer briefs, a real
+corpus, and eight metrics the lab's mechanisms needed in order to be stated at
+all. The corpus is the one worth naming. The prompt had always said its
+reference material "comes from a practice lab written before this review
+existed, and they are the source of your authority -- cite them", and it was
+handed the specialist's own brief a second time under that heading. The
+specialist had a brief and no corpus, and was invited to attribute the brief to
+a lab it had never seen.
 
 **Seeded recall is now level, and it was not before.** The prompts told both
 arms which of `value` and `upper` had to be larger only after a real run
@@ -257,10 +273,11 @@ Falsifiable precision divides by findings plus discarded, so every collapsed
 finding quietly left the denominator. Counting them again cost this arm about
 nine points, with nothing about the reviewer changed.
 
-**The baseline is ahead on every metric.** One well-written prompt containing
-the whole repository finds more of the seeded defects, states a higher share of
-testable claims, gets more of them measured, and is right about more of them,
-at a quarter of the cost.
+**The baseline still wins on cost and on coverage.** One prompt containing the
+whole repository states a higher share of testable claims and gets more of them
+measured, at a fifth of the price. What it no longer wins on is being right:
+the pipeline is now ahead on hit rate and on falsifiable precision, and level on
+recall.
 
 #### The fourth case erased the pipeline's only lead
 
@@ -273,11 +290,17 @@ said, in the section below and in the changelog's open questions:
 So a fourth case was built -- D01, a search-index service, chosen partly
 because its first defect is the only one in the suite that measures
 `memory_bytes`, a metric the published vocabulary had carried since the start
-and no case had ever settled. On four cases the hit rate is 1.000 against
-0.600, and the lead is not merely gone but reversed.
+and no case had ever settled. On four cases the hit rate went to 1.000 against
+0.600, and the lead was not merely gone but reversed.
 
-That is the result this project ends on, and the prediction that preceded it is
-the part worth keeping: the margin was named as too small to survive more data,
+It has since reversed again, to 0.750 against 0.857, after the specialists were
+given the lab they had always been told they were citing. A margin that has
+now moved three times, twice in one direction and once in the other, over seven
+or eight experiments, is not a measurement of an architecture. It is a
+measurement of how little seven experiments can settle.
+
+The prediction that preceded the first reversal is the part worth keeping: the
+margin was named as too small to survive more data,
 before the data existed, and it did not survive it.
 
 **Read `prediction coverage` beside the hit rate.** The pipeline had 43.8% of
