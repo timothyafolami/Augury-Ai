@@ -24,6 +24,7 @@ class Signal(StrEnum):
     OBSERVABILITY = "observability"  # 06-observability: logging, metrics, tracing
     SECURITY = "security"  # 07-security: secrets, auth, raw SQL
     CRAFT = "craft"  # 08-craft: error contracts, module depth, coupling
+    SERVING = "serving"  # 10-edge: a model in the request path
     ENTRYPOINT = "entrypoint"  # where load enters the system
 
 
