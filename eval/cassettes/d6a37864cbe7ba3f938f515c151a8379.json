@@ -1,0 +1,28 @@
+{
+  "observations": [
+    {
+      "mechanism": "shared PostgreSQL database",
+      "consequence": "The service can suffer simultaneous performance degradation from N+1 queries and data compromise from a possible SQL injection, risking downtime and loss of data integrity.",
+      "findings": [
+        1,
+        2
+      ]
+    },
+    {
+      "mechanism": "fixed-size worker pool handling requests",
+      "consequence": "Under load the pool can be exhausted as N+1 queries increase latency and a network call without timeout blocks workers indefinitely, causing request timeouts and loss of availability.",
+      "findings": [
+        1,
+        5
+      ]
+    },
+    {
+      "mechanism": "absence of health‑check monitoring of downstream calls",
+      "consequence": "The service may stay marked healthy while a hanging network call (no timeout) blocks workers, leading to silent outages despite passing readiness probes.",
+      "findings": [
+        4,
+        5
+      ]
+    }
+  ]
+}
