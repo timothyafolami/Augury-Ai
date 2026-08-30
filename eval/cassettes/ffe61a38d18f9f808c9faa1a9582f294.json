@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "07-security",
+    "08-craft"
+  ],
+  "reasoning": "07-security: JWT secret handling and token decoding; 08-craft: TypeScript usage and error handling"
+}
