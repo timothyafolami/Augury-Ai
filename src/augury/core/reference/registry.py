@@ -70,14 +70,28 @@ def _canonical(name: str) -> str:
 class Registry:
     """PyPI, asked once per package and remembered."""
 
-    def __init__(self, *, fetch: Callable[[str], str | None] = _fetch) -> None:
+    def __init__(
+        self,
+        *,
+        fetch: Callable[[str], str | None] = _fetch,
+        watching: Callable[[dict[str, object]], None] | None = None,
+    ) -> None:
         self._fetch = fetch
+        # Asking the registry is a network call that shapes what the review
+        # claims, and it happened silently. A reader watching a run saw a gap
+        # where the reviewer was doing the one kind of work it cannot do from
+        # the code alone.
+        self._watching = watching
         self._seen: dict[str, PackageFacts | None] = {}
 
     def facts_for(self, name: str) -> PackageFacts | None:
         key = _canonical(name)
         if key not in self._seen:
+            # Announced only on a miss. A cached answer reaches no network, and
+            # announcing it would invent a lookup that did not happen.
+            self._say(key, "asked")
             self._seen[key] = self._ask(key)
+            self._answered(key, self._seen[key])
         return self._seen[key]
 
     def facts_for_many(self, names: Sequence[str]) -> dict[str, PackageFacts | None]:
@@ -88,6 +102,10 @@ class Registry:
         requests are independent and the work is all waiting, so a small pool
         of threads turns a minute of queueing into a few seconds.
         """
+        for name in dict.fromkeys(_canonical(n) for n in names):
+            if name not in self._seen:
+                self._say(name, "asked")
+
         wanted = [
             key for key in dict.fromkeys(_canonical(n) for n in names) if key not in self._seen
         ]
@@ -95,7 +113,29 @@ class Registry:
             with ThreadPoolExecutor(max_workers=min(POOL_SIZE, len(wanted))) as pool:
                 for key, facts in zip(wanted, pool.map(self._ask, wanted), strict=True):
                     self._seen[key] = facts
+        for name in wanted:
+            self._answered(name, self._seen.get(name))
         return {_canonical(n): self._seen.get(_canonical(n)) for n in names}
+
+    def _say(self, subject: str, state: str, **rest: object) -> None:
+        if self._watching is None:
+            return
+        self._watching(
+            {"kind": "research", "source": "pypi.org", "subject": subject, "state": state, **rest}
+        )
+
+    def _answered(self, subject: str, facts: PackageFacts | None) -> None:
+        """What was learned, or that nothing was.
+
+        Silence on a package the registry could not answer for reads as a
+        package with nothing wrong, which is the opposite of what happened.
+        """
+        self._say(
+            subject,
+            "answered",
+            found=facts is not None,
+            detail=facts.latest if facts is not None else "no answer",
+        )
 
     def _get(self, url: str) -> str | None:
         """One GET, retried once.

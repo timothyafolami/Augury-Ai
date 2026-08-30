@@ -68,12 +68,31 @@ def changelog_notes(
     latest: str,
     *,
     search: Searcher = _ddgs,
+    watching: Callable[[dict[str, object]], None] | None = None,
 ) -> tuple[Note, ...]:
     """Where to read about the gap between two versions."""
     query = f"{package} changelog breaking changes {pinned} to {latest}"
+
+    def say(state: str, **rest: object) -> None:
+        if watching is not None:
+            watching(
+                {
+                    "kind": "research",
+                    "source": "duckduckgo",
+                    "subject": query,
+                    "state": state,
+                    **rest,
+                }
+            )
+
+    say("asked")
     try:
         results = search(query, RESULTS)
-    except Exception:
+    except Exception as failed:
+        # Search is the first thing to go on a train and the run continues.
+        # It continuing quietly is the problem: the report then omits a
+        # section for a reason nobody watching could name.
+        say("answered", found=False, detail=f"search failed: {failed}")
         return ()
 
     notes = [
@@ -90,6 +109,11 @@ def changelog_notes(
     # fakeredis's changelog on an authoritative host, and host authority alone
     # put a different project first.
     notes.sort(key=lambda note: (-_rank(note, package), note.url))
+    say(
+        "answered",
+        found=bool(notes),
+        detail=notes[0].url if notes else "nothing usable returned",
+    )
     return tuple(notes)
 
 
