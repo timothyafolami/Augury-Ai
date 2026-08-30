@@ -38,8 +38,13 @@ evaluate:
 # never reaches the network, needs no API key, and spends nothing. It reports
 # $0.00 because that is what this process spent; the costs in README.md were
 # measured when the cassettes were recorded.
+# Provider and model are pinned, not taken from .env: the model id is part of
+# every cassette key, so replaying under a different one reproduces nothing.
+# Switching AUGURY_PROVIDER in .env used to make every published number
+# irreproducible, with an error that blamed missing recordings.
 eval-replay:
-	AUGURY_REPLAY_ONLY=1 uv run python -m augury.cli evaluate --seeds 5 --prove
+	AUGURY_REPLAY_ONLY=1 AUGURY_PROVIDER=groq AUGURY_MODEL=openai/gpt-oss-120b \
+	  uv run python -m augury.cli evaluate --seeds 5 --prove
 
 # Re-record the cassettes. Needs a key and spends real money. Only necessary
 # after a prompt, schema or model change, each of which correctly invalidates
