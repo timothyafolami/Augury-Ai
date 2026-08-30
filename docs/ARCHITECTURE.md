@@ -7,8 +7,8 @@ planned and is wrong in most places.
 
 ## The claim
 
-**Seven stages. Two of them consult a language model.** An eighth, off by
-default, puts the claims to an experiment — [below](#the-eighth-stage-proving-a-claim).
+**Eight stages. Two of them consult a language model.** A ninth, off by
+default, puts the claims to an experiment — [below](#the-ninth-stage-proving-a-claim).
 
 Everything a parser, a graph or a registry can answer is answered that way,
 because those answers are the same every run and cost nothing. The model is
@@ -26,26 +26,33 @@ augury review --path REPO --scope backend --budget 0.25
   ├─ 2  Cartographer .............................. no model, $0
   │       six languages, scoped, excludes vendored trees
   │       imports — including the ones written as strings
+  │       a swallowed error and an interpolated query, read from
+  │       the source in every language rather than only Python
   │       BFS from entrypoints → depth per module, unreachable set
   │
-  ├─ 3  Scheduler ................................. no model, $0  ←┐
+  ├─ 3  Deployment · Schema · Dependencies ........ no model, $0
+  │       Dockerfiles, manifests, CI, lockfiles, migrations
+  │       "no USER, so every process runs as uid 0"
+  │       on a real backend, the largest single source of findings
+  │
+  ├─ 4  Scheduler ................................. no model, $0  ←┐
   │       ranks by depth from an entrypoint, fan-in, signals,      │
   │       churn, ÷ cost. Stops when nothing left is worth its      │
   │       price, and records what it skipped and why               │
   │                                                                │
-  ├─ 4  Triage ...................... one model call per module    │
+  ├─ 5  Triage ...................... one model call per module    │
   │       signals allow {data, network, craft}; triage narrows     │
   │       it can narrow, never widen                               │
   │                                                                │
-  ├─ 5  LayerAnalyst × N ............ one model call each          │
+  ├─ 6  LayerAnalyst × N ............ one model call each          │
   │       concurrent. Each reads for one concern, briefed with     │
   │       its lab layer, its language's failure modes, and the     │
   │       versions this file actually runs against                 │
   │                                                                │
-  ├─ 6  ──────────────────────────────────────────────────────────┘
+  ├─ 7  ──────────────────────────────────────────────────────────┘
   │       until the budget is spent
   │
-  └─ 7  Five deterministic passes ................. no model, $0
+  └─ 8  Five deterministic passes ................. no model, $0
           reconcile   merge findings colliding on one construct
           gate        withdraw claims that are not falsifiable
           disprove    withdraw index claims the migrations settle
@@ -53,8 +60,14 @@ augury review --path REPO --scope backend --budget 0.25
           rank        by evidence, not by the model's adjective
 ```
 
-The loop at 3↔6 is the progressive part: the Scheduler re-ranks after every
-module, and a module whose neighbours produced findings is promoted.
+The loop at 4↔7 is the progressive part: the Scheduler re-ranks after every
+module, and a module whose neighbours produced findings is promoted. Drawn
+straight, this pipeline would claim the specialists run once, which is the one
+thing the diagram must not say.
+
+Six of the eight stages consult no model at all, and the deployment pass is
+the one worth arguing from: on a production backend it produced thirty-one
+findings against three from the specialists, for nothing.
 
 ---
 
@@ -71,7 +84,7 @@ are the reasons:
 | pattern | where it would fit | why it is not used |
 |---|---|---|
 | Handoff / `Swarm` | triage → specialists | Triage returns a *set*, not a delegation. Handoff lets the model choose the next agent; here that choice is a deterministic narrowing, so a hallucinated layer name cannot buy a model call. |
-| `RoundRobin` / `Selector` group chat | the eight specialists | They never see each other's output. Reconciliation is deterministic on `(path, symbol)`. In a group chat one specialist's wrong claim anchors the next one's. |
+| `RoundRobin` / `Selector` group chat | the nine specialists | They never see each other's output. Reconciliation is deterministic on `(path, symbol)`. In a group chat one specialist's wrong claim anchors the next one's. |
 | Sequential | survey → map → schedule | It *is* sequential, as a function pipeline rather than as agents, because five of the seven stages contain no model. |
 
 A framework that made every stage an agent would make five stages
@@ -79,7 +92,7 @@ non-deterministic to no benefit.
 
 ---
 
-## The eighth stage: proving a claim
+## The ninth stage: proving a claim
 
 Off by default, because it costs a model call per finding and runs generated
 code. `--prove N` turns it on for the top N findings.
@@ -118,6 +131,44 @@ repository's own files. Where several services build from one directory — an
 API and four workers — the one taking traffic is preferred. With no docker, or
 no service built from the reviewed directory, it runs here and **says which**,
 because "could not be checked" is only useful when it says why.
+
+---
+
+## Three clients, one engine
+
+There is one review engine. The CLI drives it, an MCP server exposes it, and a
+web client watches it. None of them is a second implementation, and the
+document a team acts on is rendered by the same function whichever asked for
+it.
+
+```
+CLI ────────────┐
+MCP ────────────┼──▶  survey · map · schedule · triage · specialists · passes
+web ────────────┘
+```
+
+The web client subscribes to the trajectory the reviewer writes anyway, which
+is the file handed to a judge. So what a viewer watches is the run, and when
+the pipeline stops emitting the screen stops moving. Nothing is simulated, and
+the raw stream sits beside the rendered view so a sceptical viewer can check
+that the diagram is not a cartoon over a spinner.
+
+---
+
+## Where the specialist's authority comes from
+
+The analyst prompt says its reference material "comes from a practice lab
+written before this review existed, and they are the source of your authority.
+Cite them." For most of this project's life it was then handed the specialist's
+own brief a second time under that heading, so it had a brief and no corpus and
+was invited to attribute the brief to a lab it had never seen.
+
+`core/corpus.py` loads the real thing: the mechanism block from every topic in
+the layer this specialist owns, tagged with the topic it came from, because
+citing is only possible if the citation is in the text. Bounded, because it
+ships once per module per specialist. Deterministic, because a corpus that
+varies is a cassette that never replays. And empty when the lab is absent, with
+the prompt saying so rather than claiming a source it was not given.
 
 ---
 
@@ -170,11 +221,11 @@ re-raised: Ctrl-C has to keep working.
 
 ---
 
-## The eight specialists
+## The nine specialists
 
-One `LayerAnalyst` class, instantiated eight times from a layer spec. Each is
-one layer of the practice lab, so the agent hunting a defect is the one that
-owns the layer defining it.
+One `LayerAnalyst` class, instantiated nine times from a layer spec. Each is one
+layer of the practice lab, so the agent hunting a defect is the one that owns
+the layer defining it.
 
 | specialist | lab layer | routed by |
 |---|---|---|
@@ -186,6 +237,12 @@ owns the layer defining it.
 | `observability` | `06-observability` | observability |
 | `security` | `07-security` | security |
 | `craft` | `08-craft` | craft |
+| `serving` | `10-edge` | serving |
+
+`09-writing` has no specialist and will not get one. It is about design
+documents, postmortems and commit messages, and a reviewer reading source has
+nothing to say about them. That is recorded beside the layers in code, so a
+later reader sees a decision rather than a gap.
 
 Each call carries three briefs: the **layer** brief (what this concern is), the
 **language** brief (how that concern shows up in this runtime — a blocking call
@@ -223,7 +280,12 @@ grounded in what is installed rather than in a training cutoff.
 | `core/schema/` | Migrations read as a schema, and what they do to live tables |
 | `core/reference/` | Registry versions, dependency staleness, changelog links |
 | `core/adapters/` | Providers, pricing, record-and-replay |
-| `core/layers.py`, `prompts/layers/` | The eight concerns |
+| `core/layers.py`, `prompts/layers/` | The nine concerns |
+| `core/corpus.py` | The lab, as material a specialist can cite |
+| `core/artifacts/` | Every document a repository ships, and the rules over them |
+| `agents/synthesis.py` | What no single specialist could say |
+| `core/architecture.py`, `core/coverage.py`, `core/forecast.py` | The diagram, the coverage, the pressures |
+| `server/` | The web client: discovery, a live stream, the document |
 | `core/languages.py`, `prompts/languages/` | How each runtime fails |
 | `core/priority.py`, `reachability.py`, `repetition.py`, `indexes.py` | The passes over a finished report |
 | `core/report.py` | The document a team acts on |
