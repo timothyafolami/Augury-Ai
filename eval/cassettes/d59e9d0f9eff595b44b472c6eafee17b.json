@@ -1,0 +1,26 @@
+{
+  "findings": [
+    {
+      "path": "src/lib/receipt.ts",
+      "line": 7,
+      "layer": "security",
+      "symbol": "writeReceipt",
+      "mechanism": "The function concatenates the user‑supplied `orderId` directly into a filesystem path without validation, enabling directory‑traversal file write. This mirrors the injection flaw described in **02‑sql‑injection** where untrusted data is mixed into code strings, allowing an attacker to escape the intended directory and write arbitrary files on the host.",
+      "severity": "high",
+      "remediation": "Validate `orderId` against a strict allowlist (e.g., /^[a-zA-Z0-9_-]+$/) or construct the path with `path.join('/var/receipts', orderId + '.json')` and verify the resolved path is within `/var/receipts` before writing.",
+      "arithmetic": "orderId may contain '../' sequences; each '../' moves one directory up. With a single '../' the path becomes `/var/receipts/../evil.json` → `/var/evil.json`, allowing write outside the receipts directory. No additional conditions required.",
+      "prediction": null
+    },
+    {
+      "path": "src/lib/receipt.ts",
+      "line": 9,
+      "layer": "security",
+      "symbol": "writeReceipt",
+      "mechanism": "The code falls back to a hard‑coded salt value (`\"salt\"`) when `RECEIPT_SALT` is not set, making the PBKDF2‑derived signature predictable. This weak secret handling is analogous to the secret‑management issues highlighted in **04‑jwt‑and‑revocation**, where static secrets enable forgery.",
+      "severity": "medium",
+      "remediation": "Require a high‑entropy, secret salt via environment variable and reject startup if it is missing; do not provide a static default. Rotate the salt periodically and store it securely.",
+      "arithmetic": "If `RECEIPT_SALT` is unset, the salt is the constant string \"salt\" (8 bytes). An attacker knowing this can compute the signature for any `body` locally, forging valid receipts. The condition is simply `RECEIPT_SALT` unset.",
+      "prediction": null
+    }
+  ]
+}
