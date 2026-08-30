@@ -92,8 +92,11 @@ For each finding:
   - `metric`: what would be measured, e.g. `http_req_duration_p99`,
     `queries_per_request`, `active_connections`, `final_balance`
   - `comparator`: `at_least`, `at_most`, or `between`
-  - `value`: the threshold, or the lower bound when the comparator is `between`
-  - `upper`: the upper bound for `between`, otherwise `null`
+  - `value`: the threshold, or the **lower** bound when the comparator is
+    `between`
+  - `upper`: the **upper** bound for `between`, otherwise `null`. It must be
+    greater than `value`; a band whose upper bound is not above its lower bound
+    admits nothing and is rejected
   - `unit`: `ms`, `s`, `queries`, `rows`, `x`, `rps`, `count`
   - `condition`: the circumstance it holds under, e.g. `rate=250rps`,
     `50 rows`, `two concurrent writers`
@@ -102,9 +105,11 @@ For each finding:
   from the mechanism. A finding whose arithmetic you have already worked out
   above has a prediction; write it down.
 
-  A threshold of zero is not a prediction, because every measurement of a
-  magnitude is at least zero. Neither is a range spanning more than about a
-  hundredfold. Both will be rejected.
+  A threshold has to exclude an outcome that could actually happen. Every
+  latency is at least a millisecond and every count of something is at least 1,
+  so `at_least 0`, `at_least 0.000001ms` and `at_least 1 queries` all admit
+  every measurement anyone could take and are rejected. So is a ceiling above
+  anything measurable, and a range spanning more than about a hundredfold.
 
   A range is honest when the mechanism is uncertain: "8 to 27 times" is a real
   prediction. "Slower" is not.
