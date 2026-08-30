@@ -83,6 +83,11 @@ _INSTALLED = "installed dependencies, not code this repository is answerable for
 _VENDORED = "a vendored copy of somebody else's code"
 _BUILD_OUTPUT = "build output, produced from source that is itself in the map"
 _TOOL_CACHE = "a tool's cache, rewritten on the next run"
+_TOOL_STATE = (
+    "a dotted directory, which is where tools keep their state rather than "
+    "where a project keeps its source: editor settings, CI caches, coverage "
+    "output, agent worktrees. Scope to it explicitly to review it"
+)
 _VCS_INTERNALS = "version control internals rather than source"
 _EDITOR_STATE = "one developer's editor settings"
 _COVERAGE_REPORT = "a coverage report, produced from a test run"
@@ -206,6 +211,16 @@ def _not_source(relative: Path) -> tuple[str, str] | None:
     for part in relative.parts[:-1]:
         if part in EXCLUDED_DIRS:
             return part, EXCLUDED_DIRS[part]
+        # Any dotted directory, not only the ones named above. A repository
+        # kept `.claude/worktrees/<name>/` -- three git worktrees, each a full
+        # copy of the application -- and it supplied 366 of the 476 modules
+        # mapped. The scheduler ranked those copies against the real `src/`,
+        # so the budget went to duplicates and the code someone wanted
+        # reviewed was never reached. The leading dot is the convention for
+        # "belongs to a tool", and honouring it is a better rule than
+        # extending a list every time a new tool appears.
+        if part.startswith(".") and part not in {".", ".."}:
+            return part, _TOOL_STATE
         if part.endswith(EGG_INFO):
             return "egg-info", _BUILD_OUTPUT
         if part in GENERATED_DIRS:
