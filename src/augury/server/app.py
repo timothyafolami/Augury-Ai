@@ -18,6 +18,9 @@ import asyncio
 import hashlib
 import json
 import os
+import shutil
+import subprocess
+import sys
 import uuid
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -208,6 +211,146 @@ def within_allowed(path: str) -> Path:
     return candidate
 
 
+class NativePickerUnavailable(RuntimeError):
+    """The host cannot show a native directory chooser."""
+
+
+def _picker_start(path: str) -> Path:
+    """An existing, allowed directory at which to open the chooser."""
+    start = (Path.cwd() / Path(path).expanduser()).resolve()
+    if not _inside_allowed(start):
+        raise HTTPException(status_code=400, detail=f"{path} is outside the allowed roots")
+    while not start.is_dir() and start != start.parent:
+        start = start.parent
+    if start.is_dir() and _inside_allowed(start):
+        return start
+    raise HTTPException(status_code=500, detail="no allowed directory is available to open")
+
+
+def native_directory(start: Path) -> Path | None:
+    """Ask the host OS for a directory, returning None when the user cancels."""
+    if sys.platform == "darwin":
+        return _macos_directory(start)
+    if sys.platform == "win32":
+        return _windows_directory(start)
+    if sys.platform.startswith("linux"):
+        return _linux_directory(start)
+    return _tkinter_directory(start)
+
+
+def _macos_directory(start: Path) -> Path | None:
+    escaped = str(start).replace("\\", "\\\\").replace('"', '\\"')
+    script = (
+        'POSIX path of (choose folder with prompt "Choose a project directory" '
+        f'default location (POSIX file "{escaped}"))'
+    )
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise NativePickerUnavailable("the macOS folder picker could not be opened") from exc
+
+    if result.returncode == 0:
+        selected = result.stdout.strip()
+        return Path(selected) if selected else None
+    if "-128" in result.stderr:
+        return None
+    detail = (result.stderr or result.stdout).strip() or "unknown error"
+    raise NativePickerUnavailable(f"the macOS folder picker failed: {detail}")
+
+
+def _windows_directory(start: Path) -> Path | None:
+    escaped = str(start).replace("'", "''")
+    script = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "$picker = New-Object System.Windows.Forms.FolderBrowserDialog; "
+        '$picker.Description = "Choose a project directory"; '
+        f"$picker.SelectedPath = '{escaped}'; "
+        "if ($picker.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) "
+        "{ [Console]::Out.Write($picker.SelectedPath) }"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoLogo", "-NoProfile", "-STA", "-Command", script],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise NativePickerUnavailable("the Windows folder picker could not be opened") from exc
+
+    if result.returncode == 0:
+        selected = result.stdout.strip()
+        return Path(selected) if selected else None
+    detail = (result.stderr or result.stdout).strip() or "unknown error"
+    raise NativePickerUnavailable(f"the Windows folder picker failed: {detail}")
+
+
+def _linux_directory(start: Path) -> Path | None:
+    zenity = shutil.which("zenity")
+    if zenity is not None:
+        return _linux_dialog(
+            [zenity, "--file-selection", "--directory", "--filename", f"{start}{os.sep}"], "Zenity"
+        )
+
+    kdialog = shutil.which("kdialog")
+    if kdialog is not None:
+        return _linux_dialog([kdialog, "--getexistingdirectory", str(start)], "KDialog")
+
+    return _tkinter_directory(start)
+
+
+def _linux_dialog(command: list[str], name: str) -> Path | None:
+    try:
+        result = subprocess.run(command, capture_output=True, check=False, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise NativePickerUnavailable(f"the {name} folder picker could not be opened") from exc
+
+    if result.returncode == 0:
+        selected = result.stdout.strip()
+        return Path(selected) if selected else None
+    if not result.stdout.strip() and not result.stderr.strip():
+        return None
+    detail = (result.stderr or result.stdout).strip()
+    raise NativePickerUnavailable(f"the {name} folder picker failed: {detail}")
+
+
+def _tkinter_directory(start: Path) -> Path | None:
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError as exc:
+        raise NativePickerUnavailable(
+            "this Python installation has no native folder picker"
+        ) from exc
+
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        raise NativePickerUnavailable(
+            "the native folder picker is unavailable on this host"
+        ) from exc
+
+    try:
+        root.withdraw()
+        selected = filedialog.askdirectory(
+            initialdir=str(start), title="Choose a project directory", mustexist=True
+        )
+    except tk.TclError as exc:
+        raise NativePickerUnavailable(
+            "the native folder picker is unavailable on this host"
+        ) from exc
+    finally:
+        root.destroy()
+    return Path(selected) if selected else None
+
+
 def build() -> FastAPI:
     """The application, with its routes."""
     # Before any review runs. autogen logs the OpenAI SDK's response object,
@@ -283,6 +426,17 @@ def build() -> FastAPI:
                 for child in directories
             ],
         }
+
+    @app.post("/api/pick-directory")
+    async def pick_directory(target: Target) -> dict[str, str | None]:
+        """Open the host's folder chooser for the browser's primary action."""
+        try:
+            chosen = await asyncio.to_thread(native_directory, _picker_start(target.path))
+        except NativePickerUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if chosen is None:
+            return {"path": None}
+        return {"path": str(within_allowed(str(chosen)))}
 
     @app.post("/api/discover")
     async def discover(target: Target) -> dict[str, Any]:

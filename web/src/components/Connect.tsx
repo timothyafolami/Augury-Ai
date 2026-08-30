@@ -34,6 +34,33 @@ export function Connect({
   // ceiling low enough to stop one is a ceiling that hides the product.
   const [budget, setBudget] = useState(1);
   const [picking, setPicking] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+  const [pickerError, setPickerError] = useState("");
+
+  const chooseDirectory = async () => {
+    setChoosing(true);
+    setPickerError("");
+    try {
+      const answer = await fetch("/api/pick-directory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      if (!answer.ok) {
+        const { detail } = await answer.json().catch(() => ({ detail: answer.statusText }));
+        throw new Error(String(detail));
+      }
+      const selected = (await answer.json()) as { path: string | null };
+      if (selected.path) {
+        setPath(selected.path);
+      }
+    } catch (caught) {
+      const detail = caught instanceof Error ? caught.message : String(caught);
+      setPickerError(`The native folder picker could not open: ${detail}`);
+    } finally {
+      setChoosing(false);
+    }
+  };
 
   const unrecorded = mode.replay && !mode.recorded.includes(path);
 
@@ -63,13 +90,34 @@ export function Connect({
             spellCheck={false}
             className="w-full min-w-0 border border-edge bg-void px-4 py-3 font-mono text-sm text-chalk outline-none transition focus:border-augur-500"
           />
-          <button
-            onClick={() => setPicking(true)}
-            className="shrink-0 border border-edge px-4 font-mono text-[11px] text-mist transition hover:border-augur-500 hover:text-chalk"
-          >
-            browse
-          </button>
+            <button
+              type="button"
+              onClick={() => void chooseDirectory()}
+              disabled={choosing}
+              className="shrink-0 border border-edge px-3 py-3 font-mono text-[11px] text-mist transition hover:border-augur-500 hover:text-chalk disabled:opacity-40"
+            >
+              {choosing ? "opening folder picker..." : "choose folder"}
+            </button>
           </div>
+
+          {pickerError && (
+            <div
+              role="status"
+              className="mt-2 flex flex-wrap items-center gap-2 border border-verdict-broken/40 bg-verdict-broken/5 px-3 py-2 font-mono text-[11px] text-verdict-broken"
+            >
+              <span>{pickerError}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPickerError("");
+                  setPicking(true);
+                }}
+                className="border border-edge px-2 py-1 text-mist transition hover:border-augur-500 hover:text-chalk"
+              >
+                browse server folders
+              </button>
+            </div>
+          )}
 
           <label className="mt-6 block font-mono text-[11px] uppercase tracking-widest text-mist">
             scope <span className="normal-case tracking-normal">— a subdirectory, or all of it</span>
@@ -160,6 +208,7 @@ export function Connect({
             path={path}
             onPick={(chosen) => {
               setPath(chosen);
+              setPickerError("");
               setPicking(false);
             }}
             onClose={() => setPicking(false)}

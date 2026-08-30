@@ -37,7 +37,16 @@ from augury.core.forecast import Mechanism, Pressure
 from augury.core.reference.registry import Registry
 from augury.core.scheduling import Coverage
 from augury.core.survey import Surveyor
-from augury.server.app import Run, Target, _review, build, capacity_of, request_path
+from augury.server.app import (
+    NativePickerUnavailable,
+    Run,
+    Target,
+    _review,
+    build,
+    capacity_of,
+    native_directory,
+    request_path,
+)
 from augury.server.events import VOCABULARY, EventName
 from augury.server.live import Watchers
 
@@ -712,6 +721,74 @@ def test_browsing_offers_the_way_back_up() -> None:
         seen = client.post("/api/browse", json={"path": "eval/cases"}).json()
 
     assert seen["parent"], "no way to go up from a subdirectory"
+
+
+def test_native_picker_returns_the_directory_the_user_chose() -> None:
+    with (
+        mock.patch("augury.server.app.native_directory", return_value=Path(CASE)),
+        _client() as client,
+    ):
+        answer = client.post("/api/pick-directory", json={"path": "eval/cases"})
+
+    assert answer.status_code == 200
+    assert answer.json() == {"path": str(Path(CASE).resolve())}
+
+
+def test_native_picker_keeps_a_cancelled_choice_empty() -> None:
+    with (
+        mock.patch("augury.server.app.native_directory", return_value=None),
+        _client() as client,
+    ):
+        answer = client.post("/api/pick-directory", json={"path": "eval/cases"})
+
+    assert answer.status_code == 200
+    assert answer.json() == {"path": None}
+
+
+def test_native_picker_refuses_a_directory_outside_allowed_roots() -> None:
+    with (
+        mock.patch("augury.server.app.native_directory", return_value=Path("/etc")),
+        _client() as client,
+    ):
+        answer = client.post("/api/pick-directory", json={"path": "eval/cases"})
+
+    assert answer.status_code == 400
+
+
+def test_native_picker_explains_when_the_host_cannot_show_one() -> None:
+    with (
+        mock.patch(
+            "augury.server.app.native_directory",
+            side_effect=NativePickerUnavailable(
+                "the native folder picker is unavailable on this host"
+            ),
+        ),
+        _client() as client,
+    ):
+        answer = client.post("/api/pick-directory", json={"path": "eval/cases"})
+
+    assert answer.status_code == 503
+    assert "native folder picker" in answer.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("platform", "picker"),
+    [
+        ("darwin", "_macos_directory"),
+        ("win32", "_windows_directory"),
+        ("linux", "_linux_directory"),
+        ("freebsd", "_tkinter_directory"),
+    ],
+)
+def test_native_picker_uses_the_host_platform_dialog(platform: str, picker: str) -> None:
+    start = Path(CASE)
+    with (
+        mock.patch("augury.server.app.sys.platform", platform),
+        mock.patch(f"augury.server.app.{picker}", return_value=start) as ask,
+    ):
+        assert native_directory(start) == start
+
+    ask.assert_called_once_with(start)
 
 
 def test_the_report_is_served_as_the_document_the_cli_writes() -> None:
