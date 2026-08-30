@@ -523,11 +523,13 @@ async def _settle(
                 finding, root=root, generate=generate, environment=environment
             )
         except CannotMeasure as refusal:
-            console.print(f"  [dim]declined {finding.symbol}: {refusal}[/dim]", markup=False)
+            console.print(f"  declined {finding.symbol}: {refusal}", markup=False, style="dim")
             settled.append(finding)
             continue
         except Exception as error:
-            console.print(f"  [dim]could not settle {finding.symbol}: {error}[/dim]", markup=False)
+            console.print(
+                f"  could not settle {finding.symbol}: {error}", markup=False, style="dim"
+            )
             settled.append(finding)
             continue
 
@@ -874,7 +876,9 @@ def _print_findings(report: Report, *, limit: int = SHOWN_BY_DEFAULT) -> None:
         )
 
     for dropped in report.dropped:
-        console.print(f"[dim]withdrawn {dropped.symbol}: {dropped.reason}[/dim]", markup=False)
+        # style= rather than [dim] tags: markup=False keeps a finding's own
+        # text from being read as markup, and prints the tags literally.
+        console.print(f"withdrawn {dropped.symbol}: {dropped.reason}", markup=False, style="dim")
 
     console.print(f"\n{len(report.findings)} findings, ${report.usd:.5f}, {report.seconds:.1f}s")
 
