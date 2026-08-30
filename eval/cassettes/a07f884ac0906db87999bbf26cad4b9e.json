@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "src/lib/token.ts",
+      "line": 11,
+      "layer": "security",
+      "symbol": "claimsFrom",
+      "mechanism": "Missing JWT verification allows forged tokens to be accepted, violating JWT validation requirements (reference 04-jwt-and-revocation).",
+      "severity": "high",
+      "remediation": "Use jwt.verify with the configured SECRET to validate the token signature and expiration before extracting claims, and reject invalid tokens.",
+      "arithmetic": "No numeric threshold; the vulnerability permits arbitrary token acceptance without verification.",
+      "prediction": null
+    }
+  ]
+}
