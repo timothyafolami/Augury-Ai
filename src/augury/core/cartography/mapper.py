@@ -13,7 +13,7 @@ from collections import Counter
 from pathlib import Path
 
 from augury.core.cartography.languages import EXTENSIONS, ParseError, adapter_for
-from augury.core.cartography.model import ModuleNode, RepoMap, Signal
+from augury.core.cartography.model import Exclusion, ModuleNode, RepoMap, Signal
 
 # A single source file has no legitimate reason to be larger than this. The cap
 # bounds memory, and it stops a binary shipped with a source extension from
@@ -38,18 +38,16 @@ CONTEXT_FILES = (
     "gunicorn.conf.py",
     "uvicorn.json",
     "Procfile",
+    # The committed templates, and only those. They are the declaration of
+    # which knobs exist, which is half of every configuration defect; the file
+    # they are a template of is refused by name a few lines below.
+    ".env.example",
+    ".env.sample",
 )
 
 # Enough to carry a CMD line and a service block, not a whole manifest.
 MAX_CONTEXT_CHARS = 4_000
 
-# Directories that hold somebody else's code. Run against a production
-# repository the mapper reported 1,137 modules, 843 of which were a bundled
-# `.conda` environment -- so three quarters of the map, and three quarters of
-# any budget spent from it, was a vendored standard library. `.venv` and
-# `site-packages` were listed here and `.conda` was not.
-#
-# Matched at any depth, because a monorepo nests one of these per package.
 # Directories whose contents are tests. Matched as whole path segments, never
 # as substrings: `app/contest/` and `latest.py` are production code.
 TEST_DIRS = frozenset({"tests", "test", "testing", "spec", "specs", "__tests__"})
@@ -74,49 +72,155 @@ def looks_like_a_test(relative: str) -> bool:
     return stem.startswith(TEST_PREFIXES) or stem.endswith(TEST_SUFFIXES)
 
 
-EXCLUDED_DIRS = frozenset(
-    {
-        # Python environments and build output
-        ".venv",
-        "venv",
-        "env",
-        ".conda",
-        "conda",
-        ".tox",
-        ".nox",
-        "site-packages",
-        "dist-packages",
-        "__pycache__",
-        "eggs",
-        ".eggs",
-        "*.egg-info",
-        # JavaScript and TypeScript
-        "node_modules",
-        "bower_components",
-        ".next",
-        ".nuxt",
-        ".svelte-kit",
-        # Other ecosystems
-        "vendor",
-        "third_party",
-        "Pods",
-        ".gradle",
-        "target",
-        # Tooling and build artefacts
-        ".git",
-        ".hg",
-        ".svn",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        ".idea",
-        ".vscode",
-        "build",
-        "dist",
-        "coverage",
-        "htmlcov",
-    }
-)
+# -- what never enters the map, and the sentence said about it ---------------
+#
+# Every exclusion below is reported: a category, one of these reasons, and a
+# count of the files it swallowed. The reasons are shared constants rather than
+# strings written at each site, so a category cannot end up with two of them
+# and the count cannot drift from what it is counting.
+
+_INSTALLED = "installed dependencies, not code this repository is answerable for"
+_VENDORED = "a vendored copy of somebody else's code"
+_BUILD_OUTPUT = "build output, produced from source that is itself in the map"
+_TOOL_CACHE = "a tool's cache, rewritten on the next run"
+_VCS_INTERNALS = "version control internals rather than source"
+_EDITOR_STATE = "one developer's editor settings"
+_COVERAGE_REPORT = "a coverage report, produced from a test run"
+_MINIFIED = "a minified bundle: one machine-written line, and the source it came from is in the map"
+_GENERATED = "written by a code generator, so a defect here belongs to the generator or its schema"
+_FIXTURES = "test data rather than code that runs in production"
+_UNSUPPORTED = "no adapter reads this file type, so nothing here was parsed"
+_OUT_OF_SCOPE = "outside the directories this review was scoped to"
+_SECRETS = "holds live credentials, so it is never opened, mapped or sent to a model"
+
+# Directories that hold somebody else's code. Run against a production
+# repository the mapper reported 1,137 modules, 843 of which were a bundled
+# `.conda` environment -- so three quarters of the map, and three quarters of
+# any budget spent from it, was a vendored standard library. `.venv` and
+# `site-packages` were listed here and `.conda` was not.
+#
+# Matched at any depth, because a monorepo nests one of these per package. The
+# directory name is the category the map reports, so a reader gets
+# `node_modules 31204` rather than one total they cannot act on.
+EXCLUDED_DIRS: dict[str, str] = {
+    # Python environments and build output
+    ".venv": _INSTALLED,
+    "venv": _INSTALLED,
+    "env": _INSTALLED,
+    ".conda": _INSTALLED,
+    "conda": _INSTALLED,
+    ".tox": _TOOL_CACHE,
+    ".nox": _TOOL_CACHE,
+    "site-packages": _INSTALLED,
+    "dist-packages": _INSTALLED,
+    "__pycache__": _TOOL_CACHE,
+    "eggs": _BUILD_OUTPUT,
+    ".eggs": _BUILD_OUTPUT,
+    # JavaScript and TypeScript
+    "node_modules": _INSTALLED,
+    "bower_components": _INSTALLED,
+    ".next": _BUILD_OUTPUT,
+    ".nuxt": _BUILD_OUTPUT,
+    ".svelte-kit": _BUILD_OUTPUT,
+    # Other ecosystems
+    "vendor": _VENDORED,
+    "third_party": _VENDORED,
+    "Pods": _INSTALLED,
+    ".gradle": _TOOL_CACHE,
+    "target": _BUILD_OUTPUT,
+    # Tooling and build artefacts
+    ".git": _VCS_INTERNALS,
+    ".hg": _VCS_INTERNALS,
+    ".svn": _VCS_INTERNALS,
+    ".mypy_cache": _TOOL_CACHE,
+    ".pytest_cache": _TOOL_CACHE,
+    ".ruff_cache": _TOOL_CACHE,
+    ".idea": _EDITOR_STATE,
+    ".vscode": _EDITOR_STATE,
+    "build": _BUILD_OUTPUT,
+    "dist": _BUILD_OUTPUT,
+    "coverage": _COVERAGE_REPORT,
+    "htmlcov": _COVERAGE_REPORT,
+}
+
+# An egg-info directory carries the distribution name, so it can never be
+# matched by equality. It was listed above as the glob `*.egg-info` in a set
+# that only ever compared whole path segments, which matched nothing at all --
+# the kind of exclusion that looks present in review and does nothing at run
+# time, and the reason each of these now has to produce a count.
+EGG_INFO = ".egg-info"
+
+# Machine-written files that do carry a supported extension, so the extension
+# table alone would send them to a specialist. Reviewing a bundle spends a
+# module's budget on a file nobody can edit.
+MINIFIED_SUFFIXES = (".min.js", ".min.mjs", ".min.jsx", ".bundle.js", "-min.js")
+
+# Generated clients and stubs, by the two conventions that carry the fact in
+# the name: a directory everything under is generated, or a filename suffix the
+# generator stamps on.
+GENERATED_DIRS = frozenset({"generated", "__generated__", ".generated"})
+GENERATED_SUFFIXES = ("_pb2.py", "_pb2_grpc.py", ".pb.go", "_pb.js", ".g.dart", ".gen.go")
+
+# Test data. Whole segments again, and `testdata` is the name the Go toolchain
+# itself refuses to compile.
+FIXTURE_DIRS = frozenset({"fixtures", "__fixtures__", "testdata", "__snapshots__", "cassettes"})
+
+# Files that hold live credentials for the repository under review. Refused by
+# name, because refusing them by extension is not a decision anybody made: a
+# `.env` has no suffix `EXTENSIONS` claims, so today it survives on a table
+# written to answer "which parser reads this?" that was never asked about
+# secrets. One more entry there and a production key is in a prompt, and from
+# there in a cassette that gets committed.
+SECRET_FILENAMES = frozenset({".env", ".envrc"})
+
+# The committed half of the same convention. A template names the variables and
+# holds none of the values, so it is safe, and it is worth reading: a pool size
+# declared here against a worker count declared in the Dockerfile is exactly
+# the relationship a reviewer shown one file at a time cannot see.
+ENV_TEMPLATES = frozenset({".env.example", ".env.sample"})
+
+
+def holds_live_secrets(name: str) -> bool:
+    """Whether a file of this name must never be opened.
+
+    Matched on the whole filename rather than on a suffix, so `.env.local` and
+    `.env.production` -- which is what a real service actually ships -- are
+    refused alongside the bare name, while `environment.py` is not.
+
+    Public because this mapper is not the only reader in the system. Symbol
+    location resolves whatever repo-relative path a model names, and that path
+    is a model's output rather than ours.
+    """
+    if name in ENV_TEMPLATES:
+        return False
+    return name in SECRET_FILENAMES or name.startswith(".env.") or name.endswith(".env")
+
+
+def _not_source(relative: Path) -> tuple[str, str] | None:
+    """The category and reason this file stays out of the map, or None.
+
+    Directories are read outermost first, so the answer names the tree a
+    reader would recognise: a file under `node_modules/x/build/` is reported
+    as node_modules, which is the thing they would delete.
+    """
+    for part in relative.parts[:-1]:
+        if part in EXCLUDED_DIRS:
+            return part, EXCLUDED_DIRS[part]
+        if part.endswith(EGG_INFO):
+            return "egg-info", _BUILD_OUTPUT
+        if part in GENERATED_DIRS:
+            return "generated", _GENERATED
+        if part in FIXTURE_DIRS:
+            return "fixtures", _FIXTURES
+
+    name = relative.name
+    if name.endswith(MINIFIED_SUFFIXES):
+        return "minified", _MINIFIED
+    if name.endswith(GENERATED_SUFFIXES):
+        return "generated", _GENERATED
+    if relative.suffix.lower() not in EXTENSIONS:
+        return "unsupported", _UNSUPPORTED
+    return None
 
 
 class Cartographer:
@@ -146,7 +250,8 @@ class Cartographer:
         self._include_tests = include_tests
 
     def map(self) -> RepoMap:
-        sources = sorted(self._source_files())
+        found, excluded = self._walk()
+        sources = sorted(found)
         if self._scope and not sources:
             raise ValueError(
                 f"scope {list(self._scope)} matched no files under {self._root}. "
@@ -171,7 +276,7 @@ class Cartographer:
                 skipped[rel] = reason
                 continue
             adapter = adapter_for(path)
-            if adapter is None:  # unreachable: _source_files filters by extension
+            if adapter is None:  # unreachable: the walk filters by extension
                 continue
 
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -231,6 +336,7 @@ class Cartographer:
             unparsed=unparsed,
             unreachable=unreachable,
             skipped=skipped,
+            excluded=excluded,
             context=self._context(),
         )
 
@@ -240,10 +346,17 @@ class Cartographer:
         Only the named files: this is sent with every module, so anything here
         is paid for many times over and earns its place only by changing how
         the module reads. A .env is never collected -- context reaches a model
-        and a committed recording, and a secret belongs in neither.
+        and a committed recording, and a secret belongs in neither. Its
+        committed template is, because it names the variables and holds none
+        of them.
         """
         found: dict[str, str] = {}
         for name in CONTEXT_FILES:
+            # The list above is edited by hand and `.env` is six keystrokes
+            # from `.env.example`. Checking here rather than trusting the list
+            # is what makes the refusal a rule instead of a convention.
+            if holds_live_secrets(name):
+                continue
             path = self._root / name
             if not path.is_file() or path.is_symlink():
                 continue
@@ -258,7 +371,14 @@ class Cartographer:
         target is not: `config.py -> ~/.aws/credentials` is a valid repository
         and a .env is largely valid Python, so it parses and survives into a
         prompt and from there into a committed recording.
+
+        The credential check here is the second gate and should never fire:
+        the walk already refuses these by name, and a file that reaches this
+        point is only named, never opened. Being named in `skipped` is how a
+        broken first gate becomes visible rather than silent.
         """
+        if holds_live_secrets(path.name):
+            return "holds live credentials and is never read"
         if path.is_symlink():
             return "symlink"
         if path.stat().st_size > MAX_SOURCE_BYTES:
@@ -267,21 +387,54 @@ class Cartographer:
 
     # -- traversal ---------------------------------------------------------
 
-    def _source_files(self) -> list[Path]:
-        return [
-            path
-            for path in self._root.rglob("*")
-            if path.is_file()
-            and path.suffix.lower() in EXTENSIONS
-            and not EXCLUDED_DIRS & set(path.relative_to(self._root).parts)
-            and self._in_scope(path)
-        ]
+    def _walk(self) -> tuple[list[Path], dict[str, Exclusion]]:
+        """Every source file, and a tally of everything left behind.
 
-    def _in_scope(self, path: Path) -> bool:
+        One pass, deliberately. The counts have to come from the same walk
+        that builds the map, because a second walk is a second estimate of the
+        first, and a number nobody measured is the thing this tool exists not
+        to produce.
+        """
+        sources: list[Path] = []
+        tally: Counter[tuple[str, str]] = Counter()
+
+        for path in self._root.rglob("*"):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(self._root)
+
+            # Ordered by which answer a reader most needs. A secret is
+            # reported as a secret wherever it sits, including inside a
+            # vendored tree. A scoped run then leads with the scope, because
+            # "you asked for backend/ only" explains more of the gap than any
+            # category found inside what it hid.
+            left_out: tuple[str, str] | None
+            if holds_live_secrets(relative.name):
+                left_out = ("secrets", _SECRETS)
+            elif not self._in_scope(relative):
+                left_out = ("out_of_scope", _OUT_OF_SCOPE)
+            else:
+                left_out = _not_source(relative)
+
+            if left_out is not None:
+                tally[left_out] += 1
+                continue
+            sources.append(path)
+
+        # Largest first: at scale the top line is most of the repository, and
+        # it is the line that decides whether the review was worth reading.
+        return sources, {
+            category: Exclusion(reason=reason, count=count)
+            for (category, reason), count in sorted(
+                tally.items(), key=lambda item: (-item[1], item[0][0])
+            )
+        }
+
+    def _in_scope(self, relative: Path) -> bool:
         if not self._scope:
             return True
-        relative = path.relative_to(self._root).as_posix()
-        return any(relative == part or relative.startswith(f"{part}/") for part in self._scope)
+        posix = relative.as_posix()
+        return any(posix == part or posix.startswith(f"{part}/") for part in self._scope)
 
     def _relative(self, path: Path) -> str:
         return path.relative_to(self._root).as_posix()

@@ -58,6 +58,18 @@ class ModuleNode(BaseModel):
     churn: int = Field(default=0, ge=0, description="Commits touching this file")
 
 
+class Exclusion(BaseModel):
+    """One category of file the walk never mapped, and why.
+
+    A reason and a count, never the paths. A monorepo excludes tens of
+    thousands of vendored files, and a reviewer that answers "what did you not
+    look at?" with forty thousand lines has answered nothing.
+    """
+
+    reason: str = Field(description="Why nothing in this category was read")
+    count: int = Field(ge=0, description="How many files were excluded for that reason")
+
+
 class RepoMap(BaseModel):
     """The whole repository, as the Scheduler sees it."""
 
@@ -81,6 +93,13 @@ class RepoMap(BaseModel):
         description="Deployment configuration that sets the conditions a module "
         "runs under. Sent alongside every module, because a defect is often the "
         "relationship between a number here and a number in the source.",
+    )
+    excluded: dict[str, Exclusion] = Field(
+        default_factory=dict,
+        description="Files that never entered the map, by category. `skipped` "
+        "names files that were considered and set aside; this counts the ones "
+        "the walk never offered, which in a large repository is most of it. "
+        "Empty when nothing was excluded, rather than a row of zeroes.",
     )
 
     def module(self, path: str) -> ModuleNode:
