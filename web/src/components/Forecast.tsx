@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Pressure } from "../lib/types";
+import { Convergence } from "./Convergence";
 
 /** Where the review kept arriving, drawn.
  *
@@ -45,6 +46,12 @@ export function Forecast({ items }: { items: Pressure[] }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* The convergence itself. The rows below stay, because a diagram shows
+          which findings meet and the rows say what each one was. */}
+      <div className="overflow-x-auto border border-edge bg-void/40 px-3 py-3">
+        <Convergence items={items} onPick={(m) => setOpen(open === m ? null : m)} picked={open} />
+      </div>
+
       <div className="flex flex-col gap-3">
         {items.map((item, index) => (
           <motion.div
