@@ -23,6 +23,51 @@ from augury.core.adapters.base import ChatModel, Completion, Usage
 T = TypeVar("T", bound=BaseModel)
 
 
+# The model every committed recording was made with. Replaying is reproducing
+# one particular run, so the model is part of what is being reproduced -- and
+# a run under a different model is a different run, not a missing cassette.
+RECORDED_WITH = "openai/gpt-oss-120b"
+
+# Written beside the recordings so a replay can say what they are of. Without
+# it a mismatch is indistinguishable from an incomplete set.
+MANIFEST = "recorded-with.json"
+
+
+def models_in(directory: Path) -> tuple[str, ...]:
+    """Which models these recordings were made with, if they say."""
+    manifest = directory / MANIFEST
+    if not manifest.is_file():
+        return ()
+    try:
+        said = json.loads(manifest.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return ()
+    models = said.get("models", [])
+    return tuple(str(name) for name in models) if isinstance(models, list) else ()
+
+
+def miss_report(*, model_id: str, directory: Path, recorded: tuple[str, ...]) -> str:
+    """Why this call found no recording, and what to do about it.
+
+    The first version said "run `make eval-live` to record, or check the
+    cassettes are committed". Both suggestions were wrong for the failure that
+    actually happened: the cassettes were committed and complete, they were of
+    a different model, and re-recording would have overwritten a good set to
+    answer a question nobody asked.
+    """
+    if recorded and not any(model_id.endswith(name) for name in recorded):
+        return (
+            f"these recordings are of {', '.join(recorded)}, and this run is asking "
+            f"{model_id}. Replaying reproduces one particular run, so the model is "
+            "part of what is reproduced. Set AUGURY_PROVIDER and AUGURY_MODEL to "
+            "match, or use `make eval-replay`, which pins them for you."
+        )
+    return (
+        f"no recording for this call to {model_id} in {directory}. "
+        "Run `make eval-live` to record, or check the cassettes are committed."
+    )
+
+
 class CassetteMiss(RuntimeError):
     """No recording is available for a call that may not go to the network."""
 
@@ -90,8 +135,11 @@ class CassetteModel:
 
         if self._replay_only:
             raise CassetteMiss(
-                f"no recording for this call in {self._dir}. "
-                "Run `make eval-live` to record, or check the cassettes are committed."
+                miss_report(
+                    model_id=self._inner.model_id,
+                    directory=self._dir,
+                    recorded=models_in(self._dir),
+                )
             )
 
         # One live call per key even when several agents ask at once.
