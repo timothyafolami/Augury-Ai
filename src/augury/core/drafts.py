@@ -103,19 +103,34 @@ def to_report(
         symbol = item.symbol or "unknown"
         located = locator(path, symbol) if locator else None
 
-        findings.append(
-            Finding(
-                path=path,
-                line=located if located is not None else max(item.line, 0),
-                layer=item.layer or "unknown",
-                symbol=symbol,
-                mechanism=item.mechanism or "not stated",
-                severity=item.severity,
-                remediation=item.remediation or "not stated",
-                arithmetic=item.arithmetic,
-                prediction=prediction,
+        # A draft declares no length limits, so nothing stops a specialist
+        # writing a thorough mechanism -- and Finding caps them. Building one
+        # unguarded raised after the whole budget was spent, was reported to
+        # the user as the provider refusing the request, and was then cached,
+        # so every later run died identically and for free.
+        try:
+            findings.append(
+                Finding(
+                    path=_fits(path, MAX_PATH),
+                    line=located if located is not None else max(item.line, 0),
+                    layer=_fits(item.layer or "unknown", MAX_LAYER),
+                    symbol=_fits(symbol, MAX_SYMBOL),
+                    mechanism=_fits(item.mechanism or "not stated", MAX_TEXT),
+                    severity=item.severity,
+                    remediation=_fits(item.remediation or "not stated", MAX_TEXT),
+                    arithmetic=_fits(item.arithmetic, MAX_TEXT),
+                    prediction=prediction,
+                )
             )
-        )
+        except ValidationError as malformed:
+            # Whatever else is wrong with one item, it must not cost the run.
+            dropped.append(
+                Dropped(
+                    symbol=symbol[:MAX_SYMBOL],
+                    path=path[:MAX_PATH],
+                    reason=f"could not be made into a finding: {why_it_failed(malformed)}",
+                )
+            )
 
     return Report(
         findings=tuple(findings),
@@ -124,6 +139,26 @@ def to_report(
         usd=usd,
         seconds=seconds,
     )
+
+
+# What Finding accepts, less the room the marker needs. A model writes to the
+# limit it was given, and it was given none.
+MAX_TEXT = 4000
+MAX_PATH = 4000
+MAX_LAYER = 120
+MAX_SYMBOL = 480
+_CUT = " [truncated]"
+
+
+def _fits(text: str, limit: int) -> str:
+    """The text, short enough to store, saying so when it was shortened.
+
+    Silently cutting a mechanism would publish half a sentence as though the
+    reviewer had written it.
+    """
+    if len(text) <= limit:
+        return text
+    return text[: limit - len(_CUT)] + _CUT
 
 
 def _validate(draft: DraftPrediction | None) -> tuple[Prediction | None, str | None]:
