@@ -27,6 +27,8 @@ from augury.cli.quiet import quiet_dependency_noise
 from augury.cli.rendering import languages_read, service_table
 from augury.core.adapters.base import ChatModel
 from augury.core.adapters.provider import model_from
+from augury.core.artifacts import read_artifacts
+from augury.core.artifacts.checks import deployment_findings
 from augury.core.cartography import Cartographer
 from augury.core.cartography.languages import EXTENSIONS
 from augury.core.findings import Finding, Measurement, Report
@@ -269,6 +271,8 @@ def report(
 
     bases = [root / part for part in limits] or [root]
     banner.stage(console, 3, 5, "Schema", "what the migrations do to tables with rows in them")
+    inventory = read_artifacts(root)
+    deployment = deployment_findings(inventory.artifacts, root=root)
     schema = tuple(f for base in bases for f in schema_findings(read_migrations(base)))
     registry = Registry()
     dependencies = tuple(
@@ -276,6 +280,7 @@ def report(
     )
     banner.note(
         console,
+        f"{counted(len(deployment), 'deployment finding')}, "
         f"{counted(len(schema), 'schema finding')}, "
         f"{counted(len(dependencies), 'dependency finding')}, "
         "all deterministic and free",
@@ -348,6 +353,7 @@ def report(
         report=reviewed,
         schema=schema,
         dependencies=dependencies,
+        deployment=deployment,
         modules=len(repo.modules),
         unreachable=len(repo.unreachable),
         reading=reading,
