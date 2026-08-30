@@ -727,3 +727,30 @@ def test_the_report_is_served_as_the_document_the_cli_writes() -> None:
     )
 
     assert written.startswith("# svc")
+
+
+def test_an_unbuilt_interface_says_how_to_build_it(tmp_path: Path) -> None:
+    """A clone has no web/dist, because a build is generated and not committed.
+
+    Serving the API and nothing at / leaves a reader with a blank page and no
+    reason for it. This is the one moment where the product is invisible, so
+    it says what to run.
+    """
+    from augury.server.app import serve_frontend
+
+    with TestClient(serve_frontend(build(), tmp_path / "nowhere")) as client:
+        answer = client.get("/")
+
+    assert answer.status_code == 200
+    assert "npm" in answer.text
+
+
+def test_a_built_interface_is_served_instead_of_the_instructions(tmp_path: Path) -> None:
+    from augury.server.app import serve_frontend
+
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>augury</title>", encoding="utf-8")
+
+    with TestClient(serve_frontend(build(), dist)) as client:
+        assert "augury" in client.get("/").text
