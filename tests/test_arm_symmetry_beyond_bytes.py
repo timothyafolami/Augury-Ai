@@ -17,6 +17,25 @@ ANALYST = raw("analyst")
 BASELINE = raw("baseline")
 
 
+# Every rule the falsifiability gate enforces, in the words the prompts use.
+# A rule reworded in one arm and not the other is the asymmetry this file
+# exists to catch, so the list is checked against both -- and checked for
+# being present at all, since a phrase with a typo in it is in neither arm and
+# would otherwise pass twice over.
+VALIDATOR_RULES = (
+    "greater than `value`",  # which bound is which
+    "at least 1",  # the floor a unit can measure
+    "hundredfold",  # the widest honest band
+    "8 to 27",  # when a range is honest rather than evasive
+)
+
+
+def test_every_validator_rule_is_stated_somewhere() -> None:
+    """Guards the test below: a rule nobody states passes it vacuously."""
+    for rule in VALIDATOR_RULES:
+        assert rule in ANALYST, f"nothing states this rule any more: {rule}"
+
+
 def test_both_arms_learn_what_the_validator_rejects() -> None:
     """The analyst was given the answer key to the falsifiability gate.
 
@@ -24,8 +43,7 @@ def test_both_arms_learn_what_the_validator_rejects() -> None:
     the falsifiable-precision denominator. Telling one arm the rules and not
     the other moves that metric directly.
     """
-    for rule in ("threshold of zero", "hundredfold"):
-        assert rule in ANALYST, rule
+    for rule in VALIDATOR_RULES:
         assert rule in BASELINE, f"the baseline is not told: {rule}"
 
 
