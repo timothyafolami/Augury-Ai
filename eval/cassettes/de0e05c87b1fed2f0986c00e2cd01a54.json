@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/api/health.py",
+      "line": 18,
+      "layer": "network",
+      "symbol": "ready",
+      "mechanism": "03-timeouts-as-a-first-principle — the DB query has no timeout, so a slow database holds a worker, a DB connection, and memory, potentially saturating the worker pool and the SQLAlchemy/asyncpg connection pool (default size 5) under load.",
+      "severity": "high",
+      "remediation": "Add an explicit timeout to the DB query or configure a statement_timeout on the PostgreSQL side, e.g. `await session.execute(select(1), execution_options={\"timeout\": 5})` or set `connect_args={\"command_timeout\": 5}` when creating the async engine.",
+      "arithmetic": "Workers=4 (Dockerfile uvicorn --workers 4). Default asyncpg/SQLAlchemy pool size per worker=5 (reference 02-connection-pooling-and-pool-exhaustion). Concurrency ceiling = workers × pool_size = 4 × 5 = 20 active DB connections. At request rate 80 rps with DB latency 200 ms, required active connections = rate × latency = 80 × 0.2 s = 16. Worker saturation = 16/20 = 0.8 (80%). Thus under these conditions the service will have ≥80% of its workers blocked by the DB query.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 0.8,
+        "upper": null,
+        "unit": "x",
+        "condition": "rate=80rps, db_latency=200ms"
+      }
+    }
+  ]
+}
