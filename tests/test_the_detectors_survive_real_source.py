@@ -26,7 +26,7 @@ import pytest
 from augury.core.cartography.mapper import Cartographer
 from augury.core.cartography.model import Signal
 
-RUST = '''\
+RUST = """\
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -58,9 +58,9 @@ impl Cache {
         *target = byte;
     }
 }
-'''
+"""
 
-CPP = '''\
+CPP = """\
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -95,9 +95,9 @@ class Auditor {
 };
 
 }  // namespace inventory
-'''
+"""
 
-JAVA = '''\
+JAVA = """\
 package com.example.inventory;
 
 import java.io.InputStream;
@@ -125,7 +125,7 @@ public final class Restore {
         pool.shutdown();
     }
 }
-'''
+"""
 
 
 def _signals(root: Path, name: str, source: str) -> frozenset[Signal]:
@@ -169,7 +169,7 @@ def test_a_lock_guard_declaration_counts_as_concurrency(tmp_path: Path) -> None:
 
 def test_a_file_with_none_of_it_stays_quiet(tmp_path: Path) -> None:
     """The guard that makes the three above mean something."""
-    plain = '''\
+    plain = """\
 package com.example.inventory;
 
 /** A value object. */
@@ -184,7 +184,7 @@ public final class Sku {
         return code;
     }
 }
-'''
+"""
     raised = _signals(tmp_path, "Sku.java", plain)
 
     assert Signal.CONCURRENCY not in raised
