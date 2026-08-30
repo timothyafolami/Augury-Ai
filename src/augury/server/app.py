@@ -518,6 +518,8 @@ async def _review(run: Run, root: Path, target: Target) -> None:
             report=result,
             schema=schema,
             dependencies=tuple(dependencies),
+            deployment=deployment,
+            synthesis=observations,
             modules=len(repo.modules),
             unreachable=len(repo.unreachable),
             reading=reading,
