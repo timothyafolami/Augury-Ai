@@ -1,0 +1,36 @@
+{
+  "observations": [
+    {
+      "mechanism": "The /ready health endpoint runs a database query without a timeout, leaving the transaction open (idle‑in‑transaction) which holds a DB connection, a worker, and a slot in the asyncpg pool.",
+      "consequence": "A surge of health‑check requests can exhaust workers and DB connections, rendering the API unresponsive.",
+      "findings": [
+        1,
+        6
+      ]
+    },
+    {
+      "mechanism": "The PostgreSQL connection pool is larger than the number of API workers, and because queries lack timeouts, a slow query blocks a pool slot while its worker is also blocked.",
+      "consequence": "Under load the service can run out of both workers and DB connections, causing a deadlock that stalls all requests.",
+      "findings": [
+        4,
+        6
+      ]
+    },
+    {
+      "mechanism": "A generic exception handler swallows database errors and returns an empty list, while correlation IDs are never attached to logs, so an error carries no request identifier.",
+      "consequence": "Order‑listing failures become invisible in logs, preventing fast diagnosis and extending outage time.",
+      "findings": [
+        5,
+        7
+      ]
+    },
+    {
+      "mechanism": "Creating a new httpx.AsyncClient for every payment request opens a fresh socket (consuming a file descriptor) and forces a cold TLS handshake on each call.",
+      "consequence": "At moderate load the process can hit the OS file‑descriptor limit and incur extra latency, effectively throttling the service.",
+      "findings": [
+        8,
+        9
+      ]
+    }
+  ]
+}
