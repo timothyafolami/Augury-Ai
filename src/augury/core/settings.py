@@ -46,8 +46,8 @@ DEFAULT_CASSETTE_DIR = Path(__file__).resolve().parents[3] / "eval" / "cassettes
 # here that still reasons well enough for this to work. The structure around
 # the model is what this project is about, so the default should be the one
 # that makes running it on a real repository affordable.
-DEFAULT_PROVIDER = "deepseek"
-DEFAULT_MODEL = "deepseek-v4-flash"
+DEFAULT_PROVIDER = "groq"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 
 API_KEY_VARIABLES: dict[str, str] = {
     "groq": "GROQ_API_KEY",
