@@ -46,7 +46,7 @@ const LAYER_START = LEFT_EDGE - 72;
 // both one finding, both landing on adjacent rows.
 const CLEARANCE = 34;
 
-interface Placed {
+export interface Placed {
   mechanism: string;
   band: string;
   independent: number;
@@ -54,18 +54,17 @@ interface Placed {
   evidence: { key: string; label: string; where: string; layer: string; y: number }[];
 }
 
-export function Convergence({
-  items,
-  onPick,
-  picked,
-}: {
-  items: Pressure[];
-  onPick: (mechanism: string) => void;
-  picked: string | null;
-}) {
-  // Laid out top to bottom in one pass: every finding gets a row, and each
-  // mechanism sits at the middle of the rows that feed it, so the lines fan
-  // rather than cross.
+/** Where every evidence mark and every mechanism node sits.
+ *
+ * Pure, and exported, because it is the part of this component that can be
+ * wrong in a way nobody notices: two mechanisms landing on the same line
+ * render one label on top of the other, and that shipped once. A diagram is
+ * hard to assert on; an array of numbers is not.
+ */
+export function place(items: Pressure[]): { placed: Placed[]; height: number } {
+  // Top to bottom in one pass: every finding gets a row, and each mechanism
+  // sits at the middle of the rows that feed it, so the lines fan rather
+  // than cross.
   let row = 0;
   const placed: Placed[] = items.map((item) => {
     const evidence = item.evidence.map((piece) => ({
@@ -95,7 +94,19 @@ export function Convergence({
   }
 
   const lowest = placed.length ? placed[placed.length - 1].y : TOP;
-  const height = Math.max(TOP + row * ROW, lowest + ROW) + 12;
+  return { placed, height: Math.max(TOP + row * ROW, lowest + ROW) + 12 };
+}
+
+export function Convergence({
+  items,
+  onPick,
+  picked,
+}: {
+  items: Pressure[];
+  onPick: (mechanism: string) => void;
+  picked: string | null;
+}) {
+  const { placed, height } = place(items);
 
   return (
     <svg
