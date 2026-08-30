@@ -107,6 +107,30 @@ export function useRun() {
   return { discovery, stages, run, report, busy, loadStages, discover, review };
 }
 
+const ORDER: StageKey[] = ["survey", "map", "schema", "specialists", "report"];
+
+/** Which stage an event proves the run has reached.
+ *
+ * Derived rather than announced, because the events name what happened and a
+ * stage is an interpretation of that. Anything earlier than the stage an event
+ * proves is finished by definition, which is what stops a stage that emits
+ * nothing of its own from staying grey for the whole run.
+ */
+const STAGE_OF: Record<string, StageKey | undefined> = {
+  "scout.started": "survey",
+  "service.detected": "survey",
+  "language.detected": "map",
+  "structure.discovered": "map",
+  "model.built": "map",
+  "research.started": "schema",
+  "research.finished": "schema",
+  "agent.started": "specialists",
+  "agent.handoff": "specialists",
+  "agent.finished": "specialists",
+  "coverage.computed": "report",
+  "prediction.generated": "report",
+};
+
 /** One step, applied to what is on screen. Pure, so it is testable on its own. */
 export function fold(prior: RunState, step: Step): RunState {
   const next: RunState = { ...prior, steps: [...prior.steps, step].slice(-400) };
@@ -115,6 +139,27 @@ export function fold(prior: RunState, step: Step): RunState {
   // interface reads those rather than guessing from a shape.
   const data = step.data ?? {};
   if (step.event === "review.started" && data.model) next.model = String(data.model);
+
+  // Stage state, derived from the typed events. The old explicit stage event
+  // went away with the vocabulary and nothing replaced it, so every stage sat
+  // grey for the whole run and the pipeline read as a diagram rather than as
+  // a thing that was happening.
+  const reached = STAGE_OF[step.event ?? ""];
+  if (reached) {
+    next.stages = { ...prior.stages };
+    let seen = false;
+    for (const key of ORDER) {
+      if (key === reached) {
+        next.stages[key] = "running";
+        seen = true;
+      } else if (!seen) {
+        next.stages[key] = "done";
+      }
+    }
+  }
+  if (step.event === "review.completed") {
+    next.stages = { survey: "done", map: "done", schema: "done", specialists: "done", report: "done" };
+  }
   if (step.event === "review.failed") next.failed = String(data.detail ?? "the run failed");
   if (step.event === "structure.discovered" && typeof data.modules === "number") {
     next.total = data.modules;

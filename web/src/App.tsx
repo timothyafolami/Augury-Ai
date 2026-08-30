@@ -17,6 +17,19 @@ import { useRun } from "./lib/useRun";
 
 type Screen = "landing" | "connect" | "workspace";
 
+/** The eight concerns, from core/layers.py. Named here so the orchestration
+ *  cannot draw a stage of the pipeline as though it were a specialist. */
+const SPECIALISTS = [
+  "concurrency",
+  "network",
+  "data",
+  "distributed",
+  "failure",
+  "observability",
+  "security",
+  "craft",
+];
+
 /** Landing, connect, workspace.
  *
  * The failure state is designed rather than left over. A provider refusing a
@@ -65,22 +78,27 @@ export default function App() {
     [discover, review],
   );
 
-  // Which specialists have actually been routed to, from the trajectory.
+  // The eight specialists, and only those. The stages of the pipeline are not
+  // specialists, and a chip reading CARTOGRAPHER under SPECIALISTS says the
+  // diagram does not know what it is drawing.
   const { active, counts } = useMemo(() => {
     const seen: string[] = [];
     const found: Record<string, number> = {};
     for (const step of run.steps) {
-      const agent = step.agent;
-      if (!agent || agent === "triage" || agent === "scheduler") continue;
-      // A trajectory records "analyst:security" and "triage:<path>". The
-      // specialist is the name; the path is where it was pointed.
-      const name = agent.split(":")[0] === "analyst"
-        ? (agent.split(":")[1] ?? "analyst").toUpperCase()
-        : agent.split(":")[0].toUpperCase();
+      const named =
+        step.event?.startsWith("agent.") && typeof step.data?.layer === "string"
+          ? step.data.layer
+          : step.agent?.startsWith("analyst:")
+            ? step.agent.split(":")[1]
+            : "";
+      if (!named || !SPECIALISTS.includes(named)) continue;
+      const name = named.toUpperCase();
       if (!seen.includes(name)) seen.push(name);
-      if (step.action === "found") found[name] = (found[name] ?? 0) + 1;
+      if (step.event === "agent.finished" && typeof step.data?.findings === "number") {
+        found[name] = (found[name] ?? 0) + step.data.findings;
+      }
     }
-    return { active: seen.slice(0, 8), counts: found };
+    return { active: seen, counts: found };
   }, [run.steps]);
 
   const context = useMemo(
