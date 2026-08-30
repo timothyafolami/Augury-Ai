@@ -45,10 +45,21 @@ the document a team acts on is rendered by the same function whichever asked
 for it.
 
 ```bash
+make demo                                            # the whole thing, no API key
 augury report --path /path/to/repo --scope backend   # writes the document
 augury mcp                                           # exposes it over MCP
-make serve                                           # builds the interface and serves it
+make serve                                           # your own repository, needs a key
 ```
+
+**`make demo` needs no API key and spends nothing.** It serves the interface
+against a recorded review of a seeded case, so you can watch the pipeline work,
+open the findings, expand a risk pressure to its evidence and read the document,
+before deciding whether to give it a key. Point it at
+`eval/cases/B01-orders-service/repo` when it asks. It replays 4 deployment
+findings, 16 code findings across nine specialists, 5 risk pressures and 4
+synthesis observations into a 259-line document, for $0.00. Every panel is
+populated from that recording rather than from anything invented for the
+occasion; the counts above are what a fresh clone with no key produced.
 
 `make serve` starts one process on <http://localhost:8000> holding both the API
 and the interface. The interface needs Node to build, once; the engine does
