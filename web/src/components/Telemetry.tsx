@@ -101,7 +101,11 @@ function say(step: Step): string {
     }
     if (step.event === "language.detected") return `${data.modules} modules of ${data.language}`;
     if (step.event === "service.detected") {
-      return `${data.service} from ${data.sourceRoot}${data.capacity ? ` — ${data.capacity}` : ""}`;
+      // A declared ceiling is the fact this whole stage exists to surface, so
+      // it is spelled out rather than shown as a bare number.
+      const ceiling =
+        typeof data.capacity === "number" ? ` — runs ${data.capacity} at a time` : "";
+      return `${data.service} built from ${data.sourceRoot}${ceiling}`;
     }
     if (step.event === "structure.discovered") {
       return `${data.modules} modules, ${data.reachable} reachable, ${data.unreachable} not`;
