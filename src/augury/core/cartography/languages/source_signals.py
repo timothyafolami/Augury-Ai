@@ -44,9 +44,17 @@ _WOVEN = re.compile(
     re.VERBOSE,
 )
 
-# A placeholder the driver binds. Its presence is the shape of a parameterised
-# query, and a file using one is doing the correct thing.
-_BOUND = re.compile(r"(?:\?|\$\d+|:\w+\b)")
+# Two string literals joined to each other, which is how a long statement is
+# wrapped rather than how a value is woven in. Collapsed before the
+# interpolation test, because `"SELECT * FROM t " + "WHERE id = ?"` otherwise
+# matches the quote-then-plus shape and a correctly-bound query is reported as
+# injection.
+#
+# This replaced a `_BOUND` pattern that looked for placeholders and was never
+# wired to anything. Suppressing on a placeholder would also have been wrong:
+# a query can bind one parameter and interpolate another, and that is a real
+# defect rather than an excused one.
+_LITERAL_JOIN = re.compile(r"""(['"])\s*\+\s*(['"])""")
 
 # Rust hands the caller a panic instead of the error. The failure does not stop
 # propagating so much as stop being a value anybody can handle.
@@ -241,13 +249,30 @@ def _weaves_a_query(text: str) -> bool:
     Both halves are required. A parameterised query mentioning SELECT is
     correct, and a comment mentioning SELECT is not a query at all, so the
     keyword alone proves nothing and the interpolation alone proves nothing.
+
+    Literal-to-literal joins are collapsed first. Wrapping a long statement
+    across two strings is formatting; joining a value between them is the
+    defect, and the quote-then-plus shape cannot tell them apart on its own.
     """
     for line in _statements(text):
         if not _SQL.search(line):
             continue
-        if _WOVEN.search(line):
+        if _WOVEN.search(_without_literal_joins(line)):
             return True
     return False
+
+
+def _without_literal_joins(line: str) -> str:
+    """The line with literal-to-literal concatenation collapsed away.
+
+    Applied repeatedly, because three literals joined in a row collapse one
+    pair at a time and a single pass would leave the last join standing.
+    """
+    previous = ""
+    while previous != line:
+        previous = line
+        line = _LITERAL_JOIN.sub("", line)
+    return line
 
 
 def _statements(text: str) -> list[str]:
