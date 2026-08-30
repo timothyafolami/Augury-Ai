@@ -14,7 +14,7 @@ export function LogFeed({ steps }: { steps: Step[] }) {
   }, [steps.length]);
 
   return (
-    <div className="h-full overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
+    <div className="max-h-[55vh] overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed lg:max-h-none lg:h-full">
       {steps.map((step, index) => (
         <div key={index} className="flex gap-2 py-px">
           <span className="shrink-0 text-mist/40">
