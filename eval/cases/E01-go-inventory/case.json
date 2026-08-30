@@ -1,0 +1,147 @@
+{
+  "id": "E01",
+  "name": "go-inventory-service",
+  "repo_description": "A Go inventory service over Postgres that reprices stock through an internal pricing API.",
+  "defects": [
+    {
+      "id": "E01-1",
+      "lab_topic": "07-security/02-sql-injection",
+      "defect": "ByWarehouse builds its WHERE clause by concatenating the warehouse string, which arrives from an unvalidated query parameter on /inventory. The neighbouring Reserved query in the same file uses $1 correctly, so the file demonstrates the safe form one function below the unsafe one.",
+      "locations": [
+        "internal/store/items.go",
+        "internal/api/handlers.go"
+      ],
+      "symbols": [
+        "ByWarehouse",
+        "q",
+        "Query"
+      ],
+      "verification": "differential",
+      "expected_metric": "http_status",
+      "notes": "database/sql offers no query builder, so concatenation is ordinary Go rather than a defeated abstraction. go vet is silent on it.",
+      "unmeasurable_because": "Settling it means issuing a request with a hostile warehouse parameter and reading the status, which needs the service running against its Postgres. The runner launches the reviewed service with --no-deps, so the database this metric is defined against is absent and the measurement fails at connect rather than returning a number."
+    },
+    {
+      "id": "E01-2",
+      "lab_topic": "03-data/07-connection-pools",
+      "defect": "rows.Close is called at the end of the happy path rather than deferred, so the scan error return leaks the rows and the connection behind them. The pool is capped at four, so four scan failures exhaust it permanently and every later request blocks rather than errors.",
+      "locations": [
+        "internal/store/items.go",
+        "internal/db/pool.go"
+      ],
+      "symbols": [
+        "rows.Close",
+        "SetMaxOpenConns",
+        "ByWarehouse"
+      ],
+      "verification": "differential",
+      "expected_metric": "active_connections",
+      "notes": "The defect is a relationship between two files: neither the missing defer nor the cap of four is wrong alone. Reviewing the store in isolation cannot find it.",
+      "unmeasurable_because": "Counting live connections requires the pool to exist, which requires the Postgres the runner excludes with --no-deps. Nothing in a container without a database can observe a database connection being leaked."
+    },
+    {
+      "id": "E01-3",
+      "lab_topic": "08-craft/03-errors-as-interface",
+      "defect": "rows.Err is never checked after the iteration, so a connection dropped mid-result-set returns a short slice and a nil error. The caller cannot distinguish a warehouse with three items from a warehouse whose read was truncated.",
+      "locations": [
+        "internal/store/items.go"
+      ],
+      "symbols": [
+        "rows.Next",
+        "rows.Err",
+        "ByWarehouse"
+      ],
+      "verification": "differential",
+      "expected_metric": "duplicate_side_effects",
+      "notes": "The canonical database/sql mistake. It reports success on partial data, which is worse than an error, and it is invisible until the network misbehaves.",
+      "unmeasurable_because": "Reproducing it needs a connection killed mid-result-set, which this suite has no fault injector for. Recorded as a detection target with no experiment."
+    },
+    {
+      "id": "E01-4",
+      "lab_topic": "03-data/06-finding-n-plus-1",
+      "defect": "The /inventory handler calls store.Reserved once per item returned by ByWarehouse, so a warehouse of 200 SKUs issues 201 queries against a pool of four.",
+      "locations": [
+        "internal/api/handlers.go"
+      ],
+      "symbols": [
+        "Reserved",
+        "ByWarehouse",
+        "out"
+      ],
+      "verification": "differential",
+      "expected_metric": "queries_per_request",
+      "notes": "No ORM is involved, so there is no lazy-loading idiom to blame. The loop says what it does.",
+      "unmeasurable_because": "Counting queries per request means serving a request, which needs the Postgres the runner excludes with --no-deps. Counting them by reading the loop instead would be the experiment measuring its own premise, which this suite treats as broken rather than as a result."
+    },
+    {
+      "id": "E01-5",
+      "lab_topic": "01-machine/03-concurrency-models",
+      "defect": "Run starts one goroutine per item sending on unbuffered channels, then returns as soon as one error arrives. Every goroutine still holding a value blocks on the send forever, leaking itself and the HTTP response body it holds open.",
+      "locations": [
+        "internal/reindex/worker.go"
+      ],
+      "symbols": [
+        "Run",
+        "results",
+        "errs",
+        "go func"
+      ],
+      "verification": "probe",
+      "expected_metric": "worker_saturation",
+      "notes": "The Go-specific defect this case exists for. There is no Python equivalent: the leak is created by the early return interacting with an unbuffered channel, and nothing in the language complains.",
+      "unmeasurable_because": "Observing goroutines still parked after the handler returns means running the Go binary and reading its runtime, and the experiments this suite runs are Python scripts mounted into the service image. Nothing here can start the program whose scheduler is the subject. This is a limit of the prover, not of the defect, and it is the honest reason the whole case ships with no experiments."
+    },
+    {
+      "id": "E01-6",
+      "lab_topic": "02-network/03-timeouts-as-a-first-principle",
+      "defect": "pricing.Fetch uses http.Get, which is http.DefaultClient, which has no timeout of any kind. A pricing service that accepts the connection and never answers holds each caller forever, and the reindex fan-out turns that into one hung goroutine per SKU.",
+      "locations": [
+        "internal/pricing/client.go"
+      ],
+      "symbols": [
+        "Fetch",
+        "http.Get"
+      ],
+      "verification": "load",
+      "expected_metric": "http_req_duration_p99",
+      "notes": "Go's default client differs from most languages' defaults by having no timeout at all, so the safe-looking one-liner is the unsafe choice.",
+      "unmeasurable_because": "Its metric is a wall-clock percentile, which no experiment here settles: a percentile cannot return the same number twice and reproducibility is the bar."
+    },
+    {
+      "id": "E01-7",
+      "lab_topic": "06-observability/05-red-and-use",
+      "defect": "/healthz returns 200 unconditionally without touching the pool, so readiness stays green while the connection pool is exhausted by E01-2 and every real request is blocking. The probe reports the process is alive, which was never the question.",
+      "locations": [
+        "internal/api/handlers.go"
+      ],
+      "symbols": [
+        "healthz",
+        "WriteHeader",
+        "Register"
+      ],
+      "verification": "differential",
+      "expected_metric": "http_status",
+      "notes": "Declared after the fact: the review found it before this manifest named it. It is kept because it is true of the code independent of who noticed, and because a health check that validates nothing is the named subject of the layer's own topic. A reader discounting this case's precision on that basis is reading it correctly.",
+      "unmeasurable_because": "The claim is that /healthz answers 200 while the pool behind it is exhausted, so settling it means exhausting a pool that needs the Postgres the runner excludes with --no-deps. A probe against a service with no database returns 200 for the wrong reason and would confirm the defect without ever demonstrating it."
+    },
+    {
+      "id": "E01-8",
+      "lab_topic": "06-observability/03-correlation-ids",
+      "defect": "Nothing extracts or forwards a request identifier. The API calls the pricing service with no header carrying the incoming context, so a slow request cannot be followed across the two services and an incident becomes archaeology.",
+      "locations": [
+        "internal/api/handlers.go",
+        "internal/pricing/client.go"
+      ],
+      "symbols": [
+        "Register",
+        "Fetch",
+        "http.Get"
+      ],
+      "verification": "differential",
+      "expected_metric": "duplicate_side_effects",
+      "notes": "Declared after the fact, on the same terms as E01-7. Also visible as the absence of any context.Context parameter on the call path, which is the Go-shaped version of the same gap.",
+      "unmeasurable_because": "Absence of instrumentation has no metric this suite can move: the experiment would have to assert that a log field never appears, which passes on an empty log."
+    }
+  ],
+  "notes": "The first case in this suite that is not Python. It exists because the claim that Augury reads six languages was, until it was added, measured on zero of them. go vet passes on this repository: every defect is a production failure rather than something a linter names. Three of the eight require reading two files together.\n\nE01-7 and E01-8 were not planned. The first review of this repository reported both, and both are true of the code, so they are declared here rather than counted as false positives. That order of events flatters the precision number on this case and is recorded so it can be discounted: six of the eight defects were written down before anything read the repository.\n\nNo defect in this case is settled by an experiment, and the reason is a property of Augury rather than of Go: the prover mounts a Python script into the reviewed service's image and runs it with --no-deps, so it can neither start a Go binary nor reach the Postgres these metrics are defined against. Every claim this case produces is therefore permanently `untested`, which is exactly what the report says about them. Adding a case the prover cannot serve is the point: it makes the boundary visible instead of leaving it as something the Python-only suite never had to mention."
+}
