@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "src/lib/receipt.ts",
+      "line": 7,
+      "layer": "security",
+      "symbol": "writeReceipt",
+      "mechanism": "The function writes to a file path built by directly interpolating the unvalidated `orderId` into the filesystem path. This lacks object‑level authorization and allows directory‑traversal (e.g., `orderId=\"../../etc/passwd\"`) resulting in arbitrary file write, matching the IDOR‑style flaw described in 01‑authn‑authz‑and‑idor.",
+      "severity": "high",
+      "remediation": "Validate and sanitize `orderId` against a whitelist of allowed characters (e.g., /^[a‑zA‑Z0‑9_-]+$/) or resolve the path with `path.join` and ensure it stays under the intended directory before calling `fs.writeFileSync`.",
+      "arithmetic": "An attacker can supply `orderId=\"../../etc/passwd\"`. The interpolated path becomes `/var/receipts/../../etc/passwd.json` which resolves to `/etc/passwd.json`. Because the process runs as the container user, the write succeeds, demonstrating arbitrary file write with a single crafted input.",
+      "prediction": null
+    }
+  ]
+}
