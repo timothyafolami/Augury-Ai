@@ -108,3 +108,31 @@ def test_a_memo_never_asks_for_full_settings(
     memo = server_memo_for(tmp_path, model_id="m")
 
     assert memo.recall("src", "data", "python", "prompt") is None
+
+
+def test_the_memo_stands_down_while_replaying_too(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Replay reproduces one recorded run, and a cache above it can disagree.
+
+    Measured, not supposed. The same web review of the same repository against
+    the same cassettes returned 16 findings, 5 pressures and a 259-line
+    document with a cold memo, and 10 findings, 4 pressures and 207 lines with
+    a warm one. The memo had been filled by live runs whose answers differed
+    from the recording, and being the outer layer it won.
+
+    So the published numbers held only on a machine that had never run this
+    before, which is the opposite of what a committed recording is for.
+
+    The memo is an optimisation for live runs. Recording bypasses it so the
+    cassette set is complete; replay bypasses it so the cassette set is what
+    answers.
+    """
+    cache = tmp_path / "cache"
+    _seed(tmp_path, monkeypatch, cache)
+    monkeypatch.setenv("AUGURY_REPLAY_ONLY", "1")
+
+    memo = server_memo_for(tmp_path, model_id="m")
+
+    assert memo.recall("src", "data", "python", "prompt") is None
+    assert memo.hits == 0
