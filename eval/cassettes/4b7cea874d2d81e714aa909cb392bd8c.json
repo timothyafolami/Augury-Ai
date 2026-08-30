@@ -1,0 +1,8 @@
+{
+  "specialists": [
+    "network",
+    "data",
+    "security"
+  ],
+  "reasoning": "network: defines HTTP endpoints and responses; data: performs SQL queries and processes rows; security: extracts and validates JWT claims."
+}
