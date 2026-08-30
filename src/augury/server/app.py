@@ -158,15 +158,40 @@ def recording_or_replaying() -> bool:
 
 
 def recorded_cases() -> list[str]:
-    """The repositories this checkout has recordings for, newest layout first.
+    """The repositories this checkout has recordings for, largest first.
 
     Read off the case directory rather than listed here, so a case added to
     the suite is offered by the interface without anyone remembering to.
+
+    Ordered by size because the interface offers the first as its default.
+    Alphabetically that was A04, three files, described in its own manifest as
+    deliberately easy -- "a repository where reading everything is free" --
+    which is the one case in the suite designed not to discriminate between
+    the arms. Landing a first-time reviewer there shows the least of what this
+    does. Ties break on the name, so the order is stable.
     """
     cases = Path(__file__).resolve().parents[3] / "eval" / "cases"
     if not cases.is_dir():
         return []
-    return sorted(str(repo) for case in cases.iterdir() if (repo := case / "repo").is_dir())
+    found = [case / "repo" for case in cases.iterdir() if (case / "repo").is_dir()]
+    return [str(repo) for repo in sorted(found, key=lambda r: (-_source_count(r), r.name))]
+
+
+def _source_count(repo: Path) -> int:
+    """Roughly how much there is to read, for ordering only.
+
+    Counts files rather than asking the Cartographer: this runs on a page
+    load, and mapping six repositories to sort a list is work nobody asked
+    for. Dotted directories are skipped here for the same reason the map
+    skips them.
+    """
+    return sum(
+        1
+        for path in repo.rglob("*")
+        if path.is_file()
+        and path.suffix in {".py", ".go", ".ts", ".tsx", ".js", ".rs", ".java", ".cpp"}
+        and not any(part.startswith(".") for part in path.relative_to(repo).parts)
+    )
 
 
 def within_allowed(path: str) -> Path:
