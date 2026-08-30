@@ -17,7 +17,7 @@ export function Telemetry({ steps }: { steps: Step[] }) {
   }, [steps.length]);
 
   return (
-    <div className="h-full overflow-y-auto pr-1">
+    <div className="max-h-[55vh] overflow-y-auto pr-1 lg:max-h-none lg:h-full">
       {steps.length === 0 && (
         <p className="py-8 text-center font-mono text-[11px] text-mist/50">
           nothing has happened yet
