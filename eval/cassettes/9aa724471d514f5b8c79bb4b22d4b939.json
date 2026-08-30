@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "network",
+    "observability"
+  ],
+  "reasoning": "network: the HTTP server creation and ListenAndServe call; observability: the log statements for startup and error handling."
+}
