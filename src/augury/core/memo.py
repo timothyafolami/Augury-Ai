@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 
 from augury.core.drafts import DraftReport
-from augury.core.settings import recording
+from augury.core.settings import recording, replay_only
 
 
 class Memo:
@@ -30,7 +30,18 @@ class Memo:
         # written. The cassette set then replays on the machine whose cache
         # happened to be warm and on no other, which is the same as not
         # having one. The saving is worth less than a set that travels.
-        if enabled and recording():
+        #
+        # Replay is the same argument from the other end. It exists to
+        # reproduce one recorded run, and a cache above the cassettes can hold
+        # a different answer to the same question -- filled by a live run on
+        # another day -- and being the outer layer it wins. Measured: the same
+        # review of the same repository against the same cassettes gave 16
+        # findings and a 259-line document with a cold memo, and 10 findings
+        # and 207 lines with a warm one. The published numbers held only on a
+        # machine that had never run it before.
+        #
+        # The memo is an optimisation for live runs, and only for those.
+        if enabled and (recording() or replay_only()):
             enabled = False
         # A different model is a different answerer to the same question, and
         # nothing downstream can tell: the report and the journal both take
