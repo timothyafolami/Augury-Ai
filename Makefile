@@ -14,8 +14,12 @@ lint:
 types:
 	uv run mypy src tests
 
+# --extra experiments, because part of the suite runs the case experiments
+# against the repositories they measure, and those import sqlalchemy. Without
+# it a fresh clone fails twelve tests for a reason that has nothing to do with
+# the code under test.
 test:
-	uv run pytest -q
+	uv run --extra experiments pytest -q
 
 fmt:
 	uv run ruff check --fix src tests
