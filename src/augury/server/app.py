@@ -224,8 +224,11 @@ async def _review(run: Run, root: Path, target: Target) -> None:
     cannot be built without the findings they were read off.
     """
     from augury.agents.augury import AuguryReviewer
+    from augury.agents.synthesis import Synthesis
     from augury.core.adapters.provider import model_from
     from augury.core.architecture import architecture
+    from augury.core.artifacts import read_artifacts
+    from augury.core.artifacts.checks import deployment_findings
     from augury.core.coverage import engineering_coverage
     from augury.core.forecast import forecast
     from augury.core.reference.changelog import changelog_notes
@@ -293,6 +296,8 @@ async def _review(run: Run, root: Path, target: Target) -> None:
             say(events.model_built(layers=tiers))
 
         bases = [root / part for part in limits] or [root]
+        inventory = await asyncio.to_thread(read_artifacts, root)
+        deployment = await asyncio.to_thread(deployment_findings, inventory.artifacts, root=root)
         schema = await asyncio.to_thread(
             lambda: tuple(f for base in bases for f in schema_findings(read_migrations(base)))
         )
@@ -401,8 +406,19 @@ async def _review(run: Run, root: Path, target: Target) -> None:
             )
         )
 
+        # Last, because it reads the finished board. It is allowed to return
+        # nothing: findings that do not connect produce no observation, and a
+        # synthesis that always finds something is a horoscope.
+        try:
+            observations = await Synthesis(model).observe(report=result, survey=found)
+        except Exception as refused:
+            say(events.review_failed(detail=f"synthesis declined: {refused}"))
+            observations = ()
+
         run.report = {
             "architecture": drawn.model_dump(mode="json"),
+            "deployment": [_finding(f) for f in deployment],
+            "synthesis": [item.model_dump(mode="json") for item in observations],
             "name": root.name,
             "usd": round(result.usd, 5),
             "seconds": round(result.seconds, 1),
