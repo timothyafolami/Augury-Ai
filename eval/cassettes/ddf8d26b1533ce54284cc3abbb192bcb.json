@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/shipping.py",
+      "line": 9,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "Uses httpx.AsyncClient with timeout=None, violating **03-timeouts-as-a-first-principle** – a call without timeout can hang indefinitely, blocking the worker handling the request and causing worker saturation when upstream latency is high.",
+      "severity": "high",
+      "remediation": "Create a module‑level httpx.AsyncClient with a finite timeout (e.g. timeout=5s) and reuse it across calls instead of constructing a new client per request.",
+      "arithmetic": "With 4 uvicorn workers, each request occupies a worker for the full upstream latency. If upstream latency = 30 s and request rate = 5 rps, after 4 seconds all workers are blocked (4 workers / 5 rps ≈ 0.8 s per request). Thus worker saturation approaches 1.0. Predicted saturation ≥ 0.9 under these conditions.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 0.9,
+        "upper": null,
+        "unit": "x",
+        "condition": "rate=5rps, upstream_latency=30s"
+      }
+    },
+    {
+      "path": "app/clients/shipping.py",
+      "line": 9,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "Creates a new AsyncClient per request, incurring DNS, TCP and TLS handshakes each time, violating **01-what-a-connection-actually-costs**. The cold‑connection overhead adds roughly 3 RTT before any payload is sent.",
+      "severity": "medium",
+      "remediation": "Instantiate a single shared AsyncClient (with appropriate limits) at module load time and reuse it for all quote calls.",
+      "arithmetic": "Assume warm request latency (application + network) = 50 ms. RTT on the path = 30 ms, so cold connection adds ≈ 3 × RTT = 90 ms. Total p99 latency ≈ 50 ms + 90 ms = 140 ms. At 100 rps the latency increase is observable as a p99 ≥ 140 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 140.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "rate=100rps, warm_latency=50ms, RTT=30ms"
+      }
+    }
+  ]
+}
