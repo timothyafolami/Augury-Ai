@@ -42,16 +42,23 @@ evaluate:
 # every cassette key, so replaying under a different one reproduces nothing.
 # Switching AUGURY_PROVIDER in .env used to make every published number
 # irreproducible, with an error that blamed missing recordings.
+#
+# --extra experiments for the same reason as `record`: a judge running this in
+# a fresh clone has no sqlalchemy, and every experiment comes back Broken.
 eval-replay:
 	AUGURY_REPLAY_ONLY=1 AUGURY_PROVIDER=groq AUGURY_MODEL=openai/gpt-oss-120b \
-	  uv run python -m augury.cli evaluate --seeds 5 --prove
+	  uv run --extra experiments python -m augury.cli evaluate --seeds 5 --prove
 
 # Re-record the cassettes. Needs a key and spends real money. Only necessary
 # after a prompt, schema or model change, each of which correctly invalidates
 # every recording that depended on it.
+# --extra experiments, because the case experiments import the repository they
+# measure and a plain `uv sync` installs no extras. Without it a clean clone
+# reproduces the model calls and breaks every experiment, which is most of the
+# published table.
 # Pinned to the same model eval-replay asks for, so a recording made from a
 # shell with a different .env cannot silently produce cassettes nothing can
 # replay.
 record:
 	AUGURY_RECORD=1 AUGURY_PROVIDER=groq AUGURY_MODEL=openai/gpt-oss-120b \
-	  uv run python -m augury.cli evaluate --seeds 5 --prove
+	  uv run --extra experiments python -m augury.cli evaluate --seeds 5 --prove
