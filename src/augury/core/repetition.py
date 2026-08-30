@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 
-from augury.core.findings import Finding
+from augury.core.findings import Dropped, Finding, Severity
 
 # Below this, a repeat is a coincidence. At it, the finding is about the
 # service. Declared rather than judged per report.
@@ -35,38 +35,83 @@ _SPECIFICS = re.compile(
 )
 _WORD = re.compile(r"[a-z]+")
 
-# Words that carry the mechanism. Dropping the rest is what lets "list_orders
-# does not propagate a correlation id" and the same sentence about list_users
-# be recognised as one finding.
-_SHAPE_WORDS = 8
+# A shape shorter than this is not evidence of sameness. A mechanism made
+# entirely of quoted identifiers and numbers reduced to the empty shape, which
+# matched every other such mechanism, so three unrelated defects became one
+# finding announcing itself as "a property of the service".
+_ENOUGH_TO_COMPARE = 5
 
 
-def collapse(findings: list[Finding]) -> list[Finding]:
-    """Merge findings that say the same thing about different files."""
+def collapse(findings: list[Finding]) -> tuple[list[Finding], list[Dropped]]:
+    """Merge findings that say the same thing about different files.
+
+    Returns what survives and what it stood in for. A finding that is in
+    neither list is one nobody can audit -- and it also leaves the denominator
+    of falsifiable precision, which counts findings plus discarded, so merging
+    on one arm lifted that arm's score by up to 8.5x with no change to the
+    reviewer.
+    """
     groups: dict[tuple[str, str], list[Finding]] = defaultdict(list)
+    alone: list[Finding] = []
     for finding in findings:
-        groups[(finding.layer, _shape(finding.mechanism))].append(finding)
+        shape = _shape(finding.mechanism)
+        # Too little left to compare. Grouping on it merges by coincidence.
+        if len(shape.split()) < _ENOUGH_TO_COMPARE:
+            alone.append(finding)
+            continue
+        groups[(finding.layer, shape)].append(finding)
 
-    merged: list[Finding] = []
+    merged: list[Finding] = list(alone)
+    stood_in_for: list[Dropped] = []
     for group in groups.values():
         files = {f.path for f in group}
         if len(files) < SYSTEMIC_FILES:
             merged.extend(group)
             continue
-        merged.append(_one_of(group, files))
-    return merged
+        survivor = _one_of(group, files)
+        merged.append(survivor)
+        stood_in_for.extend(
+            Dropped(
+                symbol=other.symbol,
+                path=other.path,
+                reason=(
+                    f"collapsed into the same finding at {survivor.path}: the same "
+                    f"mechanism in {len(files)} files is one property of the service"
+                ),
+            )
+            for other in group
+            if other is not survivor_source(group)
+        )
+    return merged, stood_in_for
+
+
+def survivor_source(group: list[Finding]) -> Finding:
+    """Which finding the merged one was built from."""
+    # Worst severity first, then the earliest path, so the choice is stable
+    # across runs and unchanged from before when the severities agree.
+    return min(group, key=lambda f: (-_WEIGHT[f.severity], f.path))
 
 
 def _shape(mechanism: str) -> str:
-    """What a sentence says with its specifics removed."""
+    """What a sentence says with its specifics removed.
+
+    The whole sentence, not a prefix of it. Keeping the first eight words
+    grouped four handlers that "do not validate the request body before ..."
+    doing four different things with it -- and the ninth word is where the
+    mechanism lives.
+    """
     without = _SPECIFICS.sub(" ", mechanism.lower())
-    words = _WORD.findall(without)
-    return " ".join(words[:_SHAPE_WORDS])
+    return " ".join(_WORD.findall(without))
 
 
 def _one_of(group: list[Finding], files: set[str]) -> Finding:
-    """The first finding, carrying everywhere else it was seen."""
-    first = min(group, key=lambda f: f.path)
+    """The most serious finding, carrying everywhere else it was seen.
+
+    The alphabetically first was taken before, which is not a ranking: a MEDIUM
+    in `a.py` silently replaced two HIGHs, and the severity a reader acts on
+    became a fact about filenames.
+    """
+    first = survivor_source(group)
     others = sorted(files - {first.path})
     shown = ", ".join(others[:5]) + (", ..." if len(others) > 5 else "")
     return first.model_copy(
@@ -77,3 +122,8 @@ def _one_of(group: list[Finding], files: set[str]) -> Finding:
             )
         }
     )
+
+
+# Ordering severities so the survivor of a merge is the worst of what it
+# stands for, rather than whichever file sorts first.
+_WEIGHT = {Severity.HIGH: 3, Severity.MEDIUM: 2, Severity.LOW: 1}
