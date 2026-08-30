@@ -511,6 +511,22 @@ def model_from(settings: Settings) -> ChatModel:
     return CassetteModel(inner, directory, replay_only=settings.replay_only)
 
 
+def triage_model_from(settings: Settings) -> ChatModel:
+    """The model that answers the routing question.
+
+    Built here rather than at the call site, and through the same live-versus-
+    recorded decision, because a second model built anywhere else is a second
+    way to reach a provider by accident -- which is the failure `model_from`
+    exists to prevent, and which has happened in this project before.
+
+    Identical to `model_from` when no routing model is named, so the ordinary
+    single-model run is unchanged.
+    """
+    if settings.triage_spec == settings.spec:
+        return model_from(settings)
+    return model_from(settings.model_copy(update={"spec": settings.triage_spec}))
+
+
 class SealedModel:
     """A model that carries an identity and refuses to be called.
 
