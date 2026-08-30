@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "src/routes/orders.ts",
+      "line": 19,
+      "layer": "security",
+      "symbol": "GET /orders",
+      "mechanism": "SQL injection via string‑interpolated query; user‑supplied status (and claims.sub) are concatenated into the SQL without parameterisation, violating 02‑sql‑injection (OWASP A05).",
+      "severity": "high",
+      "remediation": "Replace the interpolated query with a parameterised statement, e.g. `pool.query('SELECT id, sku, quantity FROM orders WHERE customer = $1 AND status = $2', [claims.sub, status])`.",
+      "arithmetic": "The query string is built as a literal; an attacker can set `status` to `' OR '1'='1` which makes the WHERE clause always true, causing the request to succeed and return data regardless of the original filter. No sanitisation or length limits are applied, so the injection is always possible.",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "at_least",
+        "value": 200.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "status=\"' OR '1'='1\""
+      }
+    },
+    {
+      "path": "src/routes/orders.ts",
+      "line": 33,
+      "layer": "security",
+      "symbol": "POST /orders/:id/receipt",
+      "mechanism": "Insecure Direct Object Reference – the endpoint selects an order by id without verifying that the authenticated user owns the order, violating 01‑authn‑authz‑and‑idor (OWASP A01).",
+      "severity": "high",
+      "remediation": "Add an ownership check, e.g. `SELECT * FROM orders WHERE id = $1 AND customer = $2`, passing `claims.sub` as the second parameter, and reject if no row is returned.",
+      "arithmetic": "The query retrieves any order by its primary key; because the `customer` condition is omitted, any authenticated user can supply another user's order id and obtain its receipt. The check is absent, so the exploit works for any `id` value that exists, regardless of load.",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "at_least",
+        "value": 200.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "id of another user"
+      }
+    }
+  ]
+}
