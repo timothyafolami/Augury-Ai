@@ -128,6 +128,16 @@ def _flag(name: str) -> bool:
     return os.environ.get(name, "") not in ("", "0", "false")
 
 
+def recording() -> bool:
+    """Whether this process is writing cassettes.
+
+    Separate from `load_settings` because the callers that need this answer
+    include ones that must work without a provider key, and full settings
+    refuse to load without one.
+    """
+    return _flag("AUGURY_RECORD")
+
+
 def _cassette_dir() -> Path:
     """Where recordings live. Repository-relative so the default is committed."""
     override = os.environ.get("AUGURY_CASSETTES", "")
