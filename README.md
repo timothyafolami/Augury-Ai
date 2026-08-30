@@ -189,11 +189,21 @@ Two components do the hardest work and neither is a language model.
 
 **Cartographer** walks a repository in any of six languages, resolves the
 import graph, computes fan-in and churn, and attaches the engineering concerns
-each module touches. Deterministic; no model call. One of those six is
-measured end to end by the evaluation: `E01-go-inventory` is a Go service with
-eight seeded defects and a clean `go vet`. The other four are exercised by unit
-tests over their parsers and signal detectors, which is a weaker claim and is
-worth reading as one.
+each module touches. Deterministic; no model call. Two of those six are
+measured end to end by the evaluation: `E01-go-inventory`, a Go service with
+eight seeded defects and a clean `go vet`, and `F01-ts-checkout`, a TypeScript
+Express service with eight, which `tsc --noEmit` accepts under strict. The
+other three are exercised by unit tests over their parsers and signal
+detectors, which is a weaker claim and is worth reading as one.
+
+Adding those two cases found three defects in this stage that no Python case
+could reach. The import graph was empty for every language but Python, so
+fan-in was zero, nothing was reachable from an entrypoint, and the scheduler's
+boost for a module importing something already found defective never fired.
+`fetch` is a global, so the most common outbound call in TypeScript raised no
+signal and the module making it went unread. And a synchronous call on a
+single-threaded runtime — the one hazard the practice lab singles Node out for
+— routed nowhere.
 
 **Scheduler** picks the next module worth reading by expected yield per dollar,
 boosts modules importing something already found defective, stops when nothing
@@ -264,28 +274,39 @@ Two of the tests that were supposed to catch this were instead enforcing it:
 one asserted the vacuity rule for the analyst *by name*, and one accepted a
 `nested` schema argument and never used it.
 
-### The result, on five cases
+### The result, on six cases
 
 A sweep was recorded call by call and the recordings committed, so this is
 reproducible exactly, with no API key: `make eval-replay` prints these numbers.
 
 | metric | baseline | augury |
 |---|---|---|
-| seeded recall | 0.857 | 0.857 |
-| falsifiable precision | **0.696** | 0.629 |
+| seeded recall | **0.793** | 0.759 |
+| falsifiable precision | 0.643 | **0.675** |
 | hit rate | 0.750 (6/8) | **0.857** (6/7) |
 | experiments run | 8 | 7 |
-| prediction coverage | **0.500** | 0.364 |
-| experiments that broke | 3 | **1** |
+| prediction coverage | **0.444** | 0.296 |
+| experiments that broke | **3** | 6 |
 
-**The fifth case reversed the precision line.** On the four Python cases the
-pipeline led on falsifiable precision, 0.690 against 0.667. Adding one Go
-service put the baseline ahead, 0.696 against 0.629, and left recall tied. The
-earlier number is not withdrawn as a mistake — it was correctly measured on the
-cases that existed — but it was measured on a suite that was entirely Python
-while the product claimed six languages, and the first language added moved it.
-That is the fourth time this margin has changed direction, which is the honest
-summary of how much five cases settle.
+**The two non-Python cases moved this twice, in opposite directions.** On four
+Python cases the pipeline led on precision, 0.690 to 0.667. Adding a Go service
+put the baseline ahead, 0.696 to 0.629. Adding a TypeScript service put the
+pipeline back in front, 0.675 to 0.643, and left the baseline ahead on recall.
+
+Read that as a warning about the sample size rather than as a result. The
+margin has now changed direction five times over six cases. What it does say,
+consistently, is that neither arm is dominating: the baseline reads everything
+and finds slightly more, the pipeline reads a fraction and is slightly more
+often right about what it finds.
+
+**One number got worse and the cause is not established.** Experiments that
+broke rose from 1 to 6 for the pipeline while the baseline held at 3. Docker
+was running for the second sweep and not the first, but the baseline's count
+was unchanged across exactly that difference, so the container path is not the
+explanation. The likeliest remaining one is that the pipeline's claims changed
+when the recordings were refreshed — the memo cache used to answer during
+recording and no longer does — but that has not been demonstrated, and it is
+recorded here as an open question rather than an explained one.
 
 ```
 hit rate  repeats not independent: p = n/a  not measured
@@ -361,14 +382,15 @@ and no case had ever settled. On four cases the hit rate went to 1.000 against
 0.600, and the lead was not merely gone but reversed.
 
 It has since reversed again, to 0.750 against 0.857, after the specialists were
-given the lab they had always been told they were citing. And then a fourth
-time, on precision, when the suite stopped being entirely Python: one Go
-service was enough to put the baseline back in front, 0.696 against 0.629.
+given the lab they had always been told they were citing. Then a fourth time,
+on precision, when the suite stopped being entirely Python: one Go service put
+the baseline back in front, 0.696 against 0.629. Then a fifth, when a
+TypeScript service put the pipeline in front again, 0.675 against 0.643.
 
-A margin that has now moved four times, over seven or eight experiments and
-five cases, is not a measurement of an architecture. It is a measurement of how
-little five cases can settle. The fourth move is the most informative of them,
-because it did not come from tuning anything: it came from measuring a claim
+A margin that has moved five times, over seven or eight experiments and six
+cases, is not a measurement of an architecture. It is a measurement of how
+little six cases can settle. The last two moves are the most informative,
+because neither came from tuning anything: both came from measuring a claim
 the suite had never tested.
 
 The prediction that preceded the first reversal is the part worth keeping: the
