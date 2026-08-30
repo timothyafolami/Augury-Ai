@@ -506,6 +506,10 @@ async def _settle(
     generate = Generator(model)
     settled: list[Finding] = []
     remaining = how_many
+    # Proving costs a model call per finding, and report.usd was fixed before
+    # any of them ran -- so five experiments were paid for and published as
+    # $0.00, in a document whose preamble says every number in it is arithmetic.
+    before_proving = model.usage
 
     console.print(
         f"\n[bold]Proving[/bold] up to {how_many} findings. "
@@ -552,7 +556,10 @@ async def _settle(
                 markup=False,
             )
 
-    return report_in.model_copy(update={"findings": tuple(settled)})
+    spent_proving = (model.usage - before_proving).usd
+    return report_in.model_copy(
+        update={"findings": tuple(settled), "usd": report_in.usd + spent_proving}
+    )
 
 
 def _memo_for(root: Path, *, enabled: bool, model_id: str = "") -> Memo:
