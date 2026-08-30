@@ -23,6 +23,7 @@ from augury.core.adapters.base import ChatModel
 from augury.core.cartography import ModuleNode, RepoMap
 from augury.core.cartography.languages import EXTENSIONS, Language
 from augury.core.cartography.symbols import locator_for
+from augury.core.corpus import corpus_for
 from augury.core.drafts import DraftReport, to_report
 from augury.core.findings import Dropped, Report
 from augury.core.indexes import indexed_columns, withdraw_false_index_claims
@@ -63,6 +64,16 @@ class Progress:
 # One file is read once per specialist, so a very long file is trimmed rather
 # than allowed to dominate the budget it shares with every other module.
 MAX_SOURCE_CHARS = 40_000
+
+# What stands in for the lab when it is not on this machine. It says the
+# specialist has no corpus, rather than leaving a heading promising one over
+# nothing, because a prompt that claims a source it lacks invites a citation
+# nobody can check.
+NO_CORPUS = (
+    "The practice lab is not present on this machine, so you have no corpus "
+    "to cite. Reason from the brief above and say plainly when a claim rests "
+    "on your own knowledge rather than on material given to you."
+)
 
 # Triage, plus the specialists it typically selects. Used only to forecast a
 # read before paying for it; actual spend is always measured.
@@ -396,7 +407,10 @@ class AuguryReviewer:
             "analyst",
             layer_name=layer.name,
             layer_brief=layer.brief,
-            corpus=layer.brief,
+            # The lab this layer was written from, not the brief again. When
+            # the lab is absent this is empty and the prompt says so rather
+            # than claiming a source it was not given.
+            corpus=corpus_for(layer.lab_layer) or NO_CORPUS,
             path=module.path,
             language=language,
             # How this concern actually appears in this runtime. The layer
