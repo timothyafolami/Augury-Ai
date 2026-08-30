@@ -26,7 +26,7 @@ from augury.cli.banner import counted
 from augury.cli.quiet import quiet_dependency_noise
 from augury.cli.rendering import languages_read, service_table
 from augury.core.adapters.base import ChatModel
-from augury.core.adapters.provider import model_from
+from augury.core.adapters.provider import model_from, triage_model_from
 from augury.core.artifacts import read_artifacts
 from augury.core.artifacts.checks import deployment_findings
 from augury.core.cartography import Cartographer
@@ -309,6 +309,7 @@ def report(
             budget=Budget(usd=budget) if budget else Budget(),
             watching=_watcher(),
             memo=_memo_for(root, enabled=cache, model_id=built_model.model_id),
+            triage_model=triage_model_from(settings),
         )
         result: Report = await built.review(repo, root)
         return result
@@ -633,6 +634,7 @@ def _review_repository(
                 trajectory=recording,
                 watching=_watcher(),
                 memo=_memo_for(root, enabled=cache, model_id=built_model.model_id),
+                triage_model=triage_model_from(settings),
             )
             if reviewer is AuguryReviewer
             else BaselineReviewer(built_model, trajectory=recording)
