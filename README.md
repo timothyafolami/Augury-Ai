@@ -307,17 +307,24 @@ reproducible exactly, with no API key: `make eval-replay` prints these numbers.
 
 | metric | baseline | augury |
 |---|---|---|
-| seeded recall | **0.793** | 0.759 |
-| falsifiable precision | 0.643 | **0.675** |
+| seeded recall | **0.828** | 0.759 |
+| falsifiable precision | **0.679** | 0.675 |
 | hit rate | 0.750 (6/8) | **0.857** (6/7) |
 | experiments run | 8 | 7 |
-| prediction coverage | **0.444** | 0.296 |
-| experiments that broke | **3** | 6 |
+| prediction coverage | **0.421** | 0.296 |
+| experiments that broke | **4** | 6 |
 
-**The two non-Python cases moved this twice, in opposite directions.** On four
-Python cases the pipeline led on precision, 0.690 to 0.667. Adding a Go service
-put the baseline ahead, 0.696 to 0.629. Adding a TypeScript service put the
-pipeline back in front, 0.675 to 0.643, and left the baseline ahead on recall.
+**This margin has moved every time the suite has.** On four Python cases the
+pipeline led on precision, 0.690 to 0.667. A Go service put the baseline ahead,
+0.696 to 0.629. A TypeScript service put the pipeline back in front, 0.675 to
+0.643. Then teaching the Cartographer to see concurrency primitives in source
+— a `go func`, a `synchronized`, a `std::thread` — moved the baseline to 0.679
+against 0.675, which is a tie in everything but the third decimal.
+
+That last change is worth reading as a capability rather than a score. The Go
+case seeds a goroutine leak, and the file that contains it was raising `data`
+and `observability` and never reaching the concurrency specialist. It is now
+found: E01 recall went to 7 of 8.
 
 Read that as a warning about the sample size rather than as a result. The
 margin has now changed direction five times over six cases. What it does say,
