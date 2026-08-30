@@ -145,6 +145,30 @@ def _inside_allowed(path: Path) -> bool:
     return any(path == root or root in path.parents for root in ALLOWED_ROOTS)
 
 
+def recording_or_replaying() -> bool:
+    """Whether every model call is served from a recording.
+
+    Read through the settings module's own rule rather than re-implementing
+    it here, so the interface and the adapter cannot disagree about which
+    mode the process is in.
+    """
+    from augury.core.settings import replay_only
+
+    return replay_only()
+
+
+def recorded_cases() -> list[str]:
+    """The repositories this checkout has recordings for, newest layout first.
+
+    Read off the case directory rather than listed here, so a case added to
+    the suite is offered by the interface without anyone remembering to.
+    """
+    cases = Path(__file__).resolve().parents[3] / "eval" / "cases"
+    if not cases.is_dir():
+        return []
+    return sorted(str(repo) for case in cases.iterdir() if (repo := case / "repo").is_dir())
+
+
 def within_allowed(path: str) -> Path:
     """Resolve this path, or refuse it.
 
@@ -188,6 +212,26 @@ def build() -> FastAPI:
             for stage in Stage.all()
         ]
 
+    @app.get("/api/mode")
+    def mode() -> dict[str, Any]:
+        """Whether this server can call a model, and what it can review if not.
+
+        Replay serves every call from a committed recording. Pointed at a
+        recorded case that is the whole product for free; pointed at anything
+        else every call misses and the interface shows a review that read
+        modules, spent nothing and found nothing, with no way to tell that
+        apart from a broken model. The server is the only thing that knows,
+        so it says.
+        """
+        replaying = recording_or_replaying()
+        return {
+            "replay": replaying,
+            # Named only when they are the answer to something. In live mode
+            # every repository works and steering anyone towards these three
+            # would be noise.
+            "recorded": recorded_cases() if replaying else [],
+        }
+
     @app.post("/api/browse")
     def browse(target: Target) -> dict[str, Any]:
         """The directories under this one, for choosing what to review.
@@ -227,9 +271,18 @@ def build() -> FastAPI:
         # this coroutine they stop the event loop, so the stream the interface
         # is watching goes quiet. That fails in the most misleading way
         # available: it looks exactly like a slow model.
-        repo = await asyncio.to_thread(
-            Cartographer(root, scope=limits, entrypoints=entrypoints).map
-        )
+        try:
+            repo = await asyncio.to_thread(
+                Cartographer(root, scope=limits, entrypoints=entrypoints).map
+            )
+        except ValueError as refused:
+            # A scope that selects nothing is the caller's mistake, and the
+            # mapper already explains it better than a message written here
+            # would: it names the scope, names the root, and says why an empty
+            # review is refused. Letting it escape returned 500 and the body
+            # "Internal Server Error", so the interface showed a crash for a
+            # field the user had mistyped.
+            raise HTTPException(status_code=400, detail=str(refused)) from refused
 
         return {
             "root": str(root),
@@ -372,9 +425,18 @@ async def _review(run: Run, root: Path, target: Target) -> None:
         # this coroutine they stop the event loop, so the stream the interface
         # is watching goes quiet. That fails in the most misleading way
         # available: it looks exactly like a slow model.
-        repo = await asyncio.to_thread(
-            Cartographer(root, scope=limits, entrypoints=entrypoints).map
-        )
+        try:
+            repo = await asyncio.to_thread(
+                Cartographer(root, scope=limits, entrypoints=entrypoints).map
+            )
+        except ValueError as refused:
+            # A scope that selects nothing is the caller's mistake, and the
+            # mapper already explains it better than a message written here
+            # would: it names the scope, names the root, and says why an empty
+            # review is refused. Letting it escape returned 500 and the body
+            # "Internal Server Error", so the interface showed a crash for a
+            # field the user had mistyped.
+            raise HTTPException(status_code=400, detail=str(refused)) from refused
         say(
             events.structure_discovered(
                 modules=len(repo.modules),
