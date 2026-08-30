@@ -128,3 +128,73 @@ async def test_a_late_viewer_sees_the_most_recent_work_not_the_oldest() -> None:
     arriving = watchers.subscribe()
 
     assert (await asyncio.wait_for(arriving.get(), 1.0))["n"] == 3
+
+
+def test_the_stream_knows_which_events_end_a_run() -> None:
+    """The server never closed the connection.
+
+    `_stream` broke on `kind == "done"`, which the typed vocabulary replaced
+    with `review.completed`, so nothing matched. A finished run worked anyway
+    because the browser closes its own EventSource, but a failed run left both
+    sides waiting: the timeout branch only gives up once a report exists, and a
+    run that failed never produces one.
+
+    Anyone watching a review that could not start therefore watched it for
+    ever, which is the state a judge with no API key lands in.
+    """
+    from augury.server.app import ENDS_A_RUN
+
+    assert "review.completed" in ENDS_A_RUN
+    assert "review.failed" in ENDS_A_RUN
+
+
+def test_a_failed_run_is_terminal_for_the_stream() -> None:
+    from augury.server.app import is_terminal
+
+    assert is_terminal({"event": "review.failed", "data": {"detail": "no key"}})
+    assert is_terminal({"event": "review.completed"})
+    assert not is_terminal({"event": "agent.started"})
+
+
+def test_the_older_shape_still_ends_it() -> None:
+    """Recorded runs and the tests use it, and dropping it silently would
+    reintroduce exactly this bug from the other direction."""
+    from augury.server.app import is_terminal
+
+    assert is_terminal({"kind": "done"})
+    assert is_terminal({"kind": "failed"})
+
+
+def test_a_stage_declining_is_not_the_run_failing() -> None:
+    """The synthesis is the only stage that runs after the money is spent.
+
+    It emitted `review.failed` when it declined, which was harmless while
+    nothing acted on that name. Once the stream learned to close on it, a
+    complete review was being truncated by its last and least important stage:
+    the report existed, and the reader never saw it.
+    """
+    import ast
+    from pathlib import Path
+
+    source = Path("src/augury/server/app.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    def mentions(node: ast.AST, name: str) -> bool:
+        return any(
+            isinstance(child, ast.Attribute) and child.attr == name for child in ast.walk(node)
+        )
+
+    # The innermost try around `observe`. The whole review sits inside an outer
+    # try whose handler reports a genuine failure, and that one is correct, so
+    # walking every enclosing try finds it and blames the wrong handler.
+    wrapping = [
+        node for node in ast.walk(tree) if isinstance(node, ast.Try) and mentions(node, "observe")
+    ]
+    assert wrapping, "the synthesis is no longer wrapped at all"
+    innermost = min(wrapping, key=lambda node: len(list(ast.walk(node))))
+
+    for handler in innermost.handlers:
+        for statement in handler.body:
+            assert not mentions(statement, "review_failed"), (
+                "the synthesis declining ends the stream and discards a finished report"
+            )
