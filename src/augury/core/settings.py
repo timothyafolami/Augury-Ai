@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import cast, get_args
+from typing import Any, cast, get_args
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from augury.core.adapters.base import ModelSpec, Provider
 from augury.core.adapters.pricing import pricing_for
@@ -66,7 +66,23 @@ class Settings(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _route_with_the_reviewing_model_by_default(cls, values: Any) -> Any:
+        """One model unless a second is named."""
+        if isinstance(values, dict) and not values.get("triage_spec"):
+            values = {**values, "triage_spec": values.get("spec")}
+        return values
+
     spec: ModelSpec
+    # The model that answers the routing question, which is asked once per
+    # file and is the least demanding call in the pipeline. Defaults to the
+    # reviewing model, because every recording in this repository was made
+    # that way and the cassette key includes the model id.
+    #
+    # Filled in below rather than required, so a caller constructing Settings
+    # directly cannot end up with a routing model it never chose.
+    triage_spec: ModelSpec = None  # type: ignore[assignment]
     api_key: str
     replay_only: bool
     record: bool = False
@@ -106,13 +122,27 @@ def load_settings() -> Settings:
     replay_only = _flag("AUGURY_REPLAY_ONLY")
     record = _flag("AUGURY_RECORD")
 
+    # Only the model differs. A triage model on another provider would need a
+    # second key, and a key nobody knew to set fails halfway through a review
+    # rather than before one starts.
+    triage_model = os.environ.get("AUGURY_TRIAGE_MODEL", "") or model
+    try:
+        pricing_for(triage_model)
+    except KeyError as exc:
+        # Refused for the same reason the reviewing model is: a model with no
+        # published price makes every cost this tool reports a guess.
+        raise SettingsError(str(exc.args[0])) from exc
+
+    spec = ModelSpec(
+        provider=provider,
+        model=model,
+        temperature=_temperature(),
+        max_tokens=_max_tokens(),
+    )
+
     return Settings(
-        spec=ModelSpec(
-            provider=provider,
-            model=model,
-            temperature=_temperature(),
-            max_tokens=_max_tokens(),
-        ),
+        spec=spec,
+        triage_spec=spec.model_copy(update={"model": triage_model}),
         # Replay serves recorded answers, so it must work with no key at all.
         # That is the path a judge takes.
         api_key="" if replay_only else _api_key(provider),
