@@ -24,16 +24,22 @@ def _no_developer_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
     monkeypatch.setattr("augury.core.settings._dotenv_path", lambda: tmp_path / ".env")
 
 
-def test_defaults_to_deepseek_flash(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The cheapest capable model, so an unconfigured run is an affordable one."""
+def test_defaults_to_gpt_oss_120b_on_groq(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Measured against the alternative rather than assumed.
+
+    DeepSeek v4-flash has the lower published price per token and cost
+    eighteen times as much per module, because a reasoning model's chain of
+    thought is billed as output. The committed cassettes are Groq recordings
+    too, so this is also the model `make eval-replay` reproduces.
+    """
     monkeypatch.delenv("AUGURY_PROVIDER", raising=False)
     monkeypatch.delenv("AUGURY_MODEL", raising=False)
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
 
     settings = load_settings()
 
-    assert settings.spec.provider == "deepseek"
-    assert settings.spec.model == "deepseek-v4-flash"
+    assert settings.spec.provider == "groq"
+    assert settings.spec.model == "openai/gpt-oss-120b"
 
 
 def test_a_dotenv_supplies_what_the_environment_does_not(
@@ -77,11 +83,11 @@ def test_a_missing_key_names_the_variable_to_set(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory
 ) -> None:
     monkeypatch.setenv("AUGURY_ENV_FILE", "/nonexistent/.env")
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("AUGURY_PROVIDER", raising=False)
 
-    # Names the default provider's variable, which is DeepSeek's.
-    with pytest.raises(SettingsError, match="DEEPSEEK_API_KEY"):
+    # Names the default provider's variable, which is Groq's.
+    with pytest.raises(SettingsError, match="GROQ_API_KEY"):
         load_settings()
 
 
