@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/payments.py",
+      "line": 15,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "01-what-a-connection-actually-costs — a new AsyncClient per call forces a cold TLS handshake each request, incurring DNS, TCP and TLS round‑trips before any payload.",
+      "severity": "high",
+      "remediation": "Instantiate a single httpx.AsyncClient at module load (or via dependency injection) with appropriate connection limits and reuse it for all charge calls instead of creating a new client per request.",
+      "arithmetic": "Assume internal RTT R=30 ms. Warm request latency ≈R (30 ms). Cold request adds DNS+TCP+TLS round‑trips ≈3R, total ≈4R (120 ms). Extra latency ≈4R‑R=3R=90 ms. Therefore the 99th‑percentile request latency will be at least 90 ms higher when the per‑request client pattern is used.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 90.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "per‑request client without reuse"
+      }
+    }
+  ]
+}
