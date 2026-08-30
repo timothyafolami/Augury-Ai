@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "internal/reindex/worker.go",
+      "line": 42,
+      "layer": "concurrency",
+      "symbol": "Run",
+      "mechanism": "Unsynchronized early return after receiving an error leaves other goroutines blocked on the unbuffered `results` or `errs` channels, causing goroutine leaks and potential deadlock. This violates the guarantee that a runtime will clean up concurrent tasks automatically (reference 04-races-and-atomicity).",
+      "severity": "high",
+      "remediation": "replace the early `return out, err` with logic that continues to receive from `results` and `errs` until all spawned goroutines have completed (e.g., use a sync.WaitGroup or drain the channels after an error) before returning the error.",
+      "arithmetic": "Let N = len(items). If an error occurs after k goroutines have successfully sent, the remaining N‑k goroutines may block forever on send because the function returns early. Thus up to N‑1 goroutine leaks are possible, proportional to the number of items processed before the first error.",
+      "prediction": null
+    }
+  ]
+}
