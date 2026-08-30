@@ -144,3 +144,42 @@ def test_a_missing_build_is_a_development_machine_not_an_error() -> None:
 
     with TestClient(app) as client:
         assert client.get("/api/stages").status_code == 200
+
+
+def test_the_report_carries_engineering_coverage_per_layer() -> None:
+    """The interface draws a bar per specialist, and a bar with no basis
+    beside it looks exactly like a measurement."""
+    from augury.core.coverage import engineering_coverage
+    from augury.core.scheduling import Coverage
+
+    from augury.core.cartography.mapper import Cartographer
+
+    repo = Cartographer(Path("eval/cases/B01-orders-service/repo")).map()
+    computed = engineering_coverage(repo, Coverage(analysed=[]), [])
+
+    assert computed.layers, "no layers reported"
+    assert all(row.basis for row in computed.layers), "a row with no stated basis"
+
+
+def test_a_layer_nothing_touches_reports_no_share_rather_than_a_full_bar() -> None:
+    """We looked at all zero of them is not a reassuring fact."""
+    from augury.core.coverage import engineering_coverage
+    from augury.core.cartography.mapper import Cartographer
+    from augury.core.scheduling import Coverage
+
+    repo = Cartographer(Path("eval/cases/B01-orders-service/repo")).map()
+    computed = engineering_coverage(repo, Coverage(analysed=[]), [])
+
+    empty = [row for row in computed.layers if row.appears_in == 0]
+    assert all(row.share is None for row in empty)
+
+
+def test_a_forecast_item_can_never_be_built_without_its_evidence() -> None:
+    """The one property that keeps a forecast from becoming a horoscope."""
+    import pytest
+    from pydantic import ValidationError
+
+    from augury.core.forecast import Mechanism, Pressure
+
+    with pytest.raises(ValidationError):
+        Pressure(mechanism=list(Mechanism)[0], evidence=(), rule="because")
