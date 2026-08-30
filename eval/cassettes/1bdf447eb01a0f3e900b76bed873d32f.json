@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "concurrency",
+    "security"
+  ],
+  "reasoning": "concurrency: the synchronous write to a shared volume could cause race conditions; security: the use of crypto.pbkdf2Sync with an environment‑derived salt and handling of unknown input requires security review."
+}
