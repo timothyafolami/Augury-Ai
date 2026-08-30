@@ -23,7 +23,7 @@ fmt:
 
 # -- reviews and evaluation (need an API key; see docs/REPRODUCE.md) --------
 
-.PHONY: review-baseline review-augury evaluate eval-replay record
+.PHONY: review-baseline review-augury evaluate eval-replay record web serve
 
 review-baseline:
 	uv run python -m augury.cli review --arm baseline --case B01
@@ -62,3 +62,15 @@ eval-replay:
 record:
 	AUGURY_RECORD=1 AUGURY_PROVIDER=groq AUGURY_MODEL=openai/gpt-oss-120b \
 	  uv run --extra experiments python -m augury.cli evaluate --seeds 5 --prove
+
+
+# The web interface. A build is generated, so a clone does not have one and the
+# server says so at / rather than serving a blank page.
+web:
+	cd web && npm install && npm run build
+
+# One command for a demonstration: build the interface if it is missing, then
+# serve it and the API from one process.
+serve:
+	@test -d web/dist || $(MAKE) web
+	uv run python -m augury.server
