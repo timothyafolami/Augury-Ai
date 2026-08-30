@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "security",
+    "craft"
+  ],
+  "reasoning": "security: the file decodes JWTs without verification and uses a default secret; craft: the token parsing and error handling logic should be reviewed for correctness and style."
+}
