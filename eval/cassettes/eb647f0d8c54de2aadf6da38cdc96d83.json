@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/services/checkout.py",
+      "line": 14,
+      "layer": "data",
+      "symbol": "place_order",
+      "mechanism": "02-mvcc-and-vacuum — the transaction remains open while awaiting the external payments.charge call, causing an idle-in-transaction connection that pins xmin and blocks vacuum.",
+      "severity": "high",
+      "remediation": "Commit or rollback the DB transaction before awaiting payments.charge, or use a separate short-lived session for the payment so the main session is not held open during the network call.",
+      "arithmetic": "Assuming payments.charge latency ≈200ms and internal processing ≈50ms, the request holds a DB connection for ~250ms, making the 99th‑percentile latency ≥250ms under that condition.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 250.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "payments latency=200ms"
+      }
+    }
+  ]
+}
