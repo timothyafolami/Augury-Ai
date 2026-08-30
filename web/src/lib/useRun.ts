@@ -4,7 +4,7 @@ import type { Discovery, Finding, Report, Stage, StageKey, StageState, Step } fr
 /** What the file tree knows about one module while a review is running. */
 export type FileState = "unread" | "reading" | "read" | "flagged";
 
-interface RunState {
+export interface RunState {
   steps: Step[];
   /** Findings as they arrive, so the panel fills while the run is working.
    *  Rendering only the finished report meant a minute of agents moving over
@@ -31,7 +31,9 @@ interface RunState {
   failed: string;
 }
 
-const EMPTY: RunState = {
+/** Before anything has arrived. Exported so a test starts where a run does,
+ *  rather than from a hand-built state that can drift from this one. */
+export const EMPTY: RunState = {
   steps: [],
   findings: [],
   context: {},
