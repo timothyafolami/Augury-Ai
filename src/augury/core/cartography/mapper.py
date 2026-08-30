@@ -609,7 +609,8 @@ class Cartographer:
         `--relative` is required: git prints paths from the repository top
         level otherwise, which silently zeroes churn whenever the mapping root
         is a subdirectory. `core.quotePath=false` keeps non-ASCII paths
-        matchable.
+        matchable. Git still writes arbitrary filename bytes, so they are
+        decoded with the same surrogate policy Python uses for filesystem paths.
         """
         try:
             result = subprocess.run(
@@ -625,7 +626,6 @@ class Cartographer:
                     "--pretty=format:",
                 ],
                 capture_output=True,
-                text=True,
                 timeout=30,
                 check=False,
             )
@@ -633,7 +633,9 @@ class Cartographer:
             return {}
         if result.returncode != 0:
             return {}
-        return Counter(line.strip() for line in result.stdout.splitlines() if line.strip())
+        return Counter(
+            os.fsdecode(line).strip() for line in result.stdout.splitlines() if line.strip()
+        )
 
 
 def _git_environment() -> dict[str, str]:

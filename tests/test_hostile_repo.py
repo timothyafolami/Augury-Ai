@@ -6,7 +6,9 @@ repository must not be able to do to the process reviewing it.
 """
 
 import os
+import subprocess
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -86,14 +88,25 @@ def test_an_enormous_file_is_not_read_into_memory(tmp_path: Path) -> None:
     assert "huge.py" in mapped.skipped
 
 
+def test_churn_decodes_raw_git_filename_bytes_on_every_filesystem(tmp_path: Path) -> None:
+    """Git gives this boundary bytes, even where the local filesystem will not."""
+    output = b"app.py\nweird_\xff_name.py\n"
+    completed = subprocess.CompletedProcess(args=["git"], returncode=0, stdout=output)
+
+    with mock.patch("augury.core.cartography.mapper.subprocess.run", return_value=completed):
+        churn = Cartographer(tmp_path)._churn()
+
+    assert churn == {"app.py": 1, os.fsdecode(b"weird_\xff_name.py"): 1}
+
+
 def test_a_filename_that_is_not_valid_utf8_does_not_crash_the_review(
     tmp_path: Path,
 ) -> None:
-    """git log output is decoded strictly.
+    """Git log output can contain filename bytes that are not valid UTF-8.
 
     An untrusted repository can contain such a name trivially, and
-    UnicodeDecodeError is not caught by the churn handler's
-    (OSError, SubprocessError), so it would take down the whole review.
+    strict decoding would take down the whole review before the churn handler
+    could return its normal best-effort result.
     """
     git(tmp_path, "init", "-q")
     (tmp_path / "app.py").write_text("x = 1\n")
