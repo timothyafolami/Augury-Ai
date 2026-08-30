@@ -23,8 +23,13 @@ from augury.core.drafts import DraftReport
 class Memo:
     """Findings for one file, one specialist, one prompt, kept on disk."""
 
-    def __init__(self, directory: Path, *, enabled: bool = True) -> None:
+    def __init__(self, directory: Path, *, model_id: str = "", enabled: bool = True) -> None:
         self._dir = Path(directory)
+        # A different model is a different answerer to the same question, and
+        # nothing downstream can tell: the report and the journal both take
+        # the model from the adapter, so a switched model was credited with
+        # findings it never saw.
+        self._model_id = model_id
         self._enabled = enabled
         self.hits = 0
         self.misses = 0
@@ -65,6 +70,6 @@ class Memo:
 
     def _path(self, source: str, layer: str, language: str, prompt: str) -> Path:
         digest = hashlib.sha256(
-            json.dumps([source, layer, language, prompt]).encode("utf-8")
+            json.dumps([self._model_id, source, layer, language, prompt]).encode("utf-8")
         ).hexdigest()
         return self._dir / f"{digest}.json"
