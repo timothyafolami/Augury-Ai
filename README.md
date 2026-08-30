@@ -83,6 +83,20 @@ call and reports nothing is otherwise indistinguishable from a broken model.
 The interface needs Node to build, once; the engine does not need it at all,
 and every number this README publishes comes from the CLI.
 
+### Two models, if you want them
+
+Triage is asked once per file — *which concerns does this file touch* — and it
+is the highest-volume call in a review and the least demanding. It can be
+given a smaller model:
+
+```bash
+AUGURY_MODEL=openai/gpt-oss-120b AUGURY_TRIAGE_MODEL=openai/gpt-oss-20b ./start.sh --live
+```
+
+Unset, triage uses the reviewing model, which is what every recording here was
+made against. The reported cost sums both models: splitting the work must not
+be able to hide half the bill, and for a while it did.
+
 What the interface adds is watching. It subscribes to the trajectory the
 reviewer writes anyway, which is the file handed to a judge, so the tree
 lighting up and the agents handing off are the run rather than an animation of
