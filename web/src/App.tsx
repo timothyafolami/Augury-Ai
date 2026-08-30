@@ -39,8 +39,12 @@ const SPECIALISTS = [
  */
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
-  const { discovery, run, report, busy, loadStages, discover, review } = useRun();
-  const [scope, setScope] = useState("backend");
+  const { discovery, mode, run, report, busy, loadStages, discover, review } = useRun();
+  // Empty, meaning the whole repository. It defaulted to "backend", which is
+  // not a directory in most repositories, so the first thing a new user saw
+  // after choosing a folder was a server error caused by a field they had
+  // never touched. The placeholder still suggests it.
+  const [scope, setScope] = useState("");
   const [error, setError] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [now, setNow] = useState(0);
@@ -108,7 +112,13 @@ export default function App() {
       { label: "modules read", value: `${run.read}/${run.total || discovery?.modules.length || 0}` },
       { label: "findings held", value: String(findingCount(report, run.findings)) },
       { label: "spent", value: `$${run.usd.toFixed(4)}` },
+      // Alongside the cost, because a total with no denominator is unreadable:
+      // $0.0000 over 31 calls is a replay, $0.0000 over 0 calls is a stall.
+      { label: "model calls", value: String(run.calls) },
     ];
+    for (const [who, spent] of Object.entries(run.byModel)) {
+      entries.push({ label: `spent · ${who}`, value: `$${spent.toFixed(4)}` });
+    }
     // Whatever the run itself counted. Reported rather than derived, so a
     // cache hit on screen is a cache hit the engine recorded.
     for (const [what, count] of Object.entries(run.context)) {
@@ -136,7 +146,7 @@ export default function App() {
 
   if (screen === "landing") return <Landing onStart={() => setScreen("connect")} />;
   if (screen === "connect")
-    return <Connect onConnect={connect} busy={busy} error={error} />;
+    return <Connect onConnect={connect} busy={busy} error={error} mode={mode} />;
 
   // While the run works, what has arrived. Once it finishes, the report,
   // which is authoritative because the deterministic passes withdraw claims
@@ -161,7 +171,10 @@ export default function App() {
         <span className="ml-auto flex items-center gap-4 font-mono text-[11px] text-mist">
           {run.model && <span className="text-augur-300">{run.model}</span>}
           <span>{(now / 1000).toFixed(0)}s</span>
-          <span className="text-chalk">${run.usd.toFixed(4)}</span>
+          <span className="text-chalk">
+            ${run.usd.toFixed(4)}
+            {run.calls > 0 && <span className="text-mist"> / {run.calls} calls</span>}
+          </span>
           {reviewing && <span className="text-augur-300">running</span>}
           {report && <span className="text-verdict-hit">complete</span>}
         </span>
