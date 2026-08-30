@@ -30,6 +30,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from augury.cli.quiet import quiet_dependency_noise
 from augury.core.cartography.languages import EXTENSIONS
 from augury.core.cartography.mapper import Cartographer
 from augury.core.cartography.model import RepoMap
@@ -50,12 +51,9 @@ ALLOWED_ROOTS = tuple(
     if part
 )
 
-# Named in every research event, so a reader can repeat the lookup that was
-# made rather than take its answer on trust.
-PACKAGE_INDEX = "pypi.org"
-
-# The other network input. Named separately because a reader weighs a fact
-# looked up in an index differently from a page a search engine ranked.
+# The search a reader weighs differently from an index lookup, and the one
+# name here the caller has to supply: the registry announces where it asked,
+# and a source named twice is a source that can disagree with itself.
 SEARCH_ENGINE = "duckduckgo"
 
 # The flags a command uses to declare how many things it will do at once. A
@@ -106,6 +104,11 @@ def within_allowed(path: str) -> Path:
 
 def build() -> FastAPI:
     """The application, with its routes."""
+    # Before any review runs. autogen logs the OpenAI SDK's response object,
+    # whose `parsed` field is declared None and holds a parsed model, so
+    # Pydantic warns nine lines per model call and buries the server log.
+    quiet_dependency_noise()
+
     app = FastAPI(title="Augury", docs_url=None, redoc_url=None)
     app.add_middleware(
         CORSMiddleware,
