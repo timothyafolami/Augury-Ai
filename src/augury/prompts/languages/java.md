@@ -30,3 +30,21 @@ work submitted there starves everything else using it.
 **Virtual threads change the arithmetic, not the rules.** Under Java 21 virtual
 threads a blocking call no longer pins a platform thread -- unless it is inside
 `synchronized`, which pins, or a native call, which pins.
+
+- `Executors.newFixedThreadPool` pairs a bounded pool with an **unbounded**
+  `LinkedBlockingQueue`, so the pool bounds concurrency while the queue grows
+  until the heap does not. A bounded queue with a rejection policy is the
+  difference between shedding and an OutOfMemoryError.
+- `HttpClient` retries idempotent methods by itself, so a retry you wrote around
+  it is a second retry layer and the amplification is the product of the two.
+- `HttpConnectTimeoutException extends HttpTimeoutException`, so the case that
+  is safe to retry is a subclass of the case that is not. Catching the parent
+  and retrying converts an ambiguous result into a duplicate.
+- `MaxRAMPercentage` defaults to 25%, so a container given 4GB runs a 1GB heap
+  and is killed by the cgroup long before the collector feels pressure.
+- The JVM caches DNS by default, and historically forever, so a failover leaves
+  the process talking to an address that has moved.
+- Catching `Exception` swallows `InterruptedException` and clears the interrupt
+  flag, which silently removes cancellation from everything below it.
+- Virtual threads remove the accidental admission controller a bounded pool was
+  providing. Work that was rate-limited by having nowhere to run now all runs.
