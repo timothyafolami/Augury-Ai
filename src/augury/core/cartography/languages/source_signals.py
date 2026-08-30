@@ -66,6 +66,60 @@ _CATCH = re.compile(r"\bcatch\s*\(([^)]*)\)\s*\{", re.IGNORECASE)
 _BROAD = re.compile(r"\b(?:Exception|Throwable|RuntimeException|Error|std::exception)\b")
 _UNTYPED = ("typescript", "javascript", "tsx")
 
+# Node runs one thread. A synchronous call does not slow the request that made
+# it; it stops every other request in the process, health checks included.
+#
+# Named rather than matched on the `Sync` suffix. The suffix is the convention
+# the standard library follows, but user code follows it too -- a factory
+# called `makeSync` is an ordinary name, and routing every file containing one
+# to the concurrency specialist spends a model call to be told nothing. These
+# are the calls that actually hold the loop: filesystem, subprocess, crypto
+# key derivation and compression, which is where the time goes.
+_BLOCKING_CALLS = (
+    # node:fs
+    "readFileSync",
+    "writeFileSync",
+    "appendFileSync",
+    "readdirSync",
+    "statSync",
+    "existsSync",
+    "unlinkSync",
+    "mkdirSync",
+    "copyFileSync",
+    # node:child_process
+    "execSync",
+    "execFileSync",
+    "spawnSync",
+    # node:crypto -- the expensive ones by design
+    "pbkdf2Sync",
+    "scryptSync",
+    "generateKeyPairSync",
+    # node:zlib
+    "gzipSync",
+    "gunzipSync",
+    "deflateSync",
+    "inflateSync",
+    "brotliCompressSync",
+)
+_BLOCKS_THE_LOOP = re.compile(r"\b(?:" + "|".join(_BLOCKING_CALLS) + r")\s*\(")
+
+# Where one thread serves every request, so a blocking call is everyone's
+# problem. A Go function spelled the same way blocks one goroutine and the
+# scheduler runs the rest, which is why this is scoped rather than global.
+_SINGLE_THREADED = ("typescript", "javascript", "tsx")
+
+# The network call these runtimes make has no import behind it. `fetch` is a
+# global, and so are the streaming transports, so a signal table keyed on
+# imports is blind to the most common outbound call in the language.
+#
+# Anchored so that `repo.fetch(id)` and `this.fetch()` stay ordinary names: a
+# member call is somebody's data-access method far more often than it is the
+# global, and routing every repository class to the network specialist buys
+# nothing. `new` is required for the constructors for the same reason.
+_GLOBAL_NETWORK = re.compile(
+    r"(?<![.\w])fetch\s*\(|\bnew\s+(?:WebSocket|EventSource)\s*\(|\bnavigator\.sendBeacon\s*\("
+)
+
 
 def signals_in_source(language: str, text: str) -> frozenset[Signal]:
     """The concerns this file raises by what it does, not by what it imports."""
@@ -78,7 +132,36 @@ def signals_in_source(language: str, text: str) -> frozenset[Signal]:
         found.add(Signal.SECURITY)
         found.add(Signal.DATA)
 
+    if _blocks_the_only_thread(language, text):
+        found.add(Signal.CONCURRENCY)
+
+    if _calls_the_network_without_importing(language, text):
+        found.add(Signal.NETWORK)
+
     return frozenset(found)
+
+
+def _calls_the_network_without_importing(language: str, text: str) -> bool:
+    """An outbound call made through a global rather than a dependency."""
+    if language not in _SINGLE_THREADED:
+        return False
+    return _GLOBAL_NETWORK.search(_without_comments(text)) is not None
+
+
+def _without_comments(text: str) -> str:
+    """Prose describing a call is not a call.
+
+    Only line comments are stripped, which is what the false positive was:
+    "// fetch the row" in a file that never touches the network.
+    """
+    return "\n".join(line.split("//", 1)[0] for line in text.splitlines())
+
+
+def _blocks_the_only_thread(language: str, text: str) -> bool:
+    """A synchronous standard-library call on a runtime with one thread."""
+    if language not in _SINGLE_THREADED:
+        return False
+    return _BLOCKS_THE_LOOP.search(text) is not None
 
 
 def _swallows_an_error(language: str, text: str) -> bool:
