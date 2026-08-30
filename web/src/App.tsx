@@ -10,6 +10,7 @@ import { Findings } from "./components/Findings";
 import { Coverage } from "./components/Coverage";
 import { Forecast } from "./components/Forecast";
 import { NotRead } from "./components/NotRead";
+import { Diagram } from "./components/Diagram";
 import { Waterfall } from "./components/Waterfall";
 import { useRun } from "./lib/useRun";
 
@@ -165,6 +166,20 @@ export default function App() {
               <Waterfall spans={run.spans} now={now} />
             </div>
           </div>
+
+          {report?.architecture && report.architecture.nodes.length > 0 && (
+            <div className="border-b border-edge p-5">
+              <Header>
+                architecture
+                <span className="ml-2 text-mist/60">
+                  drawn from the deployment and the map, with the narrow places marked
+                </span>
+              </Header>
+              <div className="mt-4">
+                <Diagram architecture={report.architecture} />
+              </div>
+            </div>
+          )}
 
           {discovery && (report || reviewing) && (
             <div className="border-b border-edge p-5">
