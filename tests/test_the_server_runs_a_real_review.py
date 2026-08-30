@@ -319,9 +319,14 @@ def _reviewed(cache: Path) -> Reviewed:
     seen = run.watchers.subscribe()
     environment = {
         "XDG_CACHE_HOME": str(cache),
-        # Pinned rather than read off whatever .env this machine has: replay
-        # needs no key, and the model id is part of every cache key.
-        "AUGURY_REPLAY_ONLY": "1",
+        # A key rather than the replay flag. The model here is already a stub,
+        # so nothing was ever replayed: the flag was only a way to satisfy the
+        # settings check without a key, and it made this run claim to be
+        # something it is not. The memo stands down under replay -- a cache
+        # above the cassettes can answer differently from the recording -- so
+        # a fixture that says "replay" to mean "no key" turns the caching test
+        # below into an assertion about nothing.
+        "GROQ_API_KEY": "test-key-not-used-the-model-is-a-stub",
         "AUGURY_PROVIDER": "groq",
         "AUGURY_MODEL": "openai/gpt-oss-120b",
     }
