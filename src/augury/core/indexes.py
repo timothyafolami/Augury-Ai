@@ -50,6 +50,10 @@ class IndexedColumns:
     def __bool__(self) -> bool:
         return bool(self._pairs)
 
+    def pairs(self) -> set[tuple[str, str]]:
+        """Every (table, column) an index leads with."""
+        return set(self._pairs)
+
     def covering(self, words: set[str]) -> tuple[str, str] | None:
         """A pair whose table and column are both named in this text."""
         return next(
@@ -59,13 +63,17 @@ class IndexedColumns:
 
 
 def indexed_columns(operations: tuple[Operation, ...]) -> IndexedColumns:
-    """Every column the migrations put an index on."""
+    """Every column the migrations put an index the planner can use on.
+
+    The leading column only. A composite index on (user_id, created_at) does
+    not serve a predicate on created_at alone, so recording every column of it
+    withdrew a true claim about scanning on the trailing one.
+    """
     return IndexedColumns(
         {
-            (op.table, column)
+            (op.table, op.columns[0])
             for op in operations
-            if op.kind in {"create_index", "create_unique_constraint"}
-            for column in op.columns
+            if op.kind in {"create_index", "create_unique_constraint"} and op.columns
         }
     )
 
@@ -106,7 +114,81 @@ def _contradicted(finding: Finding, indexed: IndexedColumns) -> tuple[str, str] 
     -- and withdrawing a true finding because its fix names an indexed column
     is worse than leaving a false one in.
     """
-    if not _CLAIMS_NO_INDEX.search(finding.mechanism):
+    match = _CLAIMS_NO_INDEX.search(finding.mechanism)
+    if match is None:
         return None
-    words = {word.lower() for word in _IDENTIFIER.findall(finding.mechanism)}
-    return indexed.covering(words)
+
+    # Only the clause making the claim, not the whole sentence. Reading every
+    # identifier in the mechanism let a bystander settle it: `id` appears in
+    # nearly every migration and in most prose about a query, so a claim that
+    # `status` has no index was withdrawn because `orders.id` is indexed --
+    # with a reason that was true about a column the finding never mentioned.
+    subject = _subject_of(finding.mechanism, match.start())
+    if subject is None:
+        return None
+    tables = {word.lower() for word in _IDENTIFIER.findall(finding.mechanism)}
+    return next(
+        ((t, c) for (t, c) in indexed.pairs() if c == subject and t in tables),
+        None,
+    )
+
+
+# Words that stand between a column and the claim about it without being the
+# column: "status, a column with no index".
+_NOT_A_COLUMN = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "on",
+        "by",
+        "in",
+        "is",
+        "are",
+        "was",
+        "no",
+        "not",
+        "any",
+        "has",
+        "have",
+        "with",
+        "without",
+        "which",
+        "that",
+        "it",
+        "its",
+        "this",
+        "these",
+        "column",
+        "columns",
+        "index",
+        "indexes",
+        "indexed",
+        "missing",
+        "lacks",
+        "lack",
+        "absent",
+        "so",
+        "then",
+        "of",
+    }
+)
+
+
+def _subject_of(mechanism: str, claim_at: int) -> str | None:
+    """The column a "no index" claim is about: the last one named before it.
+
+    Reading every identifier in the sentence let a bystander settle the claim.
+    `id` appears in nearly every migration and in most prose about a query, so
+    "joins orders on id and then filters on status, a column with no index"
+    was withdrawn because `orders.id` is indexed -- a true statement about a
+    column the finding was not talking about.
+
+    The column the claim is about is the last one named before the claim, once
+    the words that are not columns are set aside.
+    """
+    named = [word.lower() for word in _IDENTIFIER.findall(mechanism[:claim_at])]
+    real = [word for word in named if word not in _NOT_A_COLUMN]
+    return real[-1] if real else None
