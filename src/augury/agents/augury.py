@@ -27,7 +27,7 @@ from augury.core.drafts import DraftReport, to_report
 from augury.core.findings import Dropped, Report
 from augury.core.indexes import indexed_columns, withdraw_false_index_claims
 from augury.core.languages import brief_for
-from augury.core.layers import Layer
+from augury.core.layers import Layer, specialists_for
 from augury.core.memo import Memo
 from augury.core.metrics import describe, vocabulary
 from augury.core.priority import rank
@@ -91,6 +91,22 @@ class Reading:
     @classmethod
     def unread(cls, path: str, why: str) -> Reading:
         return cls(report=DraftReport(findings=[]), read=False, why=why)
+
+    @classmethod
+    def nobody_asked(cls, path: str, *, allowed: int) -> Reading:
+        """Triage was consulted and narrowed to no specialist.
+
+        Structurally a valid answer, and not a reading: the signals allowed
+        specialists and none was asked, so nothing looked at this file. A
+        provider whose structured output degrades under load returns this for
+        every module, and the run would report full coverage of a repository
+        no analyst saw.
+        """
+        return cls(
+            report=DraftReport(findings=[]),
+            read=False,
+            why=(f"triage narrowed {allowed} allowed specialists to none, so no analyst read it"),
+        )
 
 
 async def gather_survivors(
@@ -280,7 +296,15 @@ class AuguryReviewer:
         depths = {module.path: module.depth for module in repo.modules}
         has_entry = any(module.depth is not None for module in repo.modules)
         anchored = [
-            cap_severity(finding, depth=depths.get(finding.path), has_entrypoints=has_entry)
+            cap_severity(
+                finding,
+                depth=depths.get(finding.path),
+                has_entrypoints=has_entry,
+                # Whether the map has this path at all. Without it an
+                # unrecognised path -- one the model omitted or spelled
+                # differently -- was demoted as if it had been measured.
+                known=finding.path in depths,
+            )
             for finding in report.findings
         ]
 
@@ -316,10 +340,15 @@ class AuguryReviewer:
         source = self._read(root / module.path)
         language = EXTENSIONS[Path(module.path).suffix.lower()].value
 
+        allowed = specialists_for(module.signals)
         chosen = await self._triage.route(module, source, language, context)
         if not chosen:
-            # No specialist's concern appears in this file. That is a reading,
-            # and a cheap one: it was looked at and there was nothing to ask.
+            if allowed:
+                # The signals allowed specialists and triage picked none. That
+                # is the model's answer, not a reading of the file.
+                return Reading.nobody_asked(module.path, allowed=len(allowed))
+            # No specialist's concern appears in this file at all. That is a
+            # reading, and a cheap one: nothing here was worth asking about.
             return Reading.of(DraftReport(findings=[]))
 
         # Specialists are independent by construction: each reads for its own
