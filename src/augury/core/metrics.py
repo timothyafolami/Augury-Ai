@@ -34,6 +34,27 @@ METRICS: MappingProxyType[str, str] = MappingProxyType(
         "active_connections": "Connections checked out of a pool at once",
         "queue_depth": "Items waiting to be processed",
         "memory_bytes": "Resident memory held by the process",
+        # Added because the practice lab teaches mechanisms these layers could
+        # not otherwise state. A layer whose number has no name is not merely
+        # uncovered, it is unclaimable, which is a worse failure: the reviewer
+        # has nothing to be wrong about and the gap looks like agreement.
+        "throughput_rps": "Requests completed per second, whoever was still waiting",
+        "goodput": (
+            "Requests per second answered before the caller gave up, which "
+            "diverges from throughput under metastable failure"
+        ),
+        "throttled_share": (
+            "Share of scheduling periods in which a cgroup exhausted its CPU "
+            "quota and was stopped, from 0 to 1"
+        ),
+        "replication_lag_bytes": "WAL bytes a replica has received but not yet applied",
+        "open_file_descriptors": "Descriptors held by the process at once",
+        "cache_hit_rate": "Share of lookups served without reaching the origin, from 0 to 1",
+        "pool_wait_ms": (
+            "Milliseconds a caller waits to check a connection out, before any "
+            "statement is issued and therefore inside no span"
+        ),
+        "series_cardinality": "Distinct label combinations a metric produces",
     }
 )
 
