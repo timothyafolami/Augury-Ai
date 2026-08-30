@@ -660,3 +660,70 @@ def _the_same_map() -> RepoMap:
     found = Surveyor(Path(CASE)).survey()
     entrypoints = tuple({e for service in found.services for e in service.entrypoints})
     return Cartographer(Path(CASE), entrypoints=entrypoints).map()
+
+
+def test_browsing_lists_the_directories_under_a_path() -> None:
+    """A text field asks someone to remember a path. A picker shows them."""
+    with _client() as client:
+        seen = client.post("/api/browse", json={"path": "eval/cases"}).json()
+
+    assert any(entry["name"] == "B01-orders-service" for entry in seen["directories"])
+
+
+def test_browsing_refuses_a_path_outside_the_allowed_roots() -> None:
+    """The picker is the one endpoint whose whole job is to disclose paths."""
+    with _client() as client:
+        answer = client.post("/api/browse", json={"path": "/etc"})
+
+    assert answer.status_code == 400
+
+
+def test_browsing_says_which_directories_look_like_a_repository() -> None:
+    """So the picker can lead somewhere useful rather than everywhere.
+
+    A case directory holds a repository beside its experiments and its fixed
+    copy, so the marker belongs on `repo` and not on the case above it.
+    """
+    with _client() as client:
+        seen = client.post("/api/browse", json={"path": "eval/cases/B01-orders-service"}).json()
+
+    marked = {entry["name"]: entry["looksLikeARepository"] for entry in seen["directories"]}
+    assert marked.get("repo") is True
+    assert marked.get("experiments") is False
+
+
+def test_browsing_hides_the_directories_a_review_would_never_read() -> None:
+    """node_modules and .venv are most of a tree and none of a repository."""
+    with _client() as client:
+        seen = client.post("/api/browse", json={"path": "."}).json()
+
+    names = {entry["name"] for entry in seen["directories"]}
+    assert ".venv" not in names
+    assert ".git" not in names
+
+
+def test_browsing_offers_the_way_back_up() -> None:
+    with _client() as client:
+        seen = client.post("/api/browse", json={"path": "eval/cases"}).json()
+
+    assert seen["parent"], "no way to go up from a subdirectory"
+
+
+def test_the_report_is_served_as_the_document_the_cli_writes() -> None:
+    """One engine. The document a team acts on is the same one either way."""
+    from augury.core.findings import Report
+    from augury.core.survey.model import Survey
+    from augury.server.app import as_document
+
+    written = as_document(
+        name="svc",
+        survey=Survey(services=(), source_roots=()),
+        report=Report(findings=(), model_id="m", usd=0.0, seconds=1.0),
+        schema=(),
+        dependencies=(),
+        modules=10,
+        unreachable=0,
+        reading={},
+    )
+
+    assert written.startswith("# svc")
