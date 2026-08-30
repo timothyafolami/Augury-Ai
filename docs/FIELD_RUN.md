@@ -13,7 +13,7 @@ planted by this project and the grader knew the answers. That is the right way
 to measure, and it is not evidence that the thing is useful.
 
 So it was pointed at a repository it had never seen and nobody had prepared:
-the practice lab this project's eight specialists are derived from. 533 modules,
+the practice lab this project's specialists are derived from. 533 modules,
 six languages, no seeded defects, no answer key.
 
 ## What it was given
