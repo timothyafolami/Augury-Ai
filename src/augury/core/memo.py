@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 from augury.core.drafts import DraftReport
+from augury.core.settings import recording
 
 
 class Memo:
@@ -25,6 +26,12 @@ class Memo:
 
     def __init__(self, directory: Path, *, model_id: str = "", enabled: bool = True) -> None:
         self._dir = Path(directory)
+        # A recording that a memo answered is a recording that was never
+        # written. The cassette set then replays on the machine whose cache
+        # happened to be warm and on no other, which is the same as not
+        # having one. The saving is worth less than a set that travels.
+        if enabled and recording():
+            enabled = False
         # A different model is a different answerer to the same question, and
         # nothing downstream can tell: the report and the journal both take
         # the model from the adapter, so a switched model was credited with
