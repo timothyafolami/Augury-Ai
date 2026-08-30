@@ -34,3 +34,18 @@ miss because it is one character.
 
 **`http.Client` without a `Timeout`.** The zero value has no timeout at all. A
 package-level `http.DefaultClient` in a service is an unbounded wait.
+
+- `MaxIdleConnsPerHost` defaults to **2**. Fifty concurrent requests to one host
+  open fifty connections, keep two idle, and close forty-eight into client-side
+  `TIME_WAIT`, so a service that appears to pool pays TLS setup on almost every
+  call.
+- A response body not read to EOF **and** closed never returns to the pool, so a
+  handler that checks `resp.StatusCode` and returns early has a cold client.
+- `Server.IdleTimeout` falls back to `ReadTimeout` and then to none.
+- A concurrent map write is a **fatal** runtime error that `recover()` cannot
+  catch: it takes the process down, unlike a nil dereference.
+- The monotonic reading is stripped by `.UTC()`, `.Round()`, `time.Parse` and
+  JSON marshalling, so a duration computed across those can come out negative.
+- `GOMAXPROCS` became container-aware only in Go 1.25 and there is still no
+  `GOMEMLIMIT` default. `html/template` escapes per context; `text/template`
+  does not escape at all.

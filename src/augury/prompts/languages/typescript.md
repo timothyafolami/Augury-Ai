@@ -34,3 +34,15 @@ trusting the client.
 
 **Timeouts are absent by default.** `fetch` and `axios` have no default
 timeout, so a hung upstream holds the request until the client gives up.
+
+- `pg.Pool` defaults to `max: 10` and `connectionTimeoutMillis: 0`, which queues
+  a request that cannot get a connection **indefinitely**: the event loop stays
+  responsive, health checks pass, and requests simply never complete. Failing by
+  waiting rather than by erroring is the shape to look for.
+- `server.keepAliveTimeout` must be shorter than `server.headersTimeout`.
+- `dns.lookup` uses the **same** four-thread libuv pool as file IO, so DNS and
+  disk contend for it.
+- A global `unhandledRejection` handler converts a loud crash into a silent
+  failure.
+- V8 sizes its heap from the cgroup, but Buffers and Worker heaps live outside
+  it, so the container is killed at a total the heap limit never predicted.

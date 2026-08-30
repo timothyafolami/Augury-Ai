@@ -39,3 +39,21 @@ a cache is shared across every request in that worker and evicts nothing.
 **Threads and processes do not share what people assume.** A `multiprocessing`
 worker does not see a parent's module-level cache. A `threading.Lock` in a
 module reloaded by `--reload` is not the same lock.
+
+- A plain `def` endpoint is not on the event loop and has its own ceiling:
+  FastAPI runs sync handlers through `anyio.to_thread.run_sync()`, whose default
+  limiter is 40 tokens **per process**, so request 41 waits with no log line, no
+  metric and no exception. An `async def` handler with a sync driver inside is
+  the opposite defect and stalls every concurrent request on that worker. Say
+  which of the two this file has.
+- Nothing in the standard library reads the CPU quota. `os.cpu_count()` and
+  `sched_getaffinity` report the host or the affinity mask, never `cpu.max`, so
+  `workers = 2 * os.cpu_count() + 1` gives seventeen workers on a two-CPU quota.
+- psycopg3 prepares server-side after five executions, so the plan you see in
+  psql is not the plan production runs. A `str` bound to a `bigint` column is an
+  implicit cast and misses the index.
+- SQLAlchemy opens a transaction on the first statement **including a read**, so
+  a read-only `Session` pins the xmin horizon until closed. An `IntegrityError`
+  leaves the session aborted until rollback.
+- `contextvars` are not carried across `run_in_executor` unless the callable is
+  handed `contextvars.copy_context().run`, so a correlation id vanishes there.
