@@ -1,0 +1,26 @@
+{
+  "findings": [
+    {
+      "path": "app/repositories/orders.py",
+      "line": 13,
+      "layer": "observability",
+      "symbol": "load",
+      "mechanism": "Correlation IDs are not propagated (03-correlation-ids); logs lack request identifiers, preventing a single query to retrieve all logs for a request, making incidents untraceable.",
+      "severity": "high",
+      "remediation": "Add a correlation_id argument (or contextvar) to load, include it in logger calls, and propagate W3C traceparent header through downstream calls.",
+      "arithmetic": "Without a correlation ID, a log query like \"request_id=XYZ\" returns zero rows, so on‑call cannot reconstruct request flow.",
+      "prediction": null
+    },
+    {
+      "path": "app/repositories/orders.py",
+      "line": 18,
+      "layer": "observability",
+      "symbol": "list_for_customer",
+      "mechanism": "Correlation IDs are not propagated (03-correlation-ids); exception log does not contain request identifier, so errors cannot be tied to a specific request.",
+      "severity": "high",
+      "remediation": "Add a correlation_id parameter (or contextvar) to list_for_customer, include it in logger.exception message, and ensure it is passed from the request handler.",
+      "arithmetic": "When an exception occurs, the log line lacks a request_id, so a query for that request's logs misses the error entry, breaking end‑to‑end traceability.",
+      "prediction": null
+    }
+  ]
+}
