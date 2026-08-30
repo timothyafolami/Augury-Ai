@@ -116,6 +116,66 @@ _BLOCKS_THE_LOOP = re.compile(r"\b(?:" + "|".join(_BLOCKING_CALLS) + r")\s*\(")
 # scheduler runs the rest, which is why this is scoped rather than global.
 _SINGLE_THREADED = ("typescript", "javascript", "tsx")
 
+# Concurrency, read off what the file does rather than what it imports.
+#
+# The import list is the wrong place for this. `go func() {}()` imports
+# nothing at all; `synchronized` imports nothing; and a C++ file that already
+# includes <thread> for one reason gets no credit for the line that spawns.
+#
+# Found by measuring the Go case: `internal/reindex/worker.go` exists to
+# demonstrate a goroutine leak and raised `data` and `observability`, so the
+# one specialist qualified to name that mechanism was never asked to read it.
+#
+# Each pattern is anchored on syntax rather than on a word, because routing a
+# file to a specialist costs a model call and a detector that fires on the
+# word "go" in a sentence spends money to be told nothing.
+_CONCURRENT: dict[str, re.Pattern[str]] = {
+    "go": re.compile(
+        r"""(?:
+            \bgo\s+func\s*\(          # go func() { ... }()
+          | \bgo\s+\w+(?:\.\w+)*\s*\(  # go worker(...)
+          | \bchan\s                   # a channel type
+          | \bmake\s*\(\s*chan\b
+          | \bsync\.\w+               # sync.Mutex, sync.WaitGroup
+          | <-\s*\w                    # a receive
+        )""",
+        re.VERBOSE,
+    ),
+    "java": re.compile(
+        r"""(?:
+            \bsynchronized\s*[({]
+          | \bnew\s+Thread\s*\(
+          | \bExecutors?\.\w+
+          | \bExecutorService\b
+          | \bCompletableFuture\.\w+
+          | \bAtomic(?:Integer|Long|Boolean|Reference)\b
+          | \bReentrantLock\b
+        )""",
+        re.VERBOSE,
+    ),
+    "cpp": re.compile(
+        r"""(?:
+            \bstd::(?:thread|mutex|atomic|condition_variable|shared_mutex|async|future)\b
+          | \bpthread_\w+\s*\(
+          | \bstd::lock_guard\b
+          | \bstd::unique_lock\b
+        )""",
+        re.VERBOSE,
+    ),
+    "rust": re.compile(
+        r"""(?:
+            \bthread::spawn\s*\(
+          | \btokio::spawn\s*\(
+          | \bArc::new\s*\(
+          | \b(?:Mutex|RwLock)::new\s*\(
+          | \bArc\s*<
+          | \b(?:Mutex|RwLock)\s*<
+          | \basync\s+move\b
+        )""",
+        re.VERBOSE,
+    ),
+}
+
 # The network call these runtimes make has no import behind it. `fetch` is a
 # global, and so are the streaming transports, so a signal table keyed on
 # imports is blind to the most common outbound call in the language.
@@ -146,7 +206,18 @@ def signals_in_source(language: str, text: str) -> frozenset[Signal]:
     if _calls_the_network_without_importing(language, text):
         found.add(Signal.NETWORK)
 
+    if _coordinates_concurrent_work(language, text):
+        found.add(Signal.CONCURRENCY)
+
     return frozenset(found)
+
+
+def _coordinates_concurrent_work(language: str, text: str) -> bool:
+    """A thread, a task, a channel or a lock, written out in the source."""
+    pattern = _CONCURRENT.get(language)
+    if pattern is None:
+        return False
+    return pattern.search(_without_comments(text)) is not None
 
 
 def _calls_the_network_without_importing(language: str, text: str) -> bool:
