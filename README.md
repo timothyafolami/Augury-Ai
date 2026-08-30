@@ -44,32 +44,44 @@ agent, and a web client watches it work. None is a second implementation, and
 the document a team acts on is rendered by the same function whichever asked
 for it.
 
+### Start it
+
 ```bash
-make demo                                            # the whole thing, no API key
-augury report --path /path/to/repo --scope backend   # writes the document
-augury mcp                                           # exposes it over MCP
-make serve                                           # your own repository, needs a key
+./start.sh
 ```
 
-**`make demo` needs no API key and spends nothing.** It serves the interface
-against a recorded review of a seeded case, so you can watch the pipeline work,
-open the findings, expand a risk pressure to its evidence and read the document,
-before deciding whether to give it a key. Point it at
-`eval/cases/B01-orders-service/repo` when it asks. It replays 4 deployment
-findings, 16 code findings across nine specialists, 5 risk pressures and 4
-synthesis observations into a 259-line document, for $0.00. Every panel is
-populated from that recording rather than from anything invented for the
-occasion; the counts above are what a fresh clone with no key produced.
+That installs the dependencies, builds the interface once, and serves the API
+and the UI from a single process on <http://localhost:8000>. **It needs no API
+key and spends nothing**: it replays reviews recorded call by call and
+committed to this repository, so the pipeline you watch is a real run rather
+than a demonstration mode. `./start.sh --live` reviews your own repositories
+and needs a provider key.
 
-`eval/cases/E01-go-inventory/repo` replays too, and is the more interesting
-one to watch: it is a Go service, so the topology, the architecture diagram and
-the findings are all built from Go source rather than Python. It returns 4
-deployment findings, 6 code findings, 4 pressures and 3 synthesis observations
-into a 151-line document, also for $0.00.
+The other two clients:
 
-`make serve` starts one process on <http://localhost:8000> holding both the API
-and the interface. The interface needs Node to build, once; the engine does
-not need it at all, and every number this README publishes comes from the CLI.
+```bash
+augury report --path /path/to/repo --scope backend   # writes the document
+augury mcp                                           # exposes it over MCP
+```
+
+Three repositories replay, and the interface offers them:
+
+| repository | language | replays |
+|---|---|---|
+| `eval/cases/B01-orders-service/repo` | Python | 4 deployment findings, 16 code findings across nine specialists, 5 pressures, 4 synthesis observations, 259-line document |
+| `eval/cases/E01-go-inventory/repo` | Go | 4 deployment, 6 code, 4 pressures, 3 observations, 151-line document |
+| `eval/cases/F01-ts-checkout/repo` | TypeScript | 4 deployment, 5 code, 2 pressures, 3 observations, 143-line document |
+
+Every count there is what a fresh clone with no key produced, at $0.00. Every
+panel is populated from the recording rather than from anything invented for
+the occasion.
+
+Pointed at a repository with no recordings while replaying, the interface says
+so before the run starts, because a review that maps files, misses every model
+call and reports nothing is otherwise indistinguishable from a broken model.
+
+The interface needs Node to build, once; the engine does not need it at all,
+and every number this README publishes comes from the CLI.
 
 What the interface adds is watching. It subscribes to the trajectory the
 reviewer writes anyway, which is the file handed to a judge, so the tree
