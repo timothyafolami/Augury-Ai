@@ -1,0 +1,142 @@
+{
+  "id": "F01",
+  "name": "typescript-checkout-service",
+  "repo_description": "An Express checkout API in TypeScript over Postgres, pricing orders through an internal service and writing signed receipts.",
+  "defects": [
+    {
+      "id": "F01-1",
+      "lab_topic": "07-security/04-jwt-and-revocation",
+      "defect": "claimsFrom calls jwt.decode, which reads the payload without checking the signature. Anyone can mint a token with any sub and any role, so the identity every other check depends on is caller-supplied. The secret is loaded two lines above and never used.",
+      "locations": [
+        "src/lib/token.ts"
+      ],
+      "symbols": [
+        "claimsFrom",
+        "jwt.decode",
+        "SECRET"
+      ],
+      "verification": "differential",
+      "expected_metric": "http_status",
+      "notes": "decode and verify differ by one word and by everything. The file reads as though authentication happens.",
+      "unmeasurable_because": "Demonstrating it means presenting a forged token to the running service, which needs the API and its Postgres, and the prover starts the reviewed service with --no-deps."
+    },
+    {
+      "id": "F01-2",
+      "lab_topic": "07-security/02-sql-injection",
+      "defect": "The orders query interpolates both claims.sub and the status query parameter into the SQL string. The neighbouring receipt query in the same file uses $1 correctly, so the safe form is fifteen lines below the unsafe one.",
+      "locations": [
+        "src/routes/orders.ts"
+      ],
+      "symbols": [
+        "pool.query",
+        "status",
+        "claims.sub"
+      ],
+      "verification": "differential",
+      "expected_metric": "http_status",
+      "notes": "Compounded by F01-1: claims.sub is attacker-controlled, so the injection does not even need the query parameter.",
+      "unmeasurable_because": "Settling it means issuing a hostile request against the service and its database, and the prover runs the service container with --no-deps, so no database is present."
+    },
+    {
+      "id": "F01-3",
+      "lab_topic": "07-security/01-authn-authz-and-idor",
+      "defect": "The receipt route reads claims but never rejects a null one, then selects the order by id from the path with no ownership predicate. Any caller can write and sign a receipt for any order.",
+      "locations": [
+        "src/routes/orders.ts"
+      ],
+      "symbols": [
+        "claimsFrom",
+        "req.params.id",
+        "writeReceipt"
+      ],
+      "verification": "differential",
+      "expected_metric": "http_status",
+      "notes": "The GET route above it does check for null, which is what makes the omission read as an oversight rather than a decision.",
+      "unmeasurable_because": "The same --no-deps limit: proving one caller can read another's order needs two identities and a database holding both."
+    },
+    {
+      "id": "F01-4",
+      "lab_topic": "01-machine/03-concurrency-models",
+      "defect": "writeReceipt calls fs.writeFileSync and then crypto.pbkdf2Sync with 600,000 iterations, both on the request path. Node has one thread, so for the duration of that hash every other request in the process is stopped, including the health check.",
+      "locations": [
+        "src/lib/receipt.ts"
+      ],
+      "symbols": [
+        "writeReceipt",
+        "pbkdf2Sync",
+        "writeFileSync"
+      ],
+      "verification": "load",
+      "expected_metric": "http_req_duration_p99",
+      "notes": "The defect this case exists for, and the one with no Python analogue: in Python the same call blocks one worker of several. Here it blocks everyone. Neither call is wrong in a script; both are wrong in a handler.",
+      "unmeasurable_because": "Its metric is a wall-clock percentile, which no experiment in this suite settles, because a percentile cannot return the same number twice and reproducibility is the bar every experiment here clears."
+    },
+    {
+      "id": "F01-5",
+      "lab_topic": "03-data/06-finding-n-plus-1",
+      "defect": "The orders route awaits quote(row.sku) inside a for-of loop, so pricing is both one HTTP call per row and strictly serial. Twenty orders is twenty sequential round trips before the first byte of the response.",
+      "locations": [
+        "src/routes/orders.ts"
+      ],
+      "symbols": [
+        "priced",
+        "row.sku",
+        "rows.rows"
+      ],
+      "verification": "differential",
+      "expected_metric": "queries_per_request",
+      "notes": "await-in-a-loop is the most common shape of this defect in TypeScript, and it looks like ordinary sequential code because that is exactly what it is.",
+      "unmeasurable_because": "Counting the calls means serving a request against the pricing service and Postgres, neither of which the prover starts: it runs the reviewed service with --no-deps."
+    },
+    {
+      "id": "F01-6",
+      "lab_topic": "02-network/03-timeouts-as-a-first-principle",
+      "defect": "quote calls fetch with no signal and no AbortController, so a pricing service that accepts the connection and never answers holds the request forever. Combined with F01-5 the whole response waits on the slowest of twenty such calls, in series.",
+      "locations": [
+        "src/lib/pricing.ts"
+      ],
+      "symbols": [
+        "fetch",
+        "AbortController",
+        "pricing"
+      ],
+      "verification": "load",
+      "expected_metric": "http_req_duration_p99",
+      "notes": "undici gives fetch no default timeout, matching Go's default client and unlike most HTTP libraries people arrive from.",
+      "unmeasurable_because": "A wall-clock percentile again, which this suite does not accept as a settled number for the reason recorded on F01-4."
+    },
+    {
+      "id": "F01-7",
+      "lab_topic": "08-craft/03-errors-as-interface",
+      "defect": "claimsFrom wraps its decode in a try/catch that returns null on any error, so a malformed token, a library fault and an absent header are all reported to the caller as the same value. The one case that should be loud is the quietest.",
+      "locations": [
+        "src/lib/token.ts"
+      ],
+      "symbols": [
+        "claimsFrom",
+        "catch"
+      ],
+      "verification": "differential",
+      "expected_metric": "duplicate_side_effects",
+      "notes": "The catch is also unreachable in practice, because jwt.decode does not throw on a bad signature: it does not look at the signature at all.",
+      "unmeasurable_because": "Distinguishing three causes that produce one value requires observing which cause occurred, and the code has discarded that by the time anything could measure it."
+    },
+    {
+      "id": "F01-8",
+      "lab_topic": "06-observability/05-red-and-use",
+      "defect": "/healthz returns 200 without touching the pool or the pricing service, so readiness stays green while the event loop is blocked by F01-4 and every real request is queued behind it.",
+      "locations": [
+        "src/index.ts"
+      ],
+      "symbols": [
+        "healthz",
+        "listen"
+      ],
+      "verification": "differential",
+      "expected_metric": "http_status",
+      "notes": "Declared here before the repository was ever reviewed, unlike the equivalent defect in E01, which was declared after a review found it.",
+      "unmeasurable_because": "The claim is that the probe stays green while the loop is blocked, so settling it means blocking the loop under load, and the prover cannot start this service at all."
+    }
+  ],
+  "notes": "The second non-Python case, and the one closest to what this tool is for: a TypeScript Express service of the shape that gets assembled quickly. `tsc --noEmit` passes under strict, so nothing here is a type error; every defect is a production failure the compiler is content with.\n\nAll eight defects were written down before anything read the repository. That is worth stating because E01's manifest cannot say it: two of its defects were declared after a review reported them.\n\nNo defect is settled by an experiment, and the reason is sharper here than on E01. The prover mounts a Python script into the reviewed service's image and runs it with --no-deps. `node:20-slim` was probed directly for this manifest and contains no Python interpreter at all, not even python3, so the prover cannot execute anything inside this service's image regardless of what the experiment measures. Every claim this case produces is permanently `untested`, and the report says so.\n\nMeasured recall on this case understates detection, and the reason is worth stating rather than correcting. F01-3 and F01-6 are both diagnosed correctly in the report -- the IDOR finding says the endpoint \"selects an order by id without verifying that the authenticated user owns the order\" and cites the topic by name; the pricing finding says \"No timeout also violates 03-timeouts-as-a-first-principle\" -- and neither is credited, because the reconciler requires one of the declared symbols to appear as a whole word and the model named the route (`POST /orders/:id/receipt`) and the enclosing function (`quote`) instead. Route-shaped Express code hits this more often than Python does.\n\nTwo repairs were considered and both rejected. Adding the symbols the model happened to use would be fitting the manifest to one run. Matching on the lab topic the finding cites would be worse: only the pipeline is given the lab, so only the pipeline cites topics, and the metric would move in one arm's favour for a reason that has nothing to do with detection. The number stays as measured and the shortfall is documented here."
+}
