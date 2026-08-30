@@ -43,6 +43,45 @@ class Outcome(StrEnum):
     BROKEN = "broken"
 
 
+# The span a measurement in each unit can plausibly land in. A threshold at or
+# outside its own unit's range excludes nothing that can happen, which is the
+# definition of vacuous -- and pinning the guard to zero instead let the
+# perfect-score attack back in one epsilon above it: `p99 >= 0.000001ms` hits
+# every measurement ever taken and passed the gate.
+#
+# Deliberately generous. The purpose is to catch a claim that cannot lose, not
+# to referee whether a number is likely.
+REALISABLE = {
+    "ms": (1.0, 3_600_000.0),
+    "s": (0.001, 3_600.0),
+    "seconds": (0.001, 3_600.0),
+    "queries": (1.0, 1e9),
+    "query": (1.0, 1e9),
+    "requests": (1.0, 1e12),
+    "connections": (1.0, 1e6),
+    "bytes": (1.0, 1e15),
+    "mb": (0.001, 1e9),
+    "x": (1.0, 1e6),
+    "%": (0.01, 100.0),
+    "percent": (0.01, 100.0),
+    "rps": (0.01, 1e9),
+}
+
+# For a unit nobody anticipated. Excludes only what the old guard did, so an
+# unfamiliar unit is never rejected for being unfamiliar.
+UNKNOWN_UNIT = (0.0, VACUOUS_CEILING)
+
+
+def realisable_range(unit: str) -> tuple[float, float]:
+    """The smallest and largest a measurement in this unit plausibly is.
+
+    A count cannot be fractional and a latency is not measured below the
+    millisecond, so "at least one query" and "under a millisecond" exclude
+    nothing that occurs -- while reading as real thresholds.
+    """
+    return REALISABLE.get(unit.strip().lower(), UNKNOWN_UNIT)
+
+
 class Prediction(BaseModel):
     """A claim about production behaviour that a measurement can refute.
 
@@ -78,15 +117,16 @@ class Prediction(BaseModel):
         metrics. A prediction has to exclude some part of the outcome space or
         it is not a prediction.
         """
-        if self.comparator is Comparator.AT_LEAST and self.value <= 0:
+        floor, ceiling = realisable_range(self.unit)
+        if self.comparator is Comparator.AT_LEAST and self.value <= floor:
             raise ValueError(
-                "vacuous: every measurement of a magnitude is at least zero, "
-                "so this threshold excludes nothing"
+                f"vacuous: essentially every measurement in {self.unit} is at least "
+                f"{floor:g}, so this threshold excludes nothing"
             )
-        if self.comparator is Comparator.AT_MOST and self.value >= VACUOUS_CEILING:
+        if self.comparator is Comparator.AT_MOST and self.value >= ceiling:
             raise ValueError(
-                f"vacuous: no realisable measurement exceeds {VACUOUS_CEILING:g} "
-                f"{self.unit}, so this threshold excludes nothing"
+                f"vacuous: no realisable measurement in {self.unit} exceeds "
+                f"{ceiling:g}, so this threshold excludes nothing"
             )
         if self.comparator is Comparator.BETWEEN and self.upper is not None:
             if self.value <= 0:
