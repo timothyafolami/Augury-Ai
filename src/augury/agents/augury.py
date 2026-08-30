@@ -187,6 +187,7 @@ class AuguryReviewer:
         concurrency: int = DEFAULT_CONCURRENCY,
         watching: Callable[[Progress], None] | None = None,
         memo: Memo | None = None,
+        registry: Registry | None = None,
     ) -> None:
         self._model = model
         self._trace = trajectory
@@ -198,7 +199,12 @@ class AuguryReviewer:
         # Resolved once per review in `review`, because the registry is asked
         # over the network and a specialist call must not wait on it.
         self._pinned: dict[str, str] = {}
-        self._registry = Registry()
+        self._registry = registry or Registry()
+        # The batched lookup, started when the review starts and awaited only
+        # when a prompt actually needs a version. Triage runs while it is in
+        # flight, which is the whole point: the network wait overlaps the work
+        # instead of preceding it.
+        self._research: asyncio.Task[object] | None = None
         self._concurrency = max(1, concurrency)
         # Called after every module. A review of a real backend runs for
         # minutes; silence for that long is indistinguishable from a hang.
@@ -212,6 +218,20 @@ class AuguryReviewer:
         # What this repository declares it depends on. Read once; the registry
         # answers are cached per package for the life of the review.
         self._pinned = requirements_of(root)
+
+        # Every package the repository imports, asked for at once and in the
+        # background. `describe_versions` used to ask the registry one package
+        # at a time while rendering each specialist prompt, so the first module
+        # to import something new stopped the review until the network
+        # answered -- inside the loop that exists to run specialists
+        # concurrently. The registry has always had a pooled `facts_for_many`
+        # whose own docstring says sequential lookups queue until the tail
+        # exceeds the timeout. Nothing called it.
+        wanted = sorted({name for module in repo.modules for name in module.external})
+        if wanted:
+            self._research = asyncio.create_task(
+                asyncio.to_thread(self._registry.facts_for_many, wanted)
+            )
 
         started = time.monotonic()
         context = _render_context(repo.context)
@@ -403,6 +423,12 @@ class AuguryReviewer:
     async def _ask(
         self, layer: Layer, module: ModuleNode, source: str, language: str, context: str
     ) -> DraftReport:
+        # The batched lookup, if it is still in flight. Awaited here rather than
+        # before the loop so triage overlaps it. After this every `facts_for`
+        # below is a cache hit and reaches no network.
+        if self._research is not None:
+            await self._research
+
         prompt = render(
             "analyst",
             layer_name=layer.name,
