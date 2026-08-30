@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "internal/store/items.go",
+      "line": 13,
+      "layer": "security",
+      "symbol": "ByWarehouse",
+      "mechanism": "SQL injection via string concatenation of user‑controlled warehouse parameter, violating 02-sql-injection.",
+      "severity": "high",
+      "remediation": "Replace string‑built query with a parameterized query: q := \"SELECT sku, name, on_hand, reserved FROM items WHERE warehouse = $1\"; rows, err := pool.Query(q, warehouse)",
+      "arithmetic": "The function builds one SQL statement (1 query). An attacker can inject a trailing ';' and a second statement (e.g. DROP TABLE). lib/pq permits multiple statements, so the request will cause at least 2 queries per request when the payload \"'; DROP TABLE items;--\" is supplied.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 2.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "warehouse=\"'; DROP TABLE items;--\""
+      }
+    }
+  ]
+}
