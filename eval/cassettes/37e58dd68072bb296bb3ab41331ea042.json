@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/payments.py",
+      "line": 15,
+      "layer": "concurrency",
+      "symbol": "charge",
+      "mechanism": "Creating a new httpx.AsyncClient per call opens a separate socket and its own connection pool, causing many simultaneous file descriptors under load, violating the runtime's file descriptor limits (06-file-descriptors). Additionally, each socket incurs a kernel syscall overhead (02-threads-and-syscalls).",
+      "severity": "high",
+      "remediation": "Instantiate a shared httpx.AsyncClient at module level and reuse it for all calls, configuring a reasonable connection pool limit.",
+      "arithmetic": "Each concurrent call creates its own AsyncClient, which opens at least one socket (1 fd). With N concurrent requests, open_fds = N. For N=200, open_fds = 200, which approaches typical process limits (e.g., 1024).",
+      "prediction": {
+        "metric": "open_file_descriptors",
+        "comparator": "at_least",
+        "value": 200.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "concurrent_requests=200"
+      }
+    }
+  ]
+}
