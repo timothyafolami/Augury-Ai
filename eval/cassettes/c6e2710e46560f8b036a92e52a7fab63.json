@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/services/wallet.py",
+      "line": 15,
+      "layer": "data",
+      "symbol": "debit",
+      "mechanism": "01-isolation-levels – the function reads the wallet row then writes without SELECT FOR UPDATE or an atomic UPDATE, so under READ COMMITTED concurrent writers can lose updates, violating the balance invariant.",
+      "severity": "high",
+      "remediation": "Use SELECT ... FOR UPDATE (or an atomic UPDATE statement) on the wallet row before checking and updating, or run the transaction at SERIALIZABLE isolation with proper retry logic.",
+      "arithmetic": "B=100 (initial balance), A=10 (debit amount), N=5 concurrent writers; under READ COMMITTED without row locking only one debit persists, so final_balance = B - A = 90.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_least",
+        "value": 90.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "5 concurrent debit writers each amount=10 on initial balance=100"
+      }
+    },
+    {
+      "path": "app/services/wallet.py",
+      "line": 31,
+      "layer": "data",
+      "symbol": "credit",
+      "mechanism": "01-isolation-levels – the function reads the wallet row then writes without SELECT FOR UPDATE or an atomic UPDATE, so under READ COMMITTED concurrent writers can lose updates, causing missing credits.",
+      "severity": "high",
+      "remediation": "Use SELECT ... FOR UPDATE (or an atomic UPDATE statement) on the wallet row before updating, or run the transaction at SERIALIZABLE isolation with proper retry logic.",
+      "arithmetic": "B=100 (initial balance), A=10 (credit amount), N=5 concurrent writers; under READ COMMITTED without row locking only one credit persists, so final_balance = B + A = 110.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_most",
+        "value": 110.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "5 concurrent credit writers each amount=10 on initial balance=100"
+      }
+    }
+  ]
+}
