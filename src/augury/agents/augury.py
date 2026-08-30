@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import cast
 
 from augury.agents.triage import Triage
-from augury.core.adapters.base import ChatModel
+from augury.core.adapters.base import ChatModel, Usage
 from augury.core.cartography import ModuleNode, RepoMap
 from augury.core.cartography.languages import EXTENSIONS, Language
 from augury.core.cartography.symbols import locator_for
@@ -188,11 +188,20 @@ class AuguryReviewer:
         watching: Callable[[Progress], None] | None = None,
         memo: Memo | None = None,
         registry: Registry | None = None,
+        triage_model: ChatModel | None = None,
     ) -> None:
         self._model = model
         self._trace = trajectory
         self._experiments = experiments or {}
-        self._triage = Triage(model, trajectory=trajectory)
+        # Routing is asked once per file and answers a narrow question: which
+        # concerns does this file touch. It is the highest-volume call in the
+        # pipeline and the least demanding, so it can be given a cheaper model
+        # and the saving spent on specialist calls the budget would otherwise
+        # have stopped. Defaults to the reviewing model.
+        self._router = (
+            triage_model if triage_model is not None and triage_model is not model else None
+        )
+        self._triage = Triage(triage_model or model, trajectory=trajectory)
         # One triage call plus a specialist call each. Declared so the budget
         # is a ceiling on what this arm actually spends, not on a fiction.
         self._budget = budget or Budget(calls_per_module=TYPICAL_CALLS_PER_MODULE)
@@ -213,6 +222,19 @@ class AuguryReviewer:
         # is a cache that can serve a stale answer to someone who did not ask
         # for one.
         self._memo = memo or Memo(Path("."), enabled=False)
+
+    def _spent(self) -> Usage:
+        """What this run has cost, across every model it is using.
+
+        Every figure in here used to read `self._model.usage`, which is the
+        reviewing model alone. Once triage can be given its own model, that
+        reads as free -- so a change made to save money would have reported
+        saving more than it did. The budget is enforced against this too, or
+        the ceiling stops applying to half the calls.
+        """
+        if self._router is None:
+            return self._model.usage
+        return self._model.usage + self._router.usage
 
     async def review(self, repo: RepoMap, root: Path) -> Report:
         # What this repository declares it depends on. Read once; the registry
@@ -235,7 +257,7 @@ class AuguryReviewer:
 
         started = time.monotonic()
         context = _render_context(repo.context)
-        opening = self._model.usage
+        opening = self._spent()
         plan = Scheduler(repo, self._budget)
         drafts: list[DraftReport] = []
         self._record(
@@ -261,7 +283,7 @@ class AuguryReviewer:
                     },
                 )
 
-            before = self._model.usage
+            before = self._spent()
             # One batch at a time rather than the whole repository at once: the
             # scheduler promotes a module whose neighbours produced findings,
             # and that adaptivity needs results back before the next choice.
@@ -277,7 +299,7 @@ class AuguryReviewer:
                     {"path": batch[index].path, "why": str(error)[:200]},
                 ),
             )
-            batch_usd = (self._model.usage - before).usd
+            batch_usd = (self._spent() - before).usd
 
             for module, found in zip(batch, results, strict=True):
                 drafts.append(found.report)
@@ -299,12 +321,12 @@ class AuguryReviewer:
                             findings=len(found.report.findings),
                             read=len(plan.coverage_analysed),
                             total=len(repo.modules),
-                            usd=(self._model.usage - opening).usd,
+                            usd=(self._spent() - opening).usd,
                         )
                     )
 
         self._record("scheduler", "stopped", plan.coverage.model_dump())
-        spent = self._model.usage - opening
+        spent = self._spent() - opening
         report = to_report(
             DraftReport(findings=[f for draft in drafts for f in draft.findings]),
             model_id=self._model.model_id,
