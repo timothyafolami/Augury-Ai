@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "augury",
-      "runtimeExecutable": ".venv/bin/python",
-      "runtimeArgs": ["-m", "augury.server"],
+      "name": "augury-demo",
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["demo"],
       "port": 8000
     }
   ]
