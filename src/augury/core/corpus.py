@@ -26,6 +26,17 @@ from pathlib import Path
 # Where a reader is told to look for the lab if it is not beside this checkout.
 LAB_ENV = "AUGURY_LAB"
 
+# The extract, committed. The lab is a separate repository, and a judge holding
+# only Augury got an empty corpus, a different prompt and a miss on every
+# cassette -- so the published table could not be reproduced by the one person
+# it was published for. Found by cloning this repository and running the
+# evaluation in it.
+#
+# The lab remains the source. This is what ships, and it is preferred over the
+# lab so that a machine which happens to have both records cassettes anybody
+# can replay.
+EXTRACT = Path(__file__).resolve().parent / "corpus"
+
 # What one specialist may carry. Roughly two thousand tokens: enough for the
 # mechanism of every topic in a layer, far short of the topics themselves.
 MOST_CHARS = 8_000
@@ -61,13 +72,22 @@ def lab_root(explicit: Path | None = None) -> Path | None:
 def corpus_for(lab_layer: str, *, lab: Path | None = None) -> str:
     """The mechanisms this layer teaches, each with the topic it came from.
 
-    Empty when the lab is not present, and empty rather than a sentence about
-    being empty: a corpus that explains its own absence is still something the
-    specialist has to read on every call.
+    The lab when there is one, and the committed extract otherwise, which is
+    the ordinary case: the lab is a separate repository and most readers will
+    not have it. An explicit path that is not a directory falls through to the
+    extract rather than returning nothing, because a mistyped lab should cost
+    the caller its override and not the specialist its corpus.
+
+    Empty when neither is present, and empty rather than a sentence about being
+    empty: a corpus explaining its own absence is still something the
+    specialist reads on every call.
     """
     root = lab_root(lab)
     if root is None:
-        return ""
+        # No lab, or a path that is not one. The extract is what ships, so
+        # this is the ordinary case rather than the fallback.
+        shipped = EXTRACT / f"{lab_layer}.md"
+        return shipped.read_text(encoding="utf-8").strip() if shipped.is_file() else ""
 
     layer = root / lab_layer
     if not layer.is_dir():
@@ -108,3 +128,23 @@ def _mechanism(readme: str) -> str:
 def _flatten(text: str) -> str:
     """One paragraph on one line, so a bullet stays a bullet."""
     return " ".join(text.split()).strip()
+
+
+def extract_from(lab: Path, into: Path = EXTRACT) -> list[str]:
+    """Write the corpus this repository ships, from the lab it came from.
+
+    Run when the lab changes. The output is committed, because the alternative
+    is a prompt that differs depending on which repositories the reader
+    happens to have cloned.
+    """
+    into.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for layer in sorted(lab.iterdir()):
+        if not layer.is_dir() or not layer.name[0].isdigit():
+            continue
+        found = corpus_for(layer.name, lab=lab)
+        if not found:
+            continue
+        (into / f"{layer.name}.md").write_text(f"{found}\n", encoding="utf-8")
+        written.append(layer.name)
+    return written
