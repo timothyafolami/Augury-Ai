@@ -113,6 +113,10 @@ export interface Step {
   model?: string;
   report?: Report;
   model_call?: boolean;
+  /** What one call cost, as the adapter measured it. Carried on the step
+   *  itself rather than inside `data`, which is where the spend panel was
+   *  looking for it and why it read $0.0000 for whole runs. */
+  usage?: { input_tokens?: number; output_tokens?: number; usd?: number };
   at?: number;
 }
 
