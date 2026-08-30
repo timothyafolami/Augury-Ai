@@ -12,17 +12,30 @@ export function Connect({
   onConnect,
   busy,
   error,
+  mode = { replay: false, recorded: [] },
 }: {
   onConnect: (path: string, scope: string, budget: number) => void;
   busy: boolean;
   error: string;
+  mode?: { replay: boolean; recorded: string[] };
 }) {
-  const [path, setPath] = useState("../Interview-AI-Prod");
-  const [scope, setScope] = useState("backend");
+  // The first recorded case when this server can only replay, because in that
+  // mode it is the only path that produces a review. Defaulting to a
+  // repository with no recordings is how a working demo looks broken.
+  const [path, setPath] = useState(
+    mode.replay && mode.recorded.length ? mode.recorded[0] : "../Interview-AI-Prod",
+  );
+  // Empty, meaning the whole repository. It defaulted to "backend", which is
+  // not a directory in most repositories, so the first thing a new user saw
+  // after choosing a folder was a server error caused by a field they had
+  // never touched. The placeholder still suggests it.
+  const [scope, setScope] = useState("");
   // A dollar, because that is what a review of a real backend costs and a
   // ceiling low enough to stop one is a ceiling that hides the product.
   const [budget, setBudget] = useState(1);
   const [picking, setPicking] = useState(false);
+
+  const unrecorded = mode.replay && !mode.recorded.includes(path);
 
   return (
     <section className="relative flex min-h-screen items-center justify-center px-8">
@@ -92,6 +105,32 @@ export function Connect({
             The ceiling is enforced before a module is issued, against a rate the
             run measures from its own first two modules rather than a guess.
           </p>
+
+          {unrecorded && (
+            <div className="mt-6 border border-verdict-broken/40 bg-verdict-broken/5 px-4 py-3">
+              <p className="font-mono text-[11px] text-verdict-broken">
+                this server is replaying, and has no recording for that path
+              </p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-mist">
+                It will map the repository and read files, and every model call will
+                miss, so the review finds nothing and spends nothing. That is replay
+                working, not the model failing. Choose a recorded repository below, or
+                restart with <code className="text-chalk">./start.sh --live</code> and a
+                provider key to review this one for real.
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {mode.recorded.map((choice) => (
+                  <button
+                    key={choice}
+                    onClick={() => setPath(choice)}
+                    className="border border-edge px-2 py-1 font-mono text-[10px] text-mist transition hover:border-augur-400 hover:text-chalk"
+                  >
+                    {choice.split("/").slice(-2)[0]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <button
             onClick={() => onConnect(path, scope, budget)}
