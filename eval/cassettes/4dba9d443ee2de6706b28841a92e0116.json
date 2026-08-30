@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "observability"
+  ],
+  "reasoning": "Data: the file queries the database and pricing service to produce results; Observability: it logs errors with log.Printf."
+}
