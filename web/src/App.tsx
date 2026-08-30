@@ -11,6 +11,7 @@ import { Coverage } from "./components/Coverage";
 import { Forecast } from "./components/Forecast";
 import { NotRead } from "./components/NotRead";
 import { Diagram } from "./components/Diagram";
+import { Synthesis } from "./components/Synthesis";
 import { Waterfall } from "./components/Waterfall";
 import { useRun } from "./lib/useRun";
 
@@ -105,7 +106,12 @@ export default function App() {
   if (screen === "connect")
     return <Connect onConnect={connect} busy={busy} error={error} />;
 
-  const findings = report ? [...report.schema, ...report.dependencies, ...report.findings] : [];
+  // While the run works, what has arrived. Once it finishes, the report,
+  // which is authoritative because the deterministic passes withdraw claims
+  // the specialists made and the live stream cannot know that yet.
+  const findings = report
+    ? [...(report.deployment ?? []), ...report.schema, ...report.dependencies, ...report.findings]
+    : run.findings;
 
   return (
     <div className="flex h-screen flex-col">
@@ -193,6 +199,20 @@ export default function App() {
             </div>
           )}
 
+          {report && (
+            <div className="border-b border-edge p-5">
+              <Header>
+                what no single specialist could say
+                <span className="ml-2 text-mist/60">
+                  each built from findings by two or more of them
+                </span>
+              </Header>
+              <div className="mt-4">
+                <Synthesis observations={report.synthesis ?? []} />
+              </div>
+            </div>
+          )}
+
           {report?.engineering && (
             <div className="border-b border-edge p-5">
               <Header>
@@ -222,11 +242,10 @@ export default function App() {
           <div className="p-5">
             <Header>
               findings
-              {report && (
-                <span className="ml-2 text-mist/60">
-                  {findings.length} · {report.seconds}s
-                </span>
-              )}
+              <span className="ml-2 text-mist/60">
+                {findings.length}
+                {report ? ` · ${report.seconds}s` : reviewing ? " · arriving" : ""}
+              </span>
             </Header>
             <div className="mt-3">
               {findings.length > 0 ? (
@@ -234,7 +253,7 @@ export default function App() {
               ) : (
                 <Blank>
                   {reviewing
-                    ? "deterministic passes run first: schema and dependencies cost nothing"
+                    ? "deployment, schema and dependencies run first, and cost nothing"
                     : "none yet"}
                 </Blank>
               )}
