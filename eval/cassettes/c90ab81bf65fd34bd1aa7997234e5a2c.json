@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "src/lib/pricing.ts",
+      "line": 6,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "Each call creates a new HTTPS connection without reuse, incurring DNS, TCP, TLS round trips. This matches 01-what-a-connection-actually-costs. No timeout also violates 03-timeouts-as-a-first-principle.",
+      "severity": "medium",
+      "remediation": "Create a single persistent HTTP client with keep-alive (e.g., use undici's Pool) and set a request timeout (e.g., 5s) instead of calling fetch directly per request.",
+      "arithmetic": "Cold connection cost = 4 * RTT. Assuming RTT=30ms (typical intra‑datacenter), added latency = 4*30 = 120 ms per request. Baseline warm request ≈ RTT = 30 ms, so p99 increase ≈ 120 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 120.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "no client reuse, each request creates a new connection"
+      }
+    }
+  ]
+}
