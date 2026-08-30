@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "network",
+    "data"
+  ],
+  "reasoning": "Network: HTTP handlers and response encoding. Data: database queries via store and reindex."
+}
