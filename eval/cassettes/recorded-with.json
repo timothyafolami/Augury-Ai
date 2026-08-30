@@ -1,0 +1,6 @@
+{
+  "models": [
+    "openai/gpt-oss-120b"
+  ],
+  "note": "Recorded by make eval-live. Replay must ask the same model: the model id is part of every cassette key."
+}
