@@ -1,0 +1,87 @@
+{
+  "findings": [
+    {
+      "path": "internal/store/items.go",
+      "line": 15,
+      "layer": "security",
+      "symbol": "ByWarehouse",
+      "mechanism": "SQL injection via string‑concatenated warehouse parameter",
+      "severity": "high",
+      "remediation": "Replace the concatenated query with a prepared statement using a placeholder for warehouse, e.g. `SELECT ... FROM items WHERE warehouse = $1` and pass the parameter to `pool.Query`",
+      "arithmetic": "None – the risk is logical, not numeric",
+      "prediction": null
+    },
+    {
+      "path": "internal/reindex/worker.go",
+      "line": 22,
+      "layer": "concurrency",
+      "symbol": "Run",
+      "mechanism": "Spawns an unbounded goroutine per SKU, creating one HTTP connection per goroutine and exhausting resources under load",
+      "severity": "high",
+      "remediation": "Introduce a bounded worker pool or semaphore to limit concurrent goroutines, e.g. limit to 20 concurrent pricing fetches",
+      "arithmetic": "active_connections = number_of_items; for 5 items => 5 connections",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 5.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "items=5"
+      }
+    },
+    {
+      "path": "internal/db/pool.go",
+      "line": 22,
+      "layer": "concurrency",
+      "symbol": "Open",
+      "mechanism": "Pool max open connections set to 4, which is lower than typical worker count, causing request queuing and latency spikes",
+      "severity": "medium",
+      "remediation": "Raise `SetMaxOpenConns` to match or exceed the number of HTTP workers (e.g. 16) or make it configurable",
+      "arithmetic": "p99 ≈ (concurrent_requests / max_conns) * base_latency = (8/4)*10ms = 20ms",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 20.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "concurrent_requests=8, max_conns=4, base_latency=10ms"
+      }
+    },
+    {
+      "path": "internal/pricing/client.go",
+      "line": 20,
+      "layer": "network",
+      "symbol": "Fetch",
+      "mechanism": "HTTP GET has no timeout, so a slow or hanging pricing service can block the request indefinitely",
+      "severity": "high",
+      "remediation": "Use a context with timeout (e.g. 5s) when performing the HTTP request and propagate the timeout to the caller",
+      "arithmetic": "Without timeout the request can wait the full latency of the pricing service; with a 30 s latency the observed latency is ≥30 000 ms",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 30000.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "pricing_service_latency=30s"
+      }
+    },
+    {
+      "path": "internal/api/handlers.go",
+      "line": 30,
+      "layer": "data",
+      "symbol": "inventoryHandler",
+      "mechanism": "Per‑item `Reserved` query causes N+1 database queries, scaling linearly with item count and increasing load",
+      "severity": "medium",
+      "remediation": "Rewrite the handler to fetch reservations in bulk (e.g. join or IN clause) so only a constant number of queries are issued per request",
+      "arithmetic": "queries_per_request = 1 (ByWarehouse) + N (Reserved); for N=100 => 101 queries",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 101.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "items=100"
+      }
+    }
+  ]
+}
