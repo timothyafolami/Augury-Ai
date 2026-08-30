@@ -156,8 +156,8 @@ export default function App() {
     : run.findings;
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex shrink-0 items-center gap-4 border-b border-edge px-6 py-3">
+    <div className="flex min-h-screen flex-col lg:h-screen">
+      <header className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-edge bg-void/95 px-4 py-3 backdrop-blur sm:px-6 lg:static">
         <button
           onClick={() => setScreen("landing")}
           className="font-mono text-sm tracking-widest text-augur-400"
@@ -193,8 +193,8 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-px bg-edge lg:grid-cols-[19rem_minmax(0,1fr)_21rem]">
-        <aside className="flex min-h-0 flex-col gap-3 overflow-hidden bg-void p-4">
+      <main className="grid flex-1 grid-cols-1 gap-px bg-edge lg:min-h-0 lg:grid-cols-[19rem_minmax(0,1fr)_21rem]">
+        <aside className="flex flex-col gap-3 bg-void p-4 lg:min-h-0 lg:overflow-hidden">
           <Header>topology</Header>
           {discovery ? (
             <CodeTree modules={discovery.modules} files={run.files} />
@@ -203,7 +203,7 @@ export default function App() {
           )}
         </aside>
 
-        <section className="flex min-h-0 flex-col overflow-y-auto bg-void">
+        <section className="flex flex-col bg-void lg:min-h-0 lg:overflow-y-auto">
           <div className="border-b border-edge p-5">
             <Header>orchestration</Header>
             <div className="mt-3">
@@ -318,7 +318,7 @@ export default function App() {
           </div>
         </section>
 
-        <aside className="flex min-h-0 flex-col gap-3 overflow-hidden bg-void p-4">
+        <aside className="flex flex-col gap-3 bg-void p-4 lg:min-h-0 lg:overflow-hidden">
           <Context entries={context} recent={recent} />
           <Header>telemetry</Header>
           <div className="min-h-0 flex-1">
