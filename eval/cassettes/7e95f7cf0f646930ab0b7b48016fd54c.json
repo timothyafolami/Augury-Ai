@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "security",
+    "data"
+  ],
+  "reasoning": "Security: ByWarehouse builds a query with string concatenation, creating an injection risk. Data: the file performs database queries and scans rows, requiring data-layer review."
+}
