@@ -224,17 +224,29 @@ reproducible exactly, with no API key: `make eval-replay` prints these numbers.
 
 | metric | baseline | augury |
 |---|---|---|
-| seeded recall | **0.769** | 0.692 |
-| falsifiable precision | **0.750** | 0.650 |
-| hit rate | **1.000** (8/8) | 0.600 (3/5) |
-| experiments run | 8 | 5 |
-| prediction coverage | **0.889** | 0.385 |
-| cost | $0.0116 | $0.0446 (3.9x) |
+| seeded recall | **0.846** | 0.692 |
+| falsifiable precision | **0.769** | 0.591 |
+| hit rate | **1.000** (7/7) | 0.800 (4/5) |
+| experiments run | 7 | 5 |
+| prediction coverage | **0.700** | 0.462 |
 
 ```
 hit rate  repeats not independent: p = n/a  not measured
 recall    repeats not independent: inconclusive
 ```
+
+Cost is not in that table because replay is free — that is what makes it
+reproducible without a key. On the live recording run the pipeline cost about
+four times the baseline, which is the ratio to plan against and the one number
+here nobody can check by re-running it.
+
+**The pipeline arm's precision fell after these numbers were last published,
+because a bug in this project's favour was fixed.** `collapse`, which merges
+one sentence about sixteen files into one finding, ran on the pipeline arm and
+not on the baseline, and the findings it merged away entered no list at all.
+Falsifiable precision divides by findings plus discarded, so every collapsed
+finding quietly left the denominator: 0.682 became 0.591 once they were counted
+again. Nothing about the reviewer changed.
 
 **The baseline is ahead on every metric.** One well-written prompt containing
 the whole repository finds more of the seeded defects, states a higher share of
@@ -253,17 +265,18 @@ So a fourth case was built -- D01, a search-index service, chosen partly
 because its first defect is the only one in the suite that measures
 `memory_bytes`, a metric the published vocabulary had carried since the start
 and no case had ever settled. On four cases the hit rate is 1.000 against
-0.600, and the lead is not merely gone but reversed.
+0.800, and the lead is not merely gone but reversed.
 
 That is the result this project ends on, and the prediction that preceded it is
 the part worth keeping: the margin was named as too small to survive more data,
 before the data existed, and it did not survive it.
 
-**Read `prediction coverage` beside the hit rate.** The pipeline had 38.5% of
-its falsifiable claims graded against the baseline's 88.9%. It writes more
+**Read `prediction coverage` beside the hit rate.** The pipeline had 46.2% of
+its falsifiable claims graded against the baseline's 70.0%. It writes more
 claims, aimed at metrics and files the cases do not measure, so most of them
 are never settled either way -- and the ones that were settled it got wrong
-more often.
+more often. A hit rate over five experiments is five observations; treat the
+gap as a direction, not a measurement.
 
 #### Recall, audited by hand (the three-case run)
 
@@ -357,7 +370,7 @@ is 0.778 for both arms, and the hit rates are identical to the pooled figures,
 
 ### The finding is about measurement, not about agents
 
-Three times this comparison appeared to have a winner, and three times the
+Five times this comparison appeared to have a winner, and five times the
 harness was wrong:
 
 | claim | why it was withdrawn |
@@ -365,6 +378,8 @@ harness was wrong:
 | hit rate 0.000 vs 0.750 | measured at a third of the coverage; reversed when two experiments were added |
 | the arms differ in consistency | the variance was substring matching, not the reviewers |
 | hit rate 0.480 vs 0.703 | three of five experiments reported the same number on remediated code |
+| falsifiable precision 0.682 | findings merged by `collapse` left the denominator, on the pipeline arm only |
+| the gate rejects vacuous claims | it rejected `>= 0`, and `>= 0.000001` hits every measurement ever taken |
 
 Each was found by pointing an adversarial reviewer at the evaluation rather
 than at the code, and each survives in
