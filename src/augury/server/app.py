@@ -132,13 +132,20 @@ def build() -> FastAPI:
         ]
 
     @app.post("/api/discover")
-    def discover(target: Target) -> dict[str, Any]:
+    async def discover(target: Target) -> dict[str, Any]:
         """The free half: the deployment, then the map. No model, no cost."""
         root = within_allowed(target.path)
-        found = Surveyor(root).survey()
+        found = await asyncio.to_thread(Surveyor(root).survey)
         entrypoints = tuple({e for service in found.services for e in service.entrypoints})
         limits = tuple(part for part in target.scope.split(",") if part.strip())
-        repo = Cartographer(root, scope=limits, entrypoints=entrypoints).map()
+        # Every synchronous pass below is handed to a thread. They read the
+        # disk and the network with blocking sockets, and run straight from
+        # this coroutine they stop the event loop, so the stream the interface
+        # is watching goes quiet. That fails in the most misleading way
+        # available: it looks exactly like a slow model.
+        repo = await asyncio.to_thread(
+            Cartographer(root, scope=limits, entrypoints=entrypoints).map
+        )
 
         return {
             "root": str(root),
@@ -218,6 +225,7 @@ async def _review(run: Run, root: Path, target: Target) -> None:
     """
     from augury.agents.augury import AuguryReviewer
     from augury.core.adapters.provider import model_from
+    from augury.core.architecture import architecture
     from augury.core.coverage import engineering_coverage
     from augury.core.forecast import forecast
     from augury.core.reference.changelog import changelog_notes
@@ -247,7 +255,7 @@ async def _review(run: Run, root: Path, target: Target) -> None:
         )
 
         say(events.scout_started())
-        found = Surveyor(root).survey()
+        found = await asyncio.to_thread(Surveyor(root).survey)
         for service in found.services:
             say(
                 events.service_detected(
@@ -260,7 +268,14 @@ async def _review(run: Run, root: Path, target: Target) -> None:
         entrypoints = tuple({e for service in found.services for e in service.entrypoints})
 
         limits = tuple(part for part in target.scope.split(",") if part.strip())
-        repo = Cartographer(root, scope=limits, entrypoints=entrypoints).map()
+        # Every synchronous pass below is handed to a thread. They read the
+        # disk and the network with blocking sockets, and run straight from
+        # this coroutine they stop the event loop, so the stream the interface
+        # is watching goes quiet. That fails in the most misleading way
+        # available: it looks exactly like a slow model.
+        repo = await asyncio.to_thread(
+            Cartographer(root, scope=limits, entrypoints=entrypoints).map
+        )
         say(
             events.structure_discovered(
                 modules=len(repo.modules),
@@ -278,16 +293,28 @@ async def _review(run: Run, root: Path, target: Target) -> None:
             say(events.model_built(layers=tiers))
 
         bases = [root / part for part in limits] or [root]
-        schema = tuple(f for base in bases for f in schema_findings(read_migrations(base)))
+        schema = await asyncio.to_thread(
+            lambda: tuple(f for base in bases for f in schema_findings(read_migrations(base)))
+        )
 
         # Announced as the registry announces them rather than counted off the
         # declared packages: a cached answer is not a second lookup, and a
         # package the index never answered for is not a package with nothing
         # wrong. Those two are opposite facts and read identically in silence.
-        registry = Registry(watching=lambda step: _research(step, events, say))
+        #
+        # Handed back to the loop because the audit runs on a worker thread and
+        # the queues these land in belong to the loop. Publishing from the
+        # thread would wake a watcher from the wrong one, and the offset stays
+        # honest either way: the loop is idle while it waits on the audit.
+        loop = asyncio.get_running_loop()
+
+        def looked_up(step: dict[str, object]) -> None:
+            loop.call_soon_threadsafe(_research, step, events, say)
+
+        registry = Registry(watching=looked_up)
         dependencies: list[SchemaFinding] = []
         for base in bases:
-            audit = dependency_audit(requirements_of(base), registry)
+            audit = await asyncio.to_thread(dependency_audit, requirements_of(base), registry)
             dependencies.extend(audit.findings)
 
         # Where to read about each major-version gap. This is the other half
@@ -306,8 +333,11 @@ async def _review(run: Run, root: Path, target: Target) -> None:
             if not package or facts is None:
                 continue
             say(events.research_started(subject=f"{package} changelog", source=SEARCH_ENGINE))
-            notes = changelog_notes(
-                package, requirements_of(bases[0]).get(package, ""), facts.latest
+            notes = await asyncio.to_thread(
+                changelog_notes,
+                package,
+                requirements_of(bases[0]).get(package, ""),
+                facts.latest,
             )
             say(events.research_finished(subject=f"{package} changelog", found=bool(notes)))
             if notes:
@@ -356,6 +386,10 @@ async def _review(run: Run, root: Path, target: Target) -> None:
                 )
             )
 
+        # The service as a diagram, with the findings and the declared capacity
+        # ceilings on it, so the narrowest part is visible rather than described.
+        drawn = await asyncio.to_thread(architecture, found, repo, result.findings)
+
         pressures = forecast(result.findings)
         # Fired even when it is empty. No findings group into no pressures,
         # which reads as silence, and silence is the honest output -- but an
@@ -368,6 +402,7 @@ async def _review(run: Run, root: Path, target: Target) -> None:
         )
 
         run.report = {
+            "architecture": drawn.model_dump(mode="json"),
             "name": root.name,
             "usd": round(result.usd, 5),
             "seconds": round(result.seconds, 1),
