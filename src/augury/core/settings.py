@@ -128,6 +128,16 @@ def _flag(name: str) -> bool:
     return os.environ.get(name, "") not in ("", "0", "false")
 
 
+def replay_only() -> bool:
+    """Whether every model call must come from a recording.
+
+    Beside `recording` and for the same reason: callers that need this answer
+    include ones with no provider key, and full settings refuse to load
+    without one.
+    """
+    return _flag("AUGURY_REPLAY_ONLY")
+
+
 def recording() -> bool:
     """Whether this process is writing cassettes.
 
