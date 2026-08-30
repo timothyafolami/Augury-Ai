@@ -88,6 +88,63 @@ class Run:
     failed: str = ""
 
 
+# What a review would never read, and what a picker should therefore not show.
+# These are most of a tree by count and none of it by meaning.
+NEVER_REVIEWED = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        ".conda",
+        "node_modules",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".next",
+        ".nuxt",
+        "target",
+        "vendor",
+        "third_party",
+        ".idea",
+        ".vscode",
+    }
+)
+
+# What says a directory is a repository rather than a folder above one. Any of
+# them is enough: the picker is a hint, not a gate, and a repository this misses
+# can still be typed in.
+_A_REPOSITORY = (
+    ".git",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "compose.yaml",
+    "pyproject.toml",
+    "package.json",
+    "go.mod",
+    "Cargo.toml",
+    "pom.xml",
+    "requirements.txt",
+    "Dockerfile",
+    "Makefile",
+)
+
+
+def _never_reviewed(child: Path) -> bool:
+    return child.name in NEVER_REVIEWED
+
+
+def _looks_like_a_repository(child: Path) -> bool:
+    return any((child / marker).exists() for marker in _A_REPOSITORY)
+
+
+def _inside_allowed(path: Path) -> bool:
+    """Whether this path is one the server is willing to read from."""
+    return any(path == root or root in path.parents for root in ALLOWED_ROOTS)
+
+
 def within_allowed(path: str) -> Path:
     """Resolve this path, or refuse it.
 
@@ -130,6 +187,33 @@ def build() -> FastAPI:
             }
             for stage in Stage.all()
         ]
+
+    @app.post("/api/browse")
+    def browse(target: Target) -> dict[str, Any]:
+        """The directories under this one, for choosing what to review.
+
+        This is the one endpoint whose whole job is to disclose paths, so it
+        refuses anything outside the declared roots exactly as the rest do, and
+        it is resolved before it is judged.
+        """
+        here = within_allowed(target.path)
+        directories = sorted(
+            (child for child in here.iterdir() if child.is_dir() and not _never_reviewed(child)),
+            key=lambda child: child.name.lower(),
+        )
+        parent = here.parent
+        return {
+            "here": str(here),
+            "parent": str(parent) if _inside_allowed(parent) else "",
+            "directories": [
+                {
+                    "name": child.name,
+                    "path": str(child),
+                    "looksLikeARepository": _looks_like_a_repository(child),
+                }
+                for child in directories
+            ],
+        }
 
     @app.post("/api/discover")
     async def discover(target: Target) -> dict[str, Any]:
@@ -199,6 +283,18 @@ def build() -> FastAPI:
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    @app.get("/api/runs/{run_id}/document")
+    def document(run_id: str) -> dict[str, str]:
+        """The finished review as the document the CLI writes to disk.
+
+        The same renderer, so a team reading this in a browser and a team
+        reading the file are reading the same review.
+        """
+        run = runs.get(run_id)
+        if run is None or run.report is None:
+            raise HTTPException(status_code=404, detail="no finished run by that name")
+        return {"markdown": run.report.get("document", "")}
 
     @app.get("/api/runs/{run_id}/report")
     def report(run_id: str) -> dict[str, Any]:
@@ -415,7 +511,20 @@ async def _review(run: Run, root: Path, target: Target) -> None:
             say(events.review_failed(detail=f"synthesis declined: {refused}"))
             observations = ()
 
+        written = await asyncio.to_thread(
+            as_document,
+            name=root.name,
+            survey=found,
+            report=result,
+            schema=schema,
+            dependencies=tuple(dependencies),
+            modules=len(repo.modules),
+            unreachable=len(repo.unreachable),
+            reading=reading,
+        )
+
         run.report = {
+            "document": written,
             "architecture": drawn.model_dump(mode="json"),
             "deployment": [_finding(f) for f in deployment],
             "synthesis": [item.model_dump(mode="json") for item in observations],
@@ -626,6 +735,18 @@ def _named(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item.strip().lower() for item in value if isinstance(item, str)]
+
+
+def as_document(**parts: Any) -> str:
+    """The report, as the document the CLI writes.
+
+    Reused rather than reimplemented. There is one review engine, and the
+    document a team acts on should not depend on which client asked for it.
+    """
+    from augury.core.report import write_report
+
+    written: str = write_report(**parts)
+    return written
 
 
 def _finding(item: Any) -> dict[str, Any]:
