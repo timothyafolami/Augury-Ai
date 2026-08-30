@@ -1,0 +1,8 @@
+{
+  "specialists": [
+    "security",
+    "data",
+    "network"
+  ],
+  "reasoning": "security: the file extracts and validates JWT claims from the Authorization header; data: it builds and executes SQL queries, including string interpolation and parameterized queries; network: it defines Express route handlers that expose HTTP endpoints."
+}
