@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* The palette. Purple is the accent, not the surface: a review tool is read
+   for minutes at a time, and a saturated background makes findings harder to
+   read rather than more impressive. */
+@theme {
+  --color-void: #08070c;
+  --color-ink: #0e0d14;
+  --color-slate-panel: #14131c;
+  --color-edge: #221f2e;
+  --color-mist: #8e89a3;
+  --color-chalk: #e8e6f0;
+
+  --color-augur-50: #f4f1ff;
+  --color-augur-200: #d6cbff;
+  --color-augur-400: #a78bfa;
+  --color-augur-500: #8b5cf6;
+  --color-augur-600: #7c3aed;
+  --color-augur-900: #2e1065;
+
+  --color-verdict-hit: #34d399;
+  --color-verdict-miss: #fb7185;
+  --color-verdict-broken: #fbbf24;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@layer base {
+  html {
+    background: var(--color-void);
+    color-scheme: dark;
+  }
+  body {
+    margin: 0;
+    background: var(--color-void);
+    color: var(--color-chalk);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: var(--color-augur-600);
+    color: white;
+  }
+}
+
+@layer utilities {
+  /* A single hairline that reads as engineered rather than decorative. */
+  .hairline {
+    box-shadow: inset 0 0 0 1px var(--color-edge);
+  }
+  .grid-faint {
+    background-image:
+      linear-gradient(to right, rgba(139, 92, 246, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(139, 92, 246, 0.06) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+  .glow-augur {
+    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25), 0 0 40px -12px rgba(139, 92, 246, 0.55);
+  }
+}
