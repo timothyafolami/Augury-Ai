@@ -18,6 +18,7 @@ from augury.core.cartography.languages.base import (
     ParsedModule,
     ParseError,
 )
+from augury.core.cartography.languages.source_signals import signals_in_source
 from augury.core.cartography.model import Signal
 
 # The statement that carries a dependency, per grammar.
@@ -78,6 +79,12 @@ class TreeSitterAdapter(LanguageAdapter):
                 signals |= matched
             else:
                 unmatched.add(name)
+
+        # What the file does, not only what it imports. An import list says
+        # which concerns are in play; a swallowed error and a query built by
+        # interpolation are the two that are visible in the source itself, and
+        # outside Python nothing was reading it.
+        signals |= signals_in_source(self._language.value, source)
 
         return ParsedModule(
             loc=sum(1 for line in source.splitlines() if line.strip()),
