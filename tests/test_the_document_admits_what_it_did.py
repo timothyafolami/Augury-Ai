@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from augury.core.findings import Finding, Measurement, Report, Severity
 from augury.core.report import write_report
+from augury.core.schema.model import SchemaFinding
 from augury.core.schemas import Comparator, Outcome, Prediction
 from augury.core.survey.model import Survey
 
@@ -140,3 +141,108 @@ def test_partial_coverage_is_not_rounded_up_to_all_of_it() -> None:
     )
 
     assert "(100%)" not in document
+
+
+def _deployment() -> tuple[SchemaFinding, ...]:
+    return (
+        SchemaFinding(
+            rule="container-runs-as-root",
+            path="backend/Dockerfile",
+            line=1,
+            detail="the final stage declares no USER, so every process runs as uid 0",
+            remediation="Add a USER instruction to the final stage",
+        ),
+    )
+
+
+def test_the_document_carries_the_deployment_findings() -> None:
+    """On a real backend these outnumber the code findings ten to one, and the
+    document a team acts on had none of them."""
+    said = write_report(
+        name="svc",
+        survey=Survey(services=(), source_roots=()),
+        report=_report(_finding()),
+        schema=(),
+        dependencies=(),
+        deployment=_deployment(),
+        modules=10,
+        unreachable=0,
+        reading={},
+    )
+
+    assert "container-runs-as-root" in said
+
+
+def test_the_document_carries_the_synthesis() -> None:
+    """The most senior thing in the review, and it was only in the browser."""
+    from augury.agents.synthesis import Citation, Observation
+
+    said = write_report(
+        name="svc",
+        survey=Survey(services=(), source_roots=()),
+        report=_report(_finding()),
+        schema=(),
+        dependencies=(),
+        synthesis=(
+            Observation(
+                mechanism="Two unsynchronised singletons share one loader",
+                consequence="Two concurrent first requests each load the model",
+                citations=(
+                    Citation(path="a.py", line=1, symbol="load", layer="concurrency"),
+                    Citation(path="b.py", line=2, symbol="warm", layer="craft"),
+                ),
+            ),
+        ),
+        modules=10,
+        unreachable=0,
+        reading={},
+    )
+
+    assert "unsynchronised singletons" in said
+    assert "concurrency" in said
+
+
+def test_a_document_with_no_deployment_findings_says_nothing_about_them() -> None:
+    """A heading over an empty section reads as a section that found nothing,
+    which is not the same as a section that did not run."""
+    said = write_report(
+        name="svc",
+        survey=Survey(services=(), source_roots=()),
+        report=_report(_finding()),
+        schema=(),
+        dependencies=(),
+        modules=10,
+        unreachable=0,
+        reading={},
+    )
+
+    assert "Deployment" not in said
+
+
+def test_both_clients_hand_the_document_what_it_can_now_carry() -> None:
+    """A parameter with a default is a parameter a caller can forget.
+
+    The document gained deployment findings and a synthesis, and both are
+    optional so nothing broke when they were added. That is exactly how a
+    section stays permanently empty: the renderer supports it, the callers do
+    not pass it, and no test fails.
+    """
+    import ast
+    from pathlib import Path
+
+    for source in ("src/augury/cli/main.py", "src/augury/server/app.py"):
+        text = Path(source).read_text(encoding="utf-8")
+        tree = ast.parse(text)
+        handed: set[str] = set()
+        wanted = {"write_report", "as_document"}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            called = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            # The renderer is handed to a thread rather than called, so it is
+            # an argument there and the callee here. Both are the same call.
+            offloaded = any(getattr(arg, "id", None) in wanted for arg in node.args)
+            if called not in wanted and not offloaded:
+                continue
+            handed |= {kw.arg for kw in node.keywords if kw.arg}
+        assert "deployment" in handed, f"{source} never passes the deployment findings"
