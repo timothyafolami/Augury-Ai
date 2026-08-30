@@ -27,7 +27,7 @@ fmt:
 
 # -- reviews and evaluation (need an API key; see docs/REPRODUCE.md) --------
 
-.PHONY: review-baseline review-augury evaluate eval-replay record web serve
+.PHONY: review-baseline review-augury evaluate eval-replay record web serve demo
 
 review-baseline:
 	uv run python -m augury.cli review --arm baseline --case B01
@@ -78,3 +78,14 @@ web:
 serve:
 	@test -d web/dist || $(MAKE) web
 	uv run python -m augury.server
+
+
+# The whole product, with no API key and no spend. Replays a recorded review of
+# a seeded case, so a reader who has just cloned this can watch the pipeline
+# work before deciding whether to give it a key. Every panel is populated from
+# the recording: the deployment findings, the forecast, the synthesis and the
+# document are the ones that run produced.
+demo:
+	@test -d web/dist || $(MAKE) web
+	AUGURY_REPLAY_ONLY=1 AUGURY_PROVIDER=groq AUGURY_MODEL=openai/gpt-oss-120b \
+	  uv run --extra experiments python -m augury.server
