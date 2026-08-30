@@ -1,0 +1,33 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/payments.py",
+      "line": 15,
+      "layer": "observability",
+      "symbol": "charge",
+      "mechanism": "Correlation IDs are not propagated to the downstream payment gateway; without forwarding the incoming traceparent header the logs for a request cannot be assembled across service boundaries, violating 03-correlation-ids and making incidents un‑diagnosable.",
+      "severity": "high",
+      "remediation": "Add propagation of the incoming traceparent (or similar) header to the outbound request and include it in structured logs, e.g., forward request.headers.get('traceparent') in the httpx call and log it with the request ID.",
+      "arithmetic": "No correlation identifier is forwarded; therefore a query that joins logs by a request identifier will always miss the downstream call logs.",
+      "prediction": null
+    },
+    {
+      "path": "app/clients/payments.py",
+      "line": 15,
+      "layer": "observability",
+      "symbol": "charge",
+      "mechanism": "Each client request may trigger up to MAX_ATTEMPTS HTTP calls to the payment gateway, inflating the apparent request rate and distorting RED metrics; this matches the RED distortion described in 05-red-and-use.",
+      "severity": "medium",
+      "remediation": "Expose the number of retry attempts as a metric and cap retries to a safe value (e.g., 1) for idempotent operations, or implement circuit‑breaker back‑off to avoid amplification.",
+      "arithmetic": "MAX_ATTEMPTS=3, so worst‑case 3 gateway calls per client request => retry_amplification <=3x under transient HTTPError conditions.",
+      "prediction": {
+        "metric": "retry_amplification",
+        "comparator": "at_most",
+        "value": 3.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "transient HTTPError"
+      }
+    }
+  ]
+}
