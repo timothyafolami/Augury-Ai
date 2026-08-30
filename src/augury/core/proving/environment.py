@@ -61,8 +61,19 @@ class Environment:
                 "--volume",
                 f"{script}:{MOUNT_POINT}:ro",
                 self.service,
-                "python",
-                MOUNT_POINT,
+                # Not a bare `python`: Debian and Ubuntu ship `python3` with no
+                # unversioned alias, which is most base images that are not
+                # `python:*`. Probed against golang:1.22, which has
+                # /usr/bin/python3 and nothing at /usr/bin/python. Guessing
+                # wrong here fails as BROKEN with an exec error naming the
+                # script, so the experiment looks defective and the image does
+                # not. The fallback keeps an older image working.
+                "sh",
+                "-c",
+                (
+                    f"if command -v python3 >/dev/null 2>&1; then exec python3 {MOUNT_POINT}; "
+                    f"else exec python {MOUNT_POINT}; fi"
+                ),
             ]
         return [str(self.python), str(script)]
 
