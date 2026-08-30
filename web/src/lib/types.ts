@@ -81,6 +81,8 @@ export interface Report {
   schema: Finding[];
   dependencies: Finding[];
   engineering?: EngineeringCoverage;
+  deployment?: Finding[];
+  synthesis?: Observation[];
   architecture?: Architecture;
   reading?: Record<string, string[]>;
   forecast?: Pressure[];
@@ -185,4 +187,23 @@ export interface Architecture {
   nodes: ArchNode[];
   edges: ArchEdge[];
   basis: string;
+}
+
+/** One citation inside a senior observation. */
+export interface Citation {
+  path: string;
+  line: number;
+  symbol: string;
+  layer: string;
+}
+
+/** Something no single specialist could have said.
+ *
+ * Two citations are a connection only when two different specialists reported
+ * them, which the model enforces rather than the renderer.
+ */
+export interface Observation {
+  mechanism: string;
+  consequence: string;
+  citations: Citation[];
 }

@@ -1,11 +1,15 @@
 import { useCallback, useRef, useState } from "react";
-import type { Discovery, Report, Stage, StageKey, StageState, Step } from "./types";
+import type { Discovery, Finding, Report, Stage, StageKey, StageState, Step } from "./types";
 
 /** What the file tree knows about one module while a review is running. */
 export type FileState = "unread" | "reading" | "read" | "flagged";
 
 interface RunState {
   steps: Step[];
+  /** Findings as they arrive, so the panel fills while the run is working.
+   *  Rendering only the finished report meant a minute of agents moving over
+   *  an empty panel, which reads as a simulation of a review. */
+  findings: Finding[];
   stages: Record<StageKey, StageState>;
   files: Record<string, FileState>;
   spans: { agent: string; startedAt: number; endedAt: number | null }[];
@@ -18,6 +22,7 @@ interface RunState {
 
 const EMPTY: RunState = {
   steps: [],
+  findings: [],
   stages: { survey: "waiting", map: "waiting", schema: "waiting", specialists: "waiting", report: "waiting" },
   files: {},
   spans: [],
@@ -116,10 +121,20 @@ export function fold(prior: RunState, step: Step): RunState {
   }
   if (step.event === "agent.started" && typeof data.module === "string") {
     next.files = { ...next.files, [data.module]: "reading" };
+    // Modules a specialist actually opened. The old per-module progress event
+    // is gone, so this is now the only live count, and a counter stuck at zero
+    // while the tree lights up makes a working run look like a mock of one.
+    next.read = Object.keys({ ...next.files }).length;
   }
   if (step.event === "finding.detected") {
-    const found = (data.finding ?? {}) as { path?: string };
+    const found = (data.finding ?? {}) as Finding;
     if (found.path) next.files = { ...next.files, [found.path]: "flagged" };
+    // Keyed on where it is, so a redelivered event after a reconnect does not
+    // show the same finding twice.
+    const already = prior.findings.some(
+      (held) => held.path === found.path && held.line === found.line && held.symbol === found.symbol,
+    );
+    if (!already) next.findings = [...prior.findings, found];
   }
 
   if (step.kind === "model" && step.model) next.model = `${step.provider}/${step.model}`;
@@ -128,8 +143,13 @@ export function fold(prior: RunState, step: Step): RunState {
   // work was the deterministic passes reported nothing.
   if (step.kind === "done" && step.report) next.usd = step.report.usd;
   if (step.event === "review.completed") {
-    const report = data.report as { usd?: number } | undefined;
+    const report = data.report as
+      | { usd?: number; coverage?: { analysed?: string[] } }
+      | undefined;
     if (report?.usd !== undefined) next.usd = report.usd;
+    // The scheduler's own count, which is authoritative: it knows which
+    // modules it declined to spend on and the live stream does not.
+    if (report?.coverage?.analysed) next.read = report.coverage.analysed.length;
   }
   if (step.kind === "failed") next.failed = String(step.detail ?? "the run failed");
 
