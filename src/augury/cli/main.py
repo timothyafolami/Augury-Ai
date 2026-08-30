@@ -303,7 +303,7 @@ def report(
             built_model,
             budget=Budget(usd=budget) if budget else Budget(),
             watching=_watcher(),
-            memo=_memo_for(root, enabled=cache),
+            memo=_memo_for(root, enabled=cache, model_id=built_model.model_id),
         )
         result: Report = await built.review(repo, root)
         return result
@@ -555,7 +555,7 @@ async def _settle(
     return report_in.model_copy(update={"findings": tuple(settled)})
 
 
-def _memo_for(root: Path, *, enabled: bool) -> Memo:
+def _memo_for(root: Path, *, enabled: bool, model_id: str = "") -> Memo:
     """Where a repository's remembered findings live.
 
     Under the user's cache directory rather than inside the repository: a
@@ -564,7 +564,7 @@ def _memo_for(root: Path, *, enabled: bool) -> Memo:
     """
     key = hashlib.sha256(str(root).encode("utf-8")).hexdigest()[:16]
     home = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return Memo(home / "augury" / key, enabled=enabled)
+    return Memo(home / "augury" / key, model_id=model_id, enabled=enabled)
 
 
 def _review_repository(
@@ -619,7 +619,7 @@ def _review_repository(
                 budget=Budget(usd=budget_usd) if budget_usd else Budget(),
                 trajectory=recording,
                 watching=_watcher(),
-                memo=_memo_for(root, enabled=cache),
+                memo=_memo_for(root, enabled=cache, model_id=built_model.model_id),
             )
             if reviewer is AuguryReviewer
             else BaselineReviewer(built_model, trajectory=recording)
