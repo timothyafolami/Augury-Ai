@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "src/lib/receipt.ts",
+      "line": 5,
+      "layer": "concurrency",
+      "symbol": "writeReceipt",
+      "mechanism": "Blocking CPU‑bound pbkdf2Sync call runs on the Node event‑loop thread, violating the async concurrency model (03-concurrency-models) and causing all other requests to wait, inflating latency.",
+      "severity": "high",
+      "remediation": "Replace crypto.pbkdf2Sync with the asynchronous crypto.pbkdf2 and use fs.promises.writeFile instead of writeFileSync to avoid blocking the event loop.",
+      "arithmetic": "pbkdf2Sync with 600 000 iterations ≈200 ms on typical hardware; with N=10 concurrent requests the event loop serialises them, so 99th‑percentile latency ≈N × 200 ms = 2000 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 2000.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "10 concurrent requests to writeReceipt"
+      }
+    },
+    {
+      "path": "src/lib/receipt.ts",
+      "line": 5,
+      "layer": "concurrency",
+      "symbol": "writeReceipt",
+      "mechanism": "Two concurrent calls with the same orderId perform unsynchronised writeFileSync, a classic read‑modify‑write race (04-races-and-atomicity) that can overwrite each other’s output, producing duplicate side‑effects.",
+      "severity": "medium",
+      "remediation": "Serialize writes per orderId (e.g., a mutex or atomic rename pattern) or include a unique suffix in the filename to avoid collisions.",
+      "arithmetic": "With two concurrent invocations the function executes twice, but only one file persists; the extra write counts as one duplicate side‑effect.",
+      "prediction": {
+        "metric": "duplicate_side_effects",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "two concurrent writeReceipt calls with identical orderId"
+      }
+    }
+  ]
+}
