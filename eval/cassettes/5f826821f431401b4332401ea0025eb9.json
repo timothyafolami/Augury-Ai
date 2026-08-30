@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "network",
+    "observability"
+  ],
+  "reasoning": "network: HTTP server setup and request routing. observability: logging of startup and errors."
+}
