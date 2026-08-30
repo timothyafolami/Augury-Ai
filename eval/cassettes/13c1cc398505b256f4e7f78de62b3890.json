@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 9,
+      "layer": "security",
+      "symbol": "DATABASE_URL",
+      "mechanism": "Hardcoded database credentials expose a secret in source code, violating the secret‑in‑source rule (see “What you are looking for”). An attacker who can reach the internal network can connect to the PostgreSQL instance using the default user/password \"app:app\".",
+      "severity": "high",
+      "remediation": "Remove the default credentials; require DATABASE_URL to be provided via environment only and do not include a password in the source. Use a secret manager or runtime injection.",
+      "arithmetic": "One hardcoded credential pair (app:app) enables at least one unauthorized DB connection when the attacker can reach host db:5432.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "attacker connects using default credentials to db:5432"
+      }
+    }
+  ]
+}
