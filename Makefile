@@ -49,5 +49,9 @@ eval-replay:
 # Re-record the cassettes. Needs a key and spends real money. Only necessary
 # after a prompt, schema or model change, each of which correctly invalidates
 # every recording that depended on it.
+# Pinned to the same model eval-replay asks for, so a recording made from a
+# shell with a different .env cannot silently produce cassettes nothing can
+# replay.
 record:
-	AUGURY_RECORD=1 uv run python -m augury.cli evaluate --seeds 5 --prove
+	AUGURY_RECORD=1 AUGURY_PROVIDER=groq AUGURY_MODEL=openai/gpt-oss-120b \
+	  uv run python -m augury.cli evaluate --seeds 5 --prove
