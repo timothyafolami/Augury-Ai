@@ -29,3 +29,15 @@ every reader takes the write lock unless it is an `RwLock`, and neither evicts.
 **Connection pool sizing.** `sqlx`'s `max_connections` defaults low; `deadpool`
 and `bb8` each have their own default. The number that matters is the pool
 against the runtime's worker count, and neither is visible from the other.
+
+- `spawn_blocking` runs on a pool that defaults to **512** threads, the largest
+  accidental thread count of any runtime here. A handler that offloads
+  per-request work can hold five hundred threads against a CPU quota of one.
+- `available_parallelism()` is quota-aware, which makes it the only call in
+  common use here that reports what the container actually has. A worker count
+  derived from anything else oversubscribes under a cgroup.
+- `sqlx::query!` is checked against the database at compile time; a `format!`
+  interpolated into `sqlx::query` is not checked at all and is injectable. The
+  two look almost identical at a glance and one of them is the defect.
+- `Client::new()` inside a handler rebuilds the TLS root store per request and
+  pools nothing. Build it once and share it.
