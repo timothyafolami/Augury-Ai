@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "observability"
+  ],
+  "reasoning": "data: accesses the database via store.ByWarehouse and pricing.Fetch; observability: logs errors with log.Printf"
+}
