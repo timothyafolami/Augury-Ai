@@ -126,3 +126,45 @@ def test_every_wired_layer_has_a_committed_extract() -> None:
 
     for layer in LAYERS:
         assert (EXTRACT / f"{layer.lab_layer}.md").is_file(), layer.lab_layer
+
+
+def test_the_extract_wins_over_a_lab_that_says_something_else(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Two machines must build the same prompt from the same commit.
+
+    `corpus_for` preferred a lab checkout sitting beside the repository and
+    fell back to the committed extract. The texts match today, so nothing
+    showed; the day the lab is edited, every prompt recorded on a machine
+    that has it stops replaying on every machine that does not. That is the
+    memo-shadow defect one layer up, and it is cheaper to remove than to
+    detect. The lab is read when a caller names it, which is how the extract
+    is regenerated, and never implicitly.
+    """
+    from augury.core.corpus import EXTRACT, corpus_for
+
+    topic = tmp_path / "lab" / "03-data" / "01-topic"
+    topic.mkdir(parents=True)
+    (topic / "README.md").write_text(
+        "**The one idea:** a different lab entirely.\n\n"
+        "**Why it matters in practice:** it must not reach a prompt.\n\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AUGURY_LAB", str(tmp_path / "lab"))
+
+    assert corpus_for("03-data") == (EXTRACT / "03-data.md").read_text(encoding="utf-8").strip()
+
+
+def test_naming_the_lab_still_reads_it(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Which is how `extract_from` regenerates the committed copy."""
+    from augury.core.corpus import corpus_for
+
+    topic = tmp_path / "lab" / "03-data" / "01-topic"
+    topic.mkdir(parents=True)
+    (topic / "README.md").write_text(
+        "**The one idea:** a different lab entirely.\n\n"
+        "**Why it matters in practice:** it must not reach a prompt.\n\n",
+        encoding="utf-8",
+    )
+
+    assert "a different lab entirely" in corpus_for("03-data", lab=tmp_path / "lab")
