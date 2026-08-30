@@ -12,8 +12,9 @@ repository it sampled is worse than no report at all.
 
 from __future__ import annotations
 
-from augury.core.findings import Report
+from augury.core.findings import Finding, Report
 from augury.core.schema.model import SchemaFinding
+from augury.core.schemas import Comparator, Prediction
 from augury.core.survey.model import Survey
 
 # How many code findings the document lists in full. They arrive ranked, so
@@ -51,7 +52,8 @@ def write_report(
         ),
         _reading(reading or {}),
         _code(report),
-        _limits(),
+        _withdrawn(report),
+        _limits(report),
     ]
     return "\n\n".join(part for part in parts if part)
 
@@ -98,7 +100,9 @@ def _coverage(report: Report, modules: int) -> str:
     share = (100.0 * analysed / modules) if modules else 0.0
     return (
         "## What was actually read\n\n"
-        f"This review **read {analysed} of {modules} modules** ({share:.0f}%), "
+        # One decimal, and never rounded up: 249 of 250 rendered as (100%),
+        # which is the one number this document must not overstate.
+        f"This review **read {analysed} of {modules} modules** ({share:.1f}%), "
         f"spent ${report.usd:.4f}, and stopped because {stopped}.\n\n"
         "The modules were chosen by distance from an entrypoint and by how much "
         "depends on them, so this is the part of the service a request touches "
@@ -166,11 +170,13 @@ def _code(report: Report) -> str:
         lines.append(finding.mechanism)
         lines.append("")
         if finding.prediction is not None:
-            p = finding.prediction
-            lines.append(
-                f"**Testable claim:** `{p.metric} {p.comparator.value} "
-                f"{p.value:g}{p.unit}` under `{p.condition}`."
-            )
+            lines.append(f"**Testable claim:** {claim_of(finding.prediction)}")
+            lines.append("")
+        if finding.measurement is not None:
+            # The document rendered none of this, and then closed by saying
+            # nothing had been executed -- so a refuted claim was published as
+            # an open one.
+            lines.append(settled_as(finding))
             lines.append("")
         lines.append(f"*Fix:* {finding.remediation}")
         lines.append("")
@@ -181,7 +187,71 @@ def _code(report: Report) -> str:
     return "\n".join(lines)
 
 
-def _limits() -> str:
+def claim_of(prediction: Prediction) -> str:
+    """A prediction as something a reader can check.
+
+    Both bounds of a band. Printing only the lower one published "between
+    250ms", which is not the claim that was scored and cannot be checked
+    against anything -- the one property every claim here is meant to have.
+    """
+    bound = f"{prediction.value:g}"
+    if prediction.comparator is Comparator.BETWEEN and prediction.upper is not None:
+        bound = f"{prediction.value:g} and {prediction.upper:g}"
+    return (
+        f"`{prediction.metric} {prediction.comparator.value} {bound}{prediction.unit}` "
+        f"under `{prediction.condition}`."
+    )
+
+
+def settled_as(finding: Finding) -> str:
+    """What the experiment measured, and what that made of the claim."""
+    measured = finding.measurement
+    if measured is None:
+        return ""
+    if measured.value is None:
+        return f"**Experiment:** ran and measured nothing — {measured.detail}"
+    verdict = finding.prediction.score(measured.value) if finding.prediction else None
+    said = f"{verdict.value}" if verdict is not None else "measured"
+    return (
+        f"**Measured:** {measured.value:g}{_unit_of(finding)} — **{said}**. "
+        f"The experiment is at `{measured.experiment}`."
+    )
+
+
+def _unit_of(finding: Finding) -> str:
+    return finding.prediction.unit if finding.prediction else ""
+
+
+def _withdrawn(report: Report) -> str:
+    """The claims that were withdrawn, which the limits section promises.
+
+    It asserted "the reasons are recorded rather than the findings quietly
+    deleted" and showed none of them, so for this document's reader the
+    withdrawal was exactly as quiet as the sentence denies.
+    """
+    if not report.dropped:
+        return ""
+    lines = [
+        "## Withdrawn",
+        "",
+        "Claims this review made and then took back, with the reason. They are "
+        "here because a reviewer that deletes its own output is one nobody can "
+        "audit.",
+        "",
+    ]
+    lines.extend(f"- `{entry.symbol}` — {entry.reason}" for entry in report.dropped)
+    return "\n".join(lines)
+
+
+def _limits(report: Report) -> str:
+    measured = any(f.measurement is not None for f in report.findings)
+    executed = (
+        "- Every claim above that carries a measurement was executed; the rest "
+        "are predictions, not observations."
+        if measured
+        else "- Nothing here was executed. A defect that only appears under load is "
+        "predicted, not observed."
+    )
     return (
         "## What this review cannot tell you\n\n"
         "- It read a fraction of the repository, named above.\n"
@@ -190,6 +260,5 @@ def _limits() -> str:
         "are worth the time it takes to check them and no more.\n"
         "- Claims the repository itself disproves have been withdrawn, and the "
         "reasons are recorded rather than the findings quietly deleted.\n"
-        "- Nothing here was executed. A defect that only appears under load is "
-        "predicted, not observed."
+        f"{executed}"
     )
