@@ -240,6 +240,17 @@ Cost is not in that table because replay is free, which is what makes it
 reproducible without a key. On the recording run the baseline spent $0.0108 and
 the pipeline $0.0582.
 
+Reproduced from a fresh clone of this repository, which is the only test of
+that claim that counts. Every figure matches except the hit rate, which came
+back 7/7 rather than 6/7: one of the seven experiments measures a lost update
+and its number depends on how the concurrent writers interleave, so its verdict
+can land either way. It is declared as such in
+[`tests/test_experiments_discriminate.py`](tests/test_experiments_discriminate.py),
+which exempts it from reproducing exactly and still requires it to detect the
+defect on every run. A hit rate over seven experiments inherits that: it moves
+by 0.14 when that one changes its mind, which is another way of saying seven
+experiments settle very little.
+
 **The pipeline arm leads for the first time, and one run of seven experiments
 is not a finding.** Read the two lines under the table before the two in it:
 the seeds are not independent, so nothing here is significant, and a hit rate
