@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "security"
+  ],
+  "reasoning": "Data: accesses DB and scans rows; Security: builds SQL via string concatenation, potential injection."
+}
