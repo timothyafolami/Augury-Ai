@@ -11,26 +11,66 @@ import { motion } from "framer-motion";
  * dependency and an attack surface for text that came out of a model, and this
  * document only ever contains headings, paragraphs, lists, tables and code.
  */
-export function Document({ markdown }: { markdown: string }) {
+export function Document({ markdown, name = "augury-report.md" }: { markdown: string; name?: string }) {
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const blocks = useMemo(() => parse(markdown), [markdown]);
 
   if (!markdown) return null;
 
+  /** Hand the document over as a file.
+   *
+   * A review nobody can take with them is a review that ends when the tab
+   * closes. Built from the markdown already in the browser rather than
+   * re-fetched, so it cannot disagree with what is on screen.
+   */
+  const download = () => {
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    // Revoked, or every download leaks its blob for the life of the page.
+    URL.revokeObjectURL(url);
+  };
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(markdown);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
   return (
     <div>
-      <button
-        onClick={() => setOpen((was) => !was)}
-        className="flex w-full items-center gap-3 border border-edge bg-ink px-4 py-2.5 text-left transition hover:bg-slate-panel"
-      >
-        <span className="font-mono text-[11px] text-chalk">
-          the document this review writes
-        </span>
-        <span className="font-mono text-[10px] text-mist">
-          {markdown.split("\n").length} lines · identical to the file the CLI writes
-        </span>
-        <span className="ml-auto font-mono text-[10px] text-mist">{open ? "hide" : "read"}</span>
-      </button>
+      <div className="flex w-full items-center gap-3 border border-edge bg-ink px-4 py-2.5">
+        <button onClick={() => setOpen((was) => !was)} className="flex flex-1 items-center gap-3 text-left">
+          <span className="font-mono text-[11px] text-chalk">
+            the document this review writes
+          </span>
+          <span className="font-mono text-[10px] text-mist">
+            {markdown.split("\n").length} lines · identical to the file the CLI writes
+          </span>
+          <span className="ml-auto font-mono text-[10px] text-mist">{open ? "hide" : "read"}</span>
+        </button>
+
+        <span className="h-4 w-px bg-edge" />
+
+        <button
+          onClick={copy}
+          className="font-mono text-[10px] text-mist transition hover:text-chalk"
+          title="copy the whole document"
+        >
+          {copied ? "copied" : "copy"}
+        </button>
+        <button
+          onClick={download}
+          className="border border-augur-400/40 px-2 py-1 font-mono text-[10px] text-augur-400 transition hover:border-augur-400 hover:bg-augur-400/10"
+          title={`download ${name}`}
+        >
+          download .md
+        </button>
+      </div>
 
       {open && (
         <motion.div
