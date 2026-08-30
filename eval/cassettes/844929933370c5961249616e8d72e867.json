@@ -1,0 +1,80 @@
+{
+  "findings": [
+    {
+      "path": "src/routes/orders.ts",
+      "line": 9,
+      "layer": "security",
+      "symbol": "orders.get",
+      "mechanism": "SQL query interpolates user-controlled claims.sub and status without parameterization, allowing injection.",
+      "severity": "high",
+      "remediation": "Replace string interpolation with a parameterized query using placeholders.",
+      "arithmetic": "N/A – risk based on injection possibility.",
+      "prediction": null
+    },
+    {
+      "path": "src/routes/orders.ts",
+      "line": 13,
+      "layer": "network",
+      "symbol": "for (const row of rows.rows)",
+      "mechanism": "Sequential fetch to pricing service for each order row creates N+1 remote calls, increasing latency linearly with number of rows.",
+      "severity": "medium",
+      "remediation": "Batch pricing requests or fetch in parallel with limited concurrency.",
+      "arithmetic": "Assuming each quote fetch ~100ms, 10 rows => 1s latency. At 100 rps, p99 latency exceeds 1000 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 1000.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "rate=100rps, rows_per_request=10"
+      }
+    },
+    {
+      "path": "src/lib/receipt.ts",
+      "line": 4,
+      "layer": "concurrency",
+      "symbol": "writeReceipt",
+      "mechanism": "Synchronous file write and pbkdf2Sync block the event loop for ~500 ms, preventing other requests from being processed.",
+      "severity": "high",
+      "remediation": "Use async fs.promises.writeFile and crypto.pbkdf2 (async) to avoid blocking.",
+      "arithmetic": "pbkdf2 with 600,000 iterations ≈ 500 ms on typical CPU; combined with I/O leads to >2 s request time.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 2000.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "receipt generation under load=10rps"
+      }
+    },
+    {
+      "path": "src/db.ts",
+      "line": 3,
+      "layer": "concurrency",
+      "symbol": "new Pool",
+      "mechanism": "Pool max=5 limits simultaneous DB connections; high request rate can exhaust pool, causing queueing and increased latency.",
+      "severity": "medium",
+      "remediation": "Increase pool.max to match expected concurrency or implement backpressure.",
+      "arithmetic": "Each DB query ~100 ms; at 50 rps, ~5 concurrent connections needed; extra requests wait, queue_depth ≥1.",
+      "prediction": {
+        "metric": "queue_depth",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "rate=50rps"
+      }
+    },
+    {
+      "path": "src/routes/orders.ts",
+      "line": 22,
+      "layer": "security",
+      "symbol": "writeReceipt(req.params.id)",
+      "mechanism": "orderId taken from URL is used directly in file path, allowing path traversal to write arbitrary files.",
+      "severity": "high",
+      "remediation": "Validate orderId against allowed pattern or use path.join with a safe base directory.",
+      "arithmetic": "If orderId contains '../', file path escapes /var/receipts, enabling write to arbitrary location.",
+      "prediction": null
+    }
+  ]
+}
