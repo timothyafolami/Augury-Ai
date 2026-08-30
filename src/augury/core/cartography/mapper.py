@@ -223,6 +223,12 @@ def _not_source(relative: Path) -> tuple[str, str] | None:
     return None
 
 
+# The extensions a path-relative specifier may name, in the order a resolver
+# tries them. `.ts` first, because a `.js` specifier in a TypeScript project
+# means the `.ts` file far more often than it means a real `.js` one.
+SCRIPT_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+
+
 class Cartographer:
     """Builds a `RepoMap` from a repository root."""
 
@@ -258,6 +264,11 @@ class Cartographer:
                 "Reviewing nothing and reporting nothing reads as a clean bill of health."
             )
         index = self._index(sources)
+        # Only files the map contains may be the target of an edge. Resolving
+        # against the filesystem instead would draw edges to files the walk
+        # excluded, which is how a review comes to report a dependency on
+        # something it never read.
+        known = {self._relative(source) for source in sources}
 
         nodes: list[ModuleNode] = []
         unparsed: list[str] = []
@@ -289,7 +300,7 @@ class Cartographer:
             resolved = {
                 target
                 for name in parsed.imports
-                if (target := self._resolve(name, index)) is not None
+                if (target := self._resolve_import(name, index, path, known)) is not None
             }
             # Dynamic imports, resolved by exact match only. A real import may
             # fall back to its package -- `from src.tasks import x` legitimately
@@ -517,6 +528,48 @@ class Cartographer:
         return package
 
     # -- resolution --------------------------------------------------------
+
+    def _resolve_import(
+        self, specifier: str, index: dict[str, str], source: Path, known: set[str]
+    ) -> str | None:
+        """One import, resolved by whichever rule its language uses.
+
+        A specifier beginning with a dot is a path relative to the importing
+        file, which is how TypeScript, JavaScript and their variants name a
+        sibling module. Everything else is a dotted name, which is Python's
+        rule and the one this resolver was originally written for.
+        """
+        if specifier.startswith("."):
+            return self._resolve_beside(specifier, source, known)
+        return self._resolve(specifier, index)
+
+    def _resolve_beside(self, specifier: str, source: Path, known: set[str]) -> str | None:
+        """A path-relative specifier, resolved the way a bundler would.
+
+        The extension in the specifier is discarded before searching. Under
+        ESM, TypeScript requires `./db.js` to name `db.ts`: the specifier
+        describes the file that will exist after compilation, not the one on
+        disk. Trusting it literally finds nothing in any TypeScript repository
+        written to the standard the compiler enforces.
+
+        normpath rather than resolve, so a symlink cannot walk the target out
+        of the repository being reviewed.
+        """
+        target = Path(os.path.normpath(source.parent / specifier))
+        stem = target.with_suffix("") if target.suffix in SCRIPT_SUFFIXES else target
+
+        for suffix in SCRIPT_SUFFIXES:
+            candidate = self._relative(stem.with_name(stem.name + suffix))
+            if candidate in known:
+                return candidate
+
+        # A directory names the index file inside it.
+        for suffix in SCRIPT_SUFFIXES:
+            candidate = self._relative(stem / f"index{suffix}")
+            if candidate in known:
+                return candidate
+
+        return None
 
     @staticmethod
     def _resolve(dotted: str, index: dict[str, str]) -> str | None:
