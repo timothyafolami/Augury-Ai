@@ -12,6 +12,7 @@ import { Forecast } from "./components/Forecast";
 import { NotRead } from "./components/NotRead";
 import { Diagram } from "./components/Diagram";
 import { Synthesis } from "./components/Synthesis";
+import { Document } from "./components/Document";
 import { Waterfall } from "./components/Waterfall";
 import { useRun } from "./lib/useRun";
 
@@ -226,6 +227,18 @@ export default function App() {
               </Header>
               <div className="mt-4">
                 <NotRead discovery={discovery} report={report} />
+              </div>
+            </div>
+          )}
+
+          {report?.document && (
+            <div className="border-b border-edge p-5">
+              <Header>
+                the review, as a document
+                <span className="ml-2 text-mist/60">one engine, three clients</span>
+              </Header>
+              <div className="mt-4">
+                <Document markdown={report.document} />
               </div>
             </div>
           )}

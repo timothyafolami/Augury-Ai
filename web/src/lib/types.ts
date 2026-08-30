@@ -82,6 +82,8 @@ export interface Report {
   dependencies: Finding[];
   engineering?: EngineeringCoverage;
   deployment?: Finding[];
+  /** The same markdown the CLI writes to disk. */
+  document?: string;
   synthesis?: Observation[];
   architecture?: Architecture;
   reading?: Record<string, string[]>;
