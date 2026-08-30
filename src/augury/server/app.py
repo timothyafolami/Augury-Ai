@@ -508,7 +508,12 @@ async def _review(run: Run, root: Path, target: Target) -> None:
         try:
             observations = await Synthesis(model).observe(report=result, survey=found)
         except Exception as refused:
-            say(events.review_failed(detail=f"synthesis declined: {refused}"))
+            # Not a failure of the run. This is the only stage that happens
+            # after the money is spent, so a complete report already exists and
+            # ending the stream here would discard it over the least important
+            # thing in it. Reported as context, which the interface shows and
+            # nothing treats as terminal.
+            say(events.context_updated(what=f"synthesis declined: {refused}"[:200], count=0))
             observations = ()
 
         written = await asyncio.to_thread(
@@ -796,10 +801,13 @@ async def _stream(run: Run) -> AsyncIterator[str]:
             try:
                 step = await asyncio.wait_for(queue.get(), timeout=15.0)
             except TimeoutError:
+                # A run that failed never produces a report, so waiting for one
+                # waits for ever. The task being finished is the fact that
+                # settles it either way.
                 # A comment keeps proxies and browsers from closing an idle
                 # connection during a long specialist call.
                 yield ": still working\n\n"
-                if run.task is not None and run.task.done() and run.report is not None:
+                if run.task is not None and run.task.done():
                     break
                 continue
             yield _sse(step)
@@ -807,6 +815,20 @@ async def _stream(run: Run) -> AsyncIterator[str]:
                 break
     finally:
         run.watchers.unsubscribe(queue)
+
+
+# What ends a run, in both shapes the stream has carried. The typed names
+# replaced the older ones and this check was not moved, so nothing matched and
+# the server never closed a connection. A finished run worked anyway because
+# the browser closes its own EventSource; a failed run left both sides waiting,
+# which is the state a reader with no API key landed in.
+ENDS_A_RUN = frozenset({"review.completed", "review.failed"})
+_OLDER_SHAPE = frozenset({"done", "failed"})
+
+
+def is_terminal(step: dict[str, Any]) -> bool:
+    """Whether this step means the run is over, however it was named."""
+    return step.get("event") in ENDS_A_RUN or step.get("kind") in _OLDER_SHAPE
 
 
 def _sse(payload: dict[str, Any]) -> str:
