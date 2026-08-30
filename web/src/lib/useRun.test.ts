@@ -181,3 +181,54 @@ describe("counts", () => {
     expect(state.read).toBe(3);
   });
 });
+
+describe("agent spans", () => {
+  it("never ends a span before it started", () => {
+    // The waterfall renders end minus start, and it was printing "-0.2s".
+    // Whatever the ordering upstream, a span that ends before it begins is
+    // not a duration anyone can read.
+    const state = after([
+      { event: "agent.started", data: { agent: "analyst:data" }, agent: "analyst:data", at: 500 },
+      { event: "agent.finished", data: { agent: "analyst:data" }, agent: "analyst:data", at: 300 },
+    ]);
+
+    for (const span of state.spans) {
+      if (span.endedAt !== null) expect(span.endedAt).toBeGreaterThanOrEqual(span.startedAt);
+    }
+  });
+
+  it("records one span for one started-and-finished pair", () => {
+    // Two blocks were tracking spans, the second recomputing from the state
+    // before the first ran, so one agent could produce two spans and the
+    // first block's work was discarded.
+    const state = after([
+      { event: "agent.started", data: { agent: "analyst:data" }, agent: "analyst:data", at: 100 },
+      { event: "agent.finished", data: { agent: "analyst:data" }, agent: "analyst:data", at: 900 },
+    ]);
+
+    const mine = state.spans.filter((s) => s.agent === "analyst:data");
+    expect(mine).toHaveLength(1);
+    expect(mine[0].startedAt).toBe(100);
+    expect(mine[0].endedAt).toBe(900);
+  });
+
+  it("keeps separate spans for separate agents", () => {
+    const state = after([
+      { event: "agent.started", data: { agent: "analyst:data" }, agent: "analyst:data", at: 0 },
+      { event: "agent.started", data: { agent: "analyst:network" }, agent: "analyst:network", at: 10 },
+    ]);
+
+    expect(state.spans).toHaveLength(2);
+    expect(state.spans.every((s) => s.endedAt === null)).toBe(true);
+  });
+
+  it("reopens a span when the same agent runs again", () => {
+    const state = after([
+      { agent: "triage", at: 0 },
+      { agent: "triage", at: 50 },
+      { agent: "triage", at: 80 },
+    ]);
+
+    expect(state.spans).toHaveLength(2);
+  });
+});
