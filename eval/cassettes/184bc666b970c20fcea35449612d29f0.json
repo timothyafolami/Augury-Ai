@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "concurrency",
+    "security"
+  ],
+  "reasoning": "Concurrency: review the synchronous file write to a shared volume; Security: review the use of environment‑derived salt and PBKDF2 signature generation."
+}
