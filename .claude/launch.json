@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "augury",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": ["-m", "augury.server"],
+      "port": 8000
+    }
+  ]
+}
