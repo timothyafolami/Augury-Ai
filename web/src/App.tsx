@@ -175,6 +175,16 @@ export default function App() {
             ${run.usd.toFixed(4)}
             {run.calls > 0 && <span className="text-mist"> / {run.calls} calls</span>}
           </span>
+          {/* Without this, a run that answered 32 calls for $0.0000 reads as a
+              billing bug. It is a recorded run, which is the point of it. */}
+          {mode.replay && (
+            <span
+              className="border border-augur-400/40 px-1.5 py-0.5 text-[10px] text-augur-400"
+              title="every model call is served from a committed recording, so this run spends nothing"
+            >
+              replay · $0 by design
+            </span>
+          )}
           {reviewing && <span className="text-augur-300">running</span>}
           {report && <span className="text-verdict-hit">complete</span>}
         </span>
