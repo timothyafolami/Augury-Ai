@@ -129,6 +129,43 @@ _SINGLE_THREADED = ("typescript", "javascript", "tsx")
 # Each pattern is anchored on syntax rather than on a word, because routing a
 # file to a specialist costs a model call and a detector that fires on the
 # word "go" in a sentence spends money to be told nothing.
+# Where a language stops protecting the caller.
+#
+# Each of these offers a guarantee and a way to switch it off, and none of the
+# escapes import anything that says so. `unsafe` is a keyword. `strcpy` comes
+# from a header the file already needed. `Runtime` lives in `java.lang`, which
+# is imported implicitly and so appears in no import list anywhere.
+#
+# Measured: nine probes across the three languages, all raising nothing.
+_DEFEATED: dict[str, re.Pattern[str]] = {
+    "rust": re.compile(
+        r"""(?:
+            \bunsafe\s*[{]              # unsafe { ... }
+          | \bunsafe\s+fn\b            # unsafe fn
+          | \bunsafe\s+impl\b
+          | \btransmute\s*[:(<]        # mem::transmute
+          | \bget_unchecked(?:_mut)?\s*\(
+          | \bfrom_utf8_unchecked\s*\(
+          | \bunwrap_unchecked\s*\(
+        )""",
+        re.VERBOSE,
+    ),
+    # The unbounded ones only. `memcpy` and `snprintf` take a length and are
+    # ordinary, and flagging them would route most of a C++ codebase to the
+    # security specialist to be told nothing.
+    "cpp": re.compile(r"\b(?:strcpy|strcat|sprintf|gets|scanf|alloca)\s*\("),
+    "java": re.compile(
+        r"""(?:
+            \bRuntime\.getRuntime\s*\(\s*\)\s*\.\s*exec\b
+          | \bnew\s+ProcessBuilder\s*\(
+          | \bObjectInputStream\b
+          | \breadObject\s*\(\s*\)
+        )""",
+        re.VERBOSE,
+    ),
+}
+
+
 _CONCURRENT: dict[str, re.Pattern[str]] = {
     "go": re.compile(
         r"""(?:
@@ -209,7 +246,18 @@ def signals_in_source(language: str, text: str) -> frozenset[Signal]:
     if _coordinates_concurrent_work(language, text):
         found.add(Signal.CONCURRENCY)
 
+    if _defeats_the_guarantee(language, text):
+        found.add(Signal.SECURITY)
+
     return frozenset(found)
+
+
+def _defeats_the_guarantee(language: str, text: str) -> bool:
+    """An escape from the safety the language otherwise provides."""
+    pattern = _DEFEATED.get(language)
+    if pattern is None:
+        return False
+    return pattern.search(_without_comments(text)) is not None
 
 
 def _coordinates_concurrent_work(language: str, text: str) -> bool:
