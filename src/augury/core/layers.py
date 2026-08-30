@@ -70,6 +70,15 @@ LAYERS: tuple[Layer, ...] = (
         signals=frozenset({Signal.CRAFT}),
         lab_layer="08-craft",
     ),
+    Layer(
+        name="serving",
+        signals=frozenset({Signal.SERVING}),
+        lab_layer="10-edge",
+    ),
+    # 09-writing has no specialist and will not get one. It is about design
+    # documents, postmortems and commit messages, and a reviewer reading source
+    # has nothing to say about them. Recorded here so a later reader sees a
+    # decision rather than a gap.
 )
 
 
