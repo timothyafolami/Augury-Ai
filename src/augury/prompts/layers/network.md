@@ -24,3 +24,20 @@ Specifically look for:
   response blocks the rest.
 
 State the concurrency ceiling explicitly: workers times threads times pool.
+
+- A read timeout bounds the gap between bytes, not the call. A server trickling
+  one byte per second never trips it however long the response takes. Treat a
+  documented default of five minutes as no timeout at all.
+- The cache that outlives a failover is the connection pool, not DNS.
+  `getaddrinfo` does not cache and neither does Python, Go or Node by default;
+  what keeps a pod talking to a withdrawn address is a pooled socket nobody
+  retires. The fix is a maximum connection lifetime.
+- Whoever closes an idle connection first must be the side not holding a pool.
+  uvicorn's `--timeout-keep-alive` defaults to 5s against an ALB idle timeout of
+  60s, so the backend sends FIN on a connection the balancer is about to reuse.
+  The 502 rate **falls** as load rises, so a load test hides it.
+- Under HTTP/2 the ceiling is `SETTINGS_MAX_CONCURRENT_STREAMS`, set by the
+  server, invisible to `ss` and to every pool dashboard.
+- A file-descriptor leak on an error path fails as `EMFILE` far from its cause.
+  If raising the limit changes time-to-crash but not the shape of the curve, it
+  is a leak. A pile of `CLOSE_WAIT` means the peer closed and you never did.
