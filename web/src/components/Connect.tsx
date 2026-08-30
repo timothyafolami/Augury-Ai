@@ -1,5 +1,6 @@
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
+import { Picker } from "./Picker";
 
 /** Choosing what to review.
  *
@@ -21,6 +22,7 @@ export function Connect({
   // A dollar, because that is what a review of a real backend costs and a
   // ceiling low enough to stop one is a ceiling that hides the product.
   const [budget, setBudget] = useState(1);
+  const [picking, setPicking] = useState(false);
 
   return (
     <section className="relative flex min-h-screen items-center justify-center px-8">
@@ -40,13 +42,21 @@ export function Connect({
           <label className="block font-mono text-[11px] uppercase tracking-widest text-mist">
             project directory
           </label>
+          <div className="mt-2 flex gap-2">
           <input
             value={path}
             onChange={(event) => setPath(event.target.value)}
             onKeyDown={(event) => event.key === "Enter" && onConnect(path, scope, budget)}
             spellCheck={false}
-            className="mt-2 w-full border border-edge bg-void px-4 py-3 font-mono text-sm text-chalk outline-none transition focus:border-augur-500"
+            className="w-full min-w-0 border border-edge bg-void px-4 py-3 font-mono text-sm text-chalk outline-none transition focus:border-augur-500"
           />
+          <button
+            onClick={() => setPicking(true)}
+            className="shrink-0 border border-edge px-4 font-mono text-[11px] text-mist transition hover:border-augur-500 hover:text-chalk"
+          >
+            browse
+          </button>
+          </div>
 
           <label className="mt-6 block font-mono text-[11px] uppercase tracking-widest text-mist">
             scope <span className="normal-case tracking-normal">— a subdirectory, or all of it</span>
@@ -104,6 +114,19 @@ export function Connect({
           <span className="text-mist/50">one review engine, three clients</span>
         </p>
       </motion.div>
+
+      <AnimatePresence>
+        {picking && (
+          <Picker
+            path={path}
+            onPick={(chosen) => {
+              setPath(chosen);
+              setPicking(false);
+            }}
+            onClose={() => setPicking(false)}
+          />
+        )}
+      </AnimatePresence>
     </section>
   );
 }
