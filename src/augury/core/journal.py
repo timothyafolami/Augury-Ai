@@ -143,9 +143,27 @@ class Journal:
     def _append(self, record: dict[str, object]) -> None:
         try:
             with self._path.open("a", encoding="utf-8") as handle:
+                # A run killed between the write and the flush leaves a line
+                # with no newline. Appending to it merges two records into one
+                # malformed line, so the interrupted run disappears -- and it
+                # takes the next complete run with it, which is not "its own
+                # line and nothing else".
+                if self._ends_mid_line():
+                    handle.write("\n")
                 handle.write(json.dumps(record) + "\n")
         except OSError:
             return
+
+    def _ends_mid_line(self) -> bool:
+        """Whether the last thing written was never terminated."""
+        try:
+            if not self._path.is_file() or self._path.stat().st_size == 0:
+                return False
+            with self._path.open("rb") as handle:
+                handle.seek(-1, 2)
+                return handle.read(1) != b"\n"
+        except OSError:
+            return False
 
 
 def _now() -> str:
