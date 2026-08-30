@@ -35,7 +35,7 @@ SYSTEMIC = "Correlation identifiers are not propagated, so logs for one request 
 def test_the_same_mechanism_across_many_files_becomes_one_finding() -> None:
     findings = [_finding(f"app/routes/r{n}.py", SYSTEMIC) for n in range(16)]
 
-    collapsed = collapse(findings)
+    collapsed, _ = collapse(findings)
 
     assert len(collapsed) == 1
     assert "16 files" in collapsed[0].mechanism
@@ -44,7 +44,7 @@ def test_the_same_mechanism_across_many_files_becomes_one_finding() -> None:
 def test_the_collapsed_finding_keeps_where_it_was_seen() -> None:
     findings = [_finding(f"app/routes/r{n}.py", SYSTEMIC) for n in range(3)]
 
-    collapsed = collapse(findings)
+    collapsed, _ = collapse(findings)
 
     assert collapsed[0].path == "app/routes/r0.py"
     for path in ("r1.py", "r2.py"):
@@ -55,7 +55,7 @@ def test_two_files_is_not_systemic() -> None:
     """Two is a coincidence. The threshold exists so it is not a judgement."""
     findings = [_finding(f"app/routes/r{n}.py", SYSTEMIC) for n in range(2)]
 
-    assert len(collapse(findings)) == 2
+    assert len(collapse(findings)[0]) == 2
 
 
 def test_different_mechanisms_are_left_alone() -> None:
@@ -65,7 +65,7 @@ def test_different_mechanisms_are_left_alone() -> None:
         _finding("c.py", "The session is held across a network call."),
     ]
 
-    assert len(collapse(findings)) == 3
+    assert len(collapse(findings)[0]) == 3
 
 
 def test_the_same_mechanism_in_one_file_is_not_collapsed() -> None:
@@ -75,7 +75,7 @@ def test_the_same_mechanism_in_one_file_is_not_collapsed() -> None:
         _finding("a.py", SYSTEMIC, symbol="second"),
     ]
 
-    assert len(collapse(findings)) == 2
+    assert len(collapse(findings)[0]) == 2
 
 
 def test_wording_that_differs_only_in_the_file_it_names_still_collapses() -> None:
@@ -86,4 +86,4 @@ def test_wording_that_differs_only_in_the_file_it_names_still_collapses() -> Non
         _finding("app/routes/plans.py", "list_plans does not propagate a correlation id."),
     ]
 
-    assert len(collapse(findings)) == 1
+    assert len(collapse(findings)[0]) == 1
