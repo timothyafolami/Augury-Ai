@@ -222,6 +222,18 @@ Express service with eight, which `tsc --noEmit` accepts under strict. The
 other three are exercised by unit tests over their parsers and signal
 detectors, which is a weaker claim and is worth reading as one.
 
+What those detectors read is the source, not only the import list, because
+the constructs that matter most import nothing. A goroutine is `go func`. A
+lock is `synchronized`. An escape from Rust's guarantees is the keyword
+`unsafe`. An unbounded copy is `strcpy`, from a header the file already
+needed. Java's `Runtime.exec` lives in `java.lang`, which is imported
+implicitly and therefore appears in no import list anywhere.
+
+Each of those was measured raising nothing before it was added, and each is
+anchored on syntax rather than on a word: routing a file to a specialist
+costs a model call, so a rule that fires on "go" in a sentence spends money
+to be told nothing. Fourteen such guards are held by tests.
+
 Adding those two cases found three defects in this stage that no Python case
 could reach. The import graph was empty for every language but Python, so
 fan-in was zero, nothing was reachable from an entrypoint, and the scheduler's
