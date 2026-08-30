@@ -23,3 +23,17 @@ backpressure.
 
 **Exceptions across an ABI boundary.** Throwing through C, or out of a
 destructor, or out of a thread's top-level function, terminates.
+
+- `std::thread::hardware_concurrency()` may return 0, and when it returns
+  anything it reports the host's CPUs rather than the cgroup's quota. A pool
+  sized from it is sized for a machine this process cannot use.
+- `high_resolution_clock` is implementation-defined and may be an alias for
+  `system_clock`, so a duration measured with it can go backwards when the wall
+  clock is stepped. Use `steady_clock` for anything you subtract.
+- Under Linux overcommit a `bad_alloc` handler essentially never runs. The
+  allocation succeeds, the process is killed inside a later `memcpy`, and the
+  cleanup path you wrote is never reached.
+- `memcmp` short-circuits at the first differing byte, so it leaks the length of
+  a correct prefix and is wrong for comparing a secret.
+- `PQexec` permits multiple statements in one call, which turns any injection
+  into an arbitrary-statement injection. `PQexecParams` does not.
