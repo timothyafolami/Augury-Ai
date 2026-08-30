@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/api/health.py",
+      "line": 18,
+      "layer": "data",
+      "symbol": "ready",
+      "mechanism": "Idle-in-transaction connections from the ready endpoint leave a transaction open because the session is never committed or closed, pinning the xmin horizon cluster‑wide and preventing autovacuum cleanup (02-mvcc-and-vacuum).",
+      "severity": "high",
+      "remediation": "Add `await session.commit()` (or `await session.close()`) after the SELECT, or acquire the session with `async with get_session() as session:` so the transaction ends before the response is returned.",
+      "arithmetic": "Each request creates an AsyncSession that starts a transaction. The function executes a SELECT but never commits, so the transaction stays open until the session is disposed. With 4 FastAPI workers, up to 4 concurrent ready requests can each hold a connection in an idle‑in‑transaction state, yielding 4 active connections that pin xmin.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 4.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "4 concurrent ready requests"
+      }
+    }
+  ]
+}
