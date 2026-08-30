@@ -15,14 +15,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from augury.core.architecture import architecture
+from augury.core.architecture import Architecture, architecture
 from augury.core.cartography.mapper import Cartographer
 from augury.core.survey import Surveyor
 
 CASE = Path("eval/cases/B01-orders-service/repo")
 
 
-def _drawn(findings: list[object] | None = None):  # noqa: ANN202
+def _drawn(findings: list[object] | None = None) -> Architecture:
     found = Surveyor(CASE).survey()
     entrypoints = tuple({e for s in found.services for e in s.entrypoints})
     repo = Cartographer(CASE, entrypoints=entrypoints).map()
@@ -82,6 +82,10 @@ def test_the_diagram_of_an_empty_repository_is_empty_rather_than_invented() -> N
     from augury.core.cartography import RepoMap
     from augury.core.survey.model import Survey
 
-    drawn = architecture(Survey(services=(), source_roots=()), RepoMap(root="/tmp/x", modules=[], unreachable=(), unparsed=[]), [])
+    drawn = architecture(
+        Survey(services=(), source_roots=()),
+        RepoMap(root="/tmp/x", modules=[], unreachable=(), unparsed=[]),
+        [],
+    )
 
     assert drawn.nodes == ()
