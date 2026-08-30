@@ -292,7 +292,12 @@ class AuguryReviewer:
         kept, withdrawn = withdraw_false_index_claims(anchored, indexed)
 
         fan_in = {module.path: module.fan_in for module in repo.modules}
-        ordered = rank(collapse(kept), depths=depths, fan_in=fan_in)
+        # Collapsing returns what it stood in for as well as what survived.
+        # A finding in neither list leaves the falsifiable-precision
+        # denominator, which counts findings plus discarded, and merging on
+        # one arm alone lifted that arm's score with no change to the reviewer.
+        surviving, stood_in_for = collapse(kept)
+        ordered = rank(surviving, depths=depths, fan_in=fan_in)
 
         return report.model_copy(
             update={
@@ -302,7 +307,8 @@ class AuguryReviewer:
                 + tuple(
                     Dropped(symbol=w.finding.symbol, path=w.finding.path, reason=w.reason)
                     for w in withdrawn
-                ),
+                )
+                + tuple(stood_in_for),
             }
         )
 
