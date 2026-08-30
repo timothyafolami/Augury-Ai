@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "internal/pricing/client.go",
+      "line": 16,
+      "layer": "network",
+      "symbol": "Fetch",
+      "mechanism": "03-timeouts-as-a-first-principle — a network call with no timeout is not a call, it is a promise to hang forever, causing worker saturation when upstream is slow.",
+      "severity": "high",
+      "remediation": "Use a context with timeout or an http.Client with a Timeout set (e.g., 5s) when making the request, and propagate the timeout from the caller.",
+      "arithmetic": "Assume upstream latency 30s, request rate 100 rps. Required concurrent blocked workers = latency * rate = 30 * 100 = 3000. If the service can handle 500 workers, saturation = 3000/500 = 6 → capped at 1 (full saturation). Therefore worker_saturation will reach 1.0.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "rate=100rps, upstream_latency=30s, no timeout"
+      }
+    }
+  ]
+}
