@@ -1,0 +1,8 @@
+{
+  "specialists": [
+    "concurrency",
+    "data",
+    "observability"
+  ],
+  "reasoning": "concurrency: the file launches a goroutine per SKU and uses channels for coordination; data: it queries the store and pricing services and returns DB‑derived results; observability: it logs errors encountered during reindexing."
+}
