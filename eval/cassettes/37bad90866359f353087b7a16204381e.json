@@ -1,0 +1,94 @@
+{
+  "findings": [
+    {
+      "path": "internal/store/items.go",
+      "line": 17,
+      "layer": "security",
+      "symbol": "ByWarehouse",
+      "mechanism": "SQL string is built by concatenating the `warehouse` parameter without escaping, allowing injection attacks.",
+      "severity": "high",
+      "remediation": "Replace the concatenated query with a parameterized statement using placeholders.",
+      "arithmetic": "warehouse is interpolated directly into the SQL string, so an input like \"' OR '1'='1\" creates a malformed query that triggers a server error (500).",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "at_least",
+        "value": 500.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "warehouse param contains \"' OR '1'='1\""
+      }
+    },
+    {
+      "path": "internal/pricing/client.go",
+      "line": 17,
+      "layer": "network",
+      "symbol": "Fetch",
+      "mechanism": "http.Get uses the default client which has no timeout, so a hanging pricing service can block the request indefinitely.",
+      "severity": "high",
+      "remediation": "Create an http.Client with a reasonable Timeout (e.g., 5s) and use it for the request.",
+      "arithmetic": "Default client timeout = infinite; if the downstream service hangs for >30 s the observed latency exceeds any production deadline.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 30000.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "pricing service unresponsive"
+      }
+    },
+    {
+      "path": "internal/reindex/worker.go",
+      "line": 26,
+      "layer": "concurrency",
+      "symbol": "Run",
+      "mechanism": "Spawns one goroutine per SKU without any concurrency limit, potentially creating hundreds of simultaneous HTTP calls and exceeding the DB pool size.",
+      "severity": "high",
+      "remediation": "Introduce a semaphore or worker pool to cap the number of concurrent goroutines (e.g., limit to 10).",
+      "arithmetic": "With 100 SKUs, 100 goroutines run concurrently; the DB pool is limited to 4 connections, so at least 4 active DB connections and 96 waiting goroutines.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 4.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "run /reindex with 100 SKUs"
+      }
+    },
+    {
+      "path": "internal/api/handlers.go",
+      "line": 35,
+      "layer": "data",
+      "symbol": "Register:/inventory handler",
+      "mechanism": "Per‑item call to `store.Reserved` creates an N+1 query pattern, scaling DB queries linearly with the number of items returned.",
+      "severity": "medium",
+      "remediation": "Batch the reservation counts in a single query (e.g., JOIN or GROUP BY) and join the result to the items list.",
+      "arithmetic": "Base query retrieves items (1 query). For each of N items an extra `Reserved` query is issued, total queries = 1 + N. With N=100, queries=101.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 101.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "GET /inventory returning 100 items"
+      }
+    },
+    {
+      "path": "internal/db/pool.go",
+      "line": 20,
+      "layer": "concurrency",
+      "symbol": "Open",
+      "mechanism": "The connection pool is capped at 4 open connections, which is lower than typical concurrent request load, causing request queuing.",
+      "severity": "medium",
+      "remediation": "Increase `SetMaxOpenConns` to a value matching expected concurrency (e.g., 20).",
+      "arithmetic": "With 10 concurrent requests needing DB access, only 4 can proceed; the remaining 6 wait, so queue depth ≥6.",
+      "prediction": {
+        "metric": "queue_depth",
+        "comparator": "at_least",
+        "value": 6.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "10 concurrent requests"
+      }
+    }
+  ]
+}
