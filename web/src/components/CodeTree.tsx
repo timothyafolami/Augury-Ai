@@ -28,11 +28,28 @@ export function CodeTree({
   const root = useMemo(() => build(modules), [modules]);
 
   return (
-    <div className="max-h-[55vh] overflow-y-auto font-mono text-[11px] leading-[1.7] lg:max-h-none">
-      {[...root.children.values()].map((branch) => (
-        <Node key={branch.path} branch={branch} files={files} depth={0} />
-      ))}
-    </div>
+    <>
+      {/* Named, because three shades of grey are not a vocabulary. A reader
+          took "read, nothing found" for "never opened" and concluded the
+          review had skipped most of the repository. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-2 font-mono text-[9px] text-mist/70">
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 bg-augur-400" /> finding
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 bg-mist" /> read, clean
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 border border-edge" /> not read
+        </span>
+      </div>
+
+      <div className="max-h-[55vh] overflow-y-auto font-mono text-[11px] leading-[1.7] lg:max-h-none">
+        {[...root.children.values()].map((branch) => (
+          <Node key={branch.path} branch={branch} files={files} depth={0} />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -122,16 +139,21 @@ function count(branch: Branch): string {
   return String(total);
 }
 
+// `read` used to be `bg-augur-900` and `unread` `bg-edge`, which are the same
+// colour to anyone not comparing them side by side on a dark screen. A reader
+// looking at a finished review concluded the files were skipped when sixteen
+// of twenty-three had been read and found clean -- the most damaging thing
+// this panel can get wrong, because it makes a thorough review look lazy.
 function dot(state: FileState): string {
   if (state === "flagged") return "bg-augur-400";
   if (state === "reading") return "bg-augur-500";
-  if (state === "read") return "bg-augur-900";
-  return "bg-edge";
+  if (state === "read") return "bg-mist";
+  return "border border-edge bg-transparent";
 }
 
 function text(state: FileState, isFile: boolean): string {
   if (state === "flagged") return "text-augur-200";
   if (state === "reading") return "text-chalk";
-  if (state === "read") return "text-chalk/70";
-  return isFile ? "text-mist/45" : "text-mist/70";
+  if (state === "read") return "text-chalk/75";
+  return isFile ? "text-mist/35" : "text-mist/60";
 }
