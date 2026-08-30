@@ -37,6 +37,32 @@ distinguishes either of them from a review nobody can check.
 
 ---
 
+## Three ways in
+
+One review engine. The CLI drives it, an MCP server exposes it to another
+agent, and a web client watches it work. None is a second implementation, and
+the document a team acts on is rendered by the same function whichever asked
+for it.
+
+```bash
+augury report --path /path/to/repo --scope backend   # writes the document
+augury mcp                                           # exposes it over MCP
+make serve                                           # builds the interface and serves it
+```
+
+`make serve` starts one process on <http://localhost:8000> holding both the API
+and the interface. The interface needs Node to build, once; the engine does
+not need it at all, and every number this README publishes comes from the CLI.
+
+What the interface adds is watching. It subscribes to the trajectory the
+reviewer writes anyway, which is the file handed to a judge, so the tree
+lighting up and the agents handing off are the run rather than an animation of
+one. When the pipeline stops emitting, the screen stops moving. The raw event
+stream sits beside the rendered view for exactly that reason: a reader should
+be able to check that the diagram is not a cartoon over a spinner.
+
+---
+
 ## Point it at your own service
 
 ```bash
