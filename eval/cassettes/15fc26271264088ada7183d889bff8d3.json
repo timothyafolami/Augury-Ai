@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "internal/reindex/worker.go",
+      "line": 27,
+      "layer": "observability",
+      "symbol": "Run",
+      "mechanism": "Correlation IDs are generated per service and not propagated via transport, preventing logs from being linked to a single request. See 03-correlation-ids.",
+      "severity": "high",
+      "remediation": "Pass a context containing the request's traceparent into the goroutine and include it in log statements; propagate the ID through all async boundaries.",
+      "arithmetic": "N/A",
+      "prediction": null
+    }
+  ]
+}
