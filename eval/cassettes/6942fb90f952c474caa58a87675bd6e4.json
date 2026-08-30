@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/handlers/webhook.py",
+      "line": 9,
+      "layer": "data",
+      "symbol": "record_delivery",
+      "mechanism": "Read-modify-write without SELECT FOR UPDATE or atomic UPDATE leads to lost update under READ COMMITTED (01-isolation-levels).",
+      "severity": "high",
+      "remediation": "Fetch the Shipment with SELECT ... FOR UPDATE or replace the read‑modify‑write with a single atomic UPDATE (e.g., UPDATE shipment SET delivery_count = delivery_count + 1, status='delivered' WHERE id=:id) inside a SERIALIZABLE transaction.",
+      "arithmetic": "Two concurrent calls both read delivery_count=0, each adds 1, both commit. Final delivery_count can be at most 1 (lost one increment).",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_most",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "two concurrent writers, initial delivery_count=0"
+      }
+    }
+  ]
+}

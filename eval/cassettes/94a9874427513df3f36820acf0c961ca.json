@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "app/repositories/orders.py",
+      "line": 1,
+      "layer": "observability",
+      "symbol": "list_for_customer",
+      "mechanism": "Correlation IDs are generated per service and not propagated via transport, violating 03-correlation-ids. Logs cannot be queried per request.",
+      "severity": "high",
+      "remediation": "Add a request‑level correlation ID (e.g., W3C traceparent) to the context and include it in all log calls and DB queries.",
+      "arithmetic": "No numeric threshold; the failure is binary – either a request ID is present in logs or not. The absence means on‑call cannot retrieve all logs for a request.",
+      "prediction": null
+    }
+  ]
+}

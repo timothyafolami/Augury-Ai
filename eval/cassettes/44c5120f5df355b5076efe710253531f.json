@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/api/customers.py",
+      "line": 14,
+      "layer": "network",
+      "symbol": "read_customer",
+      "mechanism": "Missing database query timeout allows a single slow upstream (the Postgres instance) to block the async session indefinitely, violating the principle in **03-timeouts-as-a-first-principle** which states that a network call with no timeout can park an entire worker and pool slot.",
+      "severity": "high",
+      "remediation": "Configure a statement timeout for the asyncpg engine (e.g., `create_async_engine(..., connect_args={\"command_timeout\":5})`) or wrap the query in `asyncio.wait_for` with a reasonable deadline.",
+      "arithmetic": "workers=4; each request holds one DB connection until the query returns. With a simulated DB latency of 30 s and no timeout, all 4 workers become blocked: worker_saturation = blocked_workers/total_workers = 4/4 = 1 (100%).",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "4 concurrent requests, DB latency 30s, no query timeout"
+      }
+    }
+  ]
+}

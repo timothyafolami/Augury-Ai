@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/queue/inbox.py",
+      "line": 8,
+      "layer": "concurrency",
+      "symbol": "_pending",
+      "mechanism": "Unbounded asyncio.Queue allows unlimited growth, providing no back‑pressure. The runtime does not enforce a size limit, so concurrent producers can keep adding events, leading to unbounded memory usage and potential OOM. Cites 04-races-and-atomicity.",
+      "severity": "high",
+      "remediation": "Replace the unbounded asyncio.Queue with a bounded queue (e.g., asyncio.Queue(maxsize=1000)) and handle QueueFull to apply back‑pressure.",
+      "arithmetic": "In the experiment 'queue_depth' we offer 5000 events without any consumer. An unbounded queue will have qsize=5000. With a bounded queue of maxsize=1000 the put would block/raise, preventing growth beyond 1000. Thus the threshold is 5000 items pending.",
+      "prediction": {
+        "metric": "queue_depth",
+        "comparator": "at_least",
+        "value": 5000.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "5000 events offered, no consumer"
+      }
+    }
+  ]
+}

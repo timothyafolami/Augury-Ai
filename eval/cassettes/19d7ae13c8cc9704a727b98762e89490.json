@@ -1,0 +1,33 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/payments.py",
+      "line": 15,
+      "layer": "observability",
+      "symbol": "charge",
+      "mechanism": "The function does not propagate any transport‑level correlation identifier (e.g., W3C traceparent). Without such a header logs from downstream services cannot be correlated to a single request, violating the guidance in **03-correlation-ids** that a request must be traceable across service boundaries.",
+      "severity": "high",
+      "remediation": "Add propagation of a transport‑level correlation ID (e.g., include a `traceparent` header in the outgoing request) and enrich log records with the same ID so that all logs for a request can be queried together.",
+      "arithmetic": "No numeric threshold exists; the failure is binary – the header is absent. Therefore a falsifiable prediction cannot be expressed.",
+      "prediction": null
+    },
+    {
+      "path": "app/clients/payments.py",
+      "line": 15,
+      "layer": "observability",
+      "symbol": "charge",
+      "mechanism": "The retry loop retries up to three times on any HTTPError, causing up to three gateway calls per client request. This amplifies load on the dependency and can mask latency issues, matching the RED‑style problem described in **05-red-and-use**.",
+      "severity": "high",
+      "remediation": "Limit retries to a single attempt or implement exponential backoff with jitter and a circuit‑breaker; also emit a metric for retry attempts.",
+      "arithmetic": "MAX_ATTEMPTS=3, so each failed request can generate up to 3 calls. Under the experiment of 20 concurrent charges all receiving 503, the worst‑case total calls = 20 × 3 = 60, giving an amplification factor of 3× over the original request rate.",
+      "prediction": {
+        "metric": "retry_amplification",
+        "comparator": "at_least",
+        "value": 3.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "20 concurrent charges with gateway returning 503"
+      }
+    }
+  ]
+}

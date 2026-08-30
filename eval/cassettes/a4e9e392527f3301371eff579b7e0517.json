@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 12,
+      "layer": "data",
+      "symbol": "engine",
+      "mechanism": "07-connection-pools — the configured pool_size (20) plus max_overflow (10) yields 30 possible connections per process. With 4 uvicorn workers this totals 120 connections, exceeding PostgreSQL's default max_connections (100) and reserved superuser slots, leading to connection errors and worker saturation.",
+      "severity": "high",
+      "remediation": "Reduce pool_size and max_overflow so that (pool_size+max_overflow) ≤ floor((max_connections‑reserved)/workers). For default max_connections=100 and reserved=5, each of the 4 workers may use ≤23 connections. Set pool_size=10 and max_overflow=5 in create_async_engine.",
+      "arithmetic": "max_connections=100, reserved=5 → usable=95. workers=4 → per‑worker limit=95/4≈23.75. Configured per‑worker connections=20+10=30 >23 → risk of exceeding 100 total connections. At full load (30 concurrent requests per worker) active_connections can reach 120 ≥100.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 100.0,
+        "upper": null,
+        "unit": "connections",
+        "condition": "4 workers, each with 30 concurrent requests"
+      }
+    }
+  ]
+}

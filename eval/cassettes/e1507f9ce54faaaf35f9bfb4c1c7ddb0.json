@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/services/checkout.py",
+      "line": 14,
+      "layer": "data",
+      "symbol": "place_order",
+      "mechanism": "Read‑modify‑write on the wallet balance without SELECT ... FOR UPDATE or SERIALIZABLE allows lost updates under READ COMMITTED (01‑isolation‑levels). Concurrent debits can overwrite each other, leaving the balance higher than it should be.",
+      "severity": "high",
+      "remediation": "Wrap the balance update in a SELECT ... FOR UPDATE or replace the read‑modify‑write with an atomic UPDATE balance = balance - :amount, or run the transaction at SERIALIZABLE isolation.",
+      "arithmetic": "Initial balance = 100.00. Ten concurrent calls each debit 10.00. Without row‑level locking only one UPDATE may win, so final_balance = 100.00 - 10.00 = 90.00. Therefore the balance can be at least 90 when it should be 0.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_least",
+        "value": 90.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "10 concurrent debits of 10.00 on initial balance 100.00"
+      }
+    }
+  ]
+}

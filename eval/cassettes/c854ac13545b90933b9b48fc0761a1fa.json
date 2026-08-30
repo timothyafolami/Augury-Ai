@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 9,
+      "layer": "security",
+      "symbol": "DATABASE_URL",
+      "mechanism": "Hard‑coded database credentials expose a secret in source code, violating secret‑management best practices (no reference number but aligns with general secret‑exposure guidance).",
+      "severity": "high",
+      "remediation": "Remove the default URL containing credentials; require DATABASE_URL to be provided via environment and raise an error if missing, ensuring no credentials are stored in source.",
+      "arithmetic": "The credential string \"postgresql+asyncpg://app:app@db:5432/app\" is present verbatim in the source at line 9, exposing the username and password unconditionally.",
+      "prediction": null
+    }
+  ]
+}

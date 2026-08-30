@@ -4,5 +4,5 @@
     "observability",
     "craft"
   ],
-  "reasoning": "data: performs DB queries to load and list orders; observability: logs exceptions when listing orders; craft: overall code structure, async usage, and type hints."
+  "reasoning": "data: the file performs SQLAlchemy queries to load and list orders; observability: it logs exceptions when listing fails; craft: it defines async functions with type hints, docstrings, and error handling."
 }

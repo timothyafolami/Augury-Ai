@@ -3,5 +3,5 @@
     "data",
     "network"
   ],
-  "reasoning": "data: the file queries the Customer model via SQLAlchemy; network: it defines FastAPI HTTP endpoints."
+  "reasoning": "Data: uses SQLAlchemy session and queries the Customer model; Network: defines FastAPI endpoint handling HTTP GET requests."
 }

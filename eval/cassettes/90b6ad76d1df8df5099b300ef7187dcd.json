@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/store/session.py",
+      "line": 9,
+      "layer": "data",
+      "symbol": "engine",
+      "mechanism": "07-connection-pools — a pool is a queue; with pool_size=10 and max_overflow=0, 40 concurrent with_session calls can only hold 10 connections, causing queueing and latency spikes.",
+      "severity": "medium",
+      "remediation": "increase pool_size to match expected concurrency or set max_overflow>0, e.g., create_async_engine(..., pool_size=20, max_overflow=10)",
+      "arithmetic": "pool_size=10, max_overflow=0 → max simultaneous connections=10. Experiment runs 40 concurrent with_session calls; active connections cannot exceed 10, so expect saturation at 10 connections.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_most",
+        "value": 10.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "40 concurrent with_session calls"
+      }
+    }
+  ]
+}

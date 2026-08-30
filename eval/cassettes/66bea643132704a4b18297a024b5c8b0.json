@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/api/health.py",
+      "line": 18,
+      "layer": "network",
+      "symbol": "ready",
+      "mechanism": "Connection pool default size (5) may be exhausted under load, limiting concurrency. Cites 02-connection-pooling-and-pool-exhaustion.",
+      "severity": "medium",
+      "remediation": "Configure SQLAlchemy engine with a larger pool_size (e.g., pool_size=10) to exceed expected concurrent requests per worker.",
+      "arithmetic": "Workers=4 (Dockerfile). Default DB pool size=5. Assuming DB latency 100ms, each worker can handle 10 rps, total 40 rps. At load 80 rps, each worker's pool fully utilized (5 connections). Active connections per worker reach 5.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 5.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "rate=80rps"
+      }
+    },
+    {
+      "path": "app/api/health.py",
+      "line": 18,
+      "layer": "network",
+      "symbol": "ready",
+      "mechanism": "No statement timeout on DB queries allows a slow or hanging DB to block workers indefinitely. Cites 03-timeouts-as-a-first-principle.",
+      "severity": "high",
+      "remediation": "Set a statement timeout (e.g., asyncpg timeout=5s) via SQLAlchemy execution_options or database configuration.",
+      "arithmetic": "Workers=4. Each ready request holds one worker and one DB connection. With no timeout, a DB latency of 30s keeps the worker blocked. Four concurrent hanging requests saturate all workers: worker_saturation=1.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "4 concurrent ready requests, DB latency=30s"
+      }
+    }
+  ]
+}

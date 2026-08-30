@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/reports.py",
+      "line": 10,
+      "layer": "data",
+      "symbol": "shipments_by_courier",
+      "mechanism": "06-finding-n-plus-1 – N+1 query pattern: one SELECT for shipments plus a per‑shipment SELECT for courier name, causing queries scaling with result set.",
+      "severity": "high",
+      "remediation": "Replace per‑shipment name_for calls with a single batch query (e.g., join Shipment to Courier or fetch all needed courier names in one IN query) to eliminate N+1 queries.",
+      "arithmetic": "queries = 1 (shipment list) + N (courier lookups); with N=40 shipments this yields 41 queries per request.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 41.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "40 shipments, 2 couriers"
+      }
+    }
+  ]
+}

@@ -3,5 +3,5 @@
     "data",
     "network"
   ],
-  "reasoning": "data: uses AsyncSession and queries the Order model; network: defines FastAPI endpoints and HTTP handling"
+  "reasoning": "Data specialist should review the SQLAlchemy session usage and Order model queries; Network specialist should review the FastAPI endpoint definitions and HTTP handling."
 }

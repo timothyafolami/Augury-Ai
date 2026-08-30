@@ -3,5 +3,5 @@
     "data",
     "security"
   ],
-  "reasoning": "data: defines the async engine and session handling for database access; security: builds the database URL from an environment variable, requiring review of credential handling and connection security."
+  "reasoning": "Data: defines the database engine and session factory used for data access. Security: handles database credentials from the environment and creates connections, which may have security implications."
 }

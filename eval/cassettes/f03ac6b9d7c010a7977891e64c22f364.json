@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "app/worker.py",
+      "line": 27,
+      "layer": "observability",
+      "symbol": "handle",
+      "mechanism": "Correlation IDs are generated per service and not propagated via transport, violating 03-correlation-ids; logs cannot be queried per request.",
+      "severity": "high",
+      "remediation": "Pass the incoming request's traceparent (or request_id) through to record_delivery and include it in logger calls, e.g., logger.info('recorded %s request_id=%s', result, event.get('request_id')). Ensure the ID is propagated across async boundaries and queued messages.",
+      "arithmetic": "No correlation identifier is extracted from the event or context; therefore a single request's logs cannot be assembled, making diagnosis impossible.",
+      "prediction": null
+    }
+  ]
+}

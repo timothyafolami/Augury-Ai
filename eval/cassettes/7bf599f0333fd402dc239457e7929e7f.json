@@ -1,0 +1,98 @@
+{
+  "findings": [
+    {
+      "path": "app/queue/inbox.py",
+      "line": 8,
+      "layer": "concurrency",
+      "symbol": "_pending",
+      "mechanism": "Unbounded asyncio.Queue allows unlimited pending events, leading to memory exhaustion under burst load.",
+      "severity": "high",
+      "remediation": "Set a maxsize on the queue, e.g., _pending = asyncio.Queue(maxsize=1000).",
+      "arithmetic": "Depth grows linearly with events; with 5000 events queued, depth = 5000 > safe limit.",
+      "prediction": {
+        "metric": "queue_depth",
+        "comparator": "at_least",
+        "value": 5000.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "no workers draining the queue"
+      }
+    },
+    {
+      "path": "app/handlers/webhook.py",
+      "line": 21,
+      "layer": "data",
+      "symbol": "record_delivery",
+      "mechanism": "Read‑modify‑write on shipment.delivery_count without locking can lose increments when multiple workers update the same row concurrently.",
+      "severity": "high",
+      "remediation": "Use an atomic UPDATE (e.g., UPDATE shipments SET delivery_count = delivery_count + 1 WHERE id = :id) or SELECT … FOR UPDATE to serialize updates.",
+      "arithmetic": "With 2 concurrent deliveries for the same shipment, one increment can be overwritten, so final delivery_count may be 1 instead of 2.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_most",
+        "value": 1.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "2 concurrent deliveries for the same shipment"
+      }
+    },
+    {
+      "path": "app/handlers/webhook.py",
+      "line": 9,
+      "layer": "data",
+      "symbol": "record_delivery",
+      "mechanism": "The endpoint does not deduplicate delivery_id, so posting the same delivery multiple times increments delivery_count each time.",
+      "severity": "medium",
+      "remediation": "Insert a DeliveryEvent row with a unique delivery_id and skip the increment if it already exists, making the operation idempotent.",
+      "arithmetic": "3 posts with the same delivery_id produce 3 increments; duplicate side‑effects = 3‑1 = 2.",
+      "prediction": {
+        "metric": "duplicate_side_effects",
+        "comparator": "at_least",
+        "value": 2.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "same delivery_id posted 3 times"
+      }
+    },
+    {
+      "path": "app/reports.py",
+      "line": 18,
+      "layer": "data",
+      "symbol": "shipments_by_courier",
+      "mechanism": "For each shipment the code performs a separate DB query to fetch the courier name, causing queries_per_request to scale with number of shipments.",
+      "severity": "medium",
+      "remediation": "Join shipments with couriers in a single query or batch‑load courier names to eliminate per‑row queries.",
+      "arithmetic": "1 query for shipments + 1 query per shipment; with 40 shipments total queries = 1 + 40 = 41.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 41.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "40 shipments report"
+      }
+    },
+    {
+      "path": "app/store/session.py",
+      "line": 9,
+      "layer": "concurrency",
+      "symbol": "engine",
+      "mechanism": "Engine is created with pool_size=10 and max_overflow=0, so more than 10 concurrent workers block waiting for a connection, increasing latency.",
+      "severity": "medium",
+      "remediation": "Increase pool_size or allow overflow, e.g., create_async_engine(..., pool_size=20, max_overflow=10).",
+      "arithmetic": "With 40 concurrent with_session calls and a pool of 10, at most 10 connections are active; the other 30 wait, causing pool_wait_ms to grow proportionally to wait time.",
+      "prediction": null
+    },
+    {
+      "path": "app/worker.py",
+      "line": 34,
+      "layer": "failure",
+      "symbol": "run",
+      "mechanism": "If record_delivery raises an exception, the while‑True loop exits, stopping the worker and leaving the inbox unprocessed.",
+      "severity": "medium",
+      "remediation": "Wrap the handle call in try/except inside the loop and continue on error, logging the failure.",
+      "arithmetic": "A single unhandled exception terminates the infinite loop, causing backlog growth.",
+      "prediction": null
+    }
+  ]
+}

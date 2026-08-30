@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/api/orders.py",
+      "line": 21,
+      "layer": "data",
+      "symbol": "list_orders",
+      "mechanism": "06-finding-n-plus-1 — N+1 queries are not detectable by reading code alone; the loop calling `serialize_order` per order issues a separate statement per order, scaling queries with result size.",
+      "severity": "medium",
+      "remediation": "Fetch all required order data in a single query (e.g., join line items) and pass the fully materialized objects to the serializer, or batch the serializer calls with a DataLoader‑style loader to eliminate per‑order queries.",
+      "arithmetic": "queries = 1 (list_for_customer) + N (serialize_order per order). For N=50 orders → queries = 1+50 = 51 queries per request.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 51.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "50 orders"
+      }
+    }
+  ]
+}

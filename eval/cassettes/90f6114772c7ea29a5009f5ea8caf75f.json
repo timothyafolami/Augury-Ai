@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 11,
+      "layer": "concurrency",
+      "symbol": "engine",
+      "mechanism": "connection pool size (5) is less than the number of uvicorn workers (8) and cannot accommodate concurrent DB requests, causing callers to wait for a free connection",
+      "severity": "high",
+      "remediation": "increase pool_size to at least 8 and/or set max_overflow>0 in create_async_engine",
+      "arithmetic": "capacity_per_worker = pool_size * (1000ms / avg_query_ms) = 5 * (1000/40) = 125 rps; with uvicorn workers=8, total capacity≈1000 rps; at request_rate>125 rps per worker, connections saturate and wait time appears",
+      "prediction": {
+        "metric": "pool_wait_ms",
+        "comparator": "at_least",
+        "value": 40.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "rate=200rps per worker"
+      }
+    }
+  ]
+}

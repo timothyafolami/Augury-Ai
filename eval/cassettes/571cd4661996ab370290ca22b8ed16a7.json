@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/api/orders.py",
+      "line": 13,
+      "layer": "network",
+      "symbol": "read_order",
+      "mechanism": "03-timeouts-as-a-first-principle — a database query without a timeout can block a worker indefinitely, turning a single slow upstream into full worker saturation (high severity).",
+      "severity": "high",
+      "remediation": "Add a statement timeout to the asyncpg engine (e.g., `command_timeout=5`) or wrap DB calls with `asyncio.wait_for` to bound latency, and configure a reasonable `pool_timeout` on the SQLAlchemy engine.",
+      "arithmetic": "workers=4 (uvicorn --workers 4). Each request holds one DB connection until the query returns. With no timeout, a 30 s DB latency blocks the worker. Saturation = blocked_workers / total_workers = 4/4 = 1.0 → full saturation.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "4 concurrent requests, DB latency 30s, no query timeout"
+      }
+    },
+    {
+      "path": "app/api/orders.py",
+      "line": 21,
+      "layer": "network",
+      "symbol": "list_orders",
+      "mechanism": "02-connection-pooling-and-pool-exhaustion — the default SQLAlchemy async pool size (5) exceeds the number of uvicorn workers (4), so the narrowest concurrency limiter is the worker count, capping active DB connections at 4 (medium severity).",
+      "severity": "medium",
+      "remediation": "Explicitly set the async engine pool size to match the worker count, e.g., `create_async_engine(..., pool_size=4)` to avoid unused connections and make the limit clear.",
+      "arithmetic": "workers=4, default pool_size=5 → effective concurrency = min(workers, pool_size) = 4. Thus active DB connections cannot exceed 4 under load.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_most",
+        "value": 4.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "4 concurrent requests"
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/payments.py",
+      "line": 15,
+      "layer": "concurrency",
+      "symbol": "charge",
+      "mechanism": "Retry loop causes request amplification when the gateway consistently fails, violating the assumption that retries are harmless and can overload the dependency (see 04-races-and-atomicity).",
+      "severity": "medium",
+      "remediation": "Set MAX_ATTEMPTS = 1 to eliminate retry amplification and prevent excess load on the payment gateway.",
+      "arithmetic": "With 20 concurrent charge calls and MAX_ATTEMPTS=3, each call may issue up to 3 HTTP requests. Total requests = 20 × 3 = 60, giving an amplification factor of 60/20 = 3×.",
+      "prediction": {
+        "metric": "retry_amplification",
+        "comparator": "at_least",
+        "value": 3.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "20 concurrent charges, gateway returns 503"
+      }
+    }
+  ]
+}

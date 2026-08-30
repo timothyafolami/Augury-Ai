@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/repositories/orders.py",
+      "line": 18,
+      "layer": "craft",
+      "symbol": "list_for_customer",
+      "mechanism": "03-errors-as-interface",
+      "severity": "high",
+      "remediation": "Remove the broad `except Exception` block and let the exception propagate (or return a dedicated error result) instead of returning an empty list, so callers can distinguish a DB failure from a legitimate empty result.",
+      "arithmetic": "The function catches any Exception, logs it, and returns [] → FastAPI serialises [] with HTTP 200. When the DB is down the caller receives a successful 200 response and assumes no orders exist, hiding the failure.",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "at_most",
+        "value": 299.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "database unreachable"
+      }
+    }
+  ]
+}

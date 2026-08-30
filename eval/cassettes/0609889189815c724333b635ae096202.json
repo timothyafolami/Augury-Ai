@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "app/store/session.py",
+      "line": 7,
+      "layer": "security",
+      "symbol": "DATABASE_URL",
+      "mechanism": "Hardcoded database credentials expose a secret in source code, violating the “Secrets in source” rule (see specification bullet on secrets).",
+      "severity": "high",
+      "remediation": "Remove the default credential string and require DATABASE_URL to be provided via environment without a fallback that contains credentials.",
+      "arithmetic": "N/A",
+      "prediction": null
+    }
+  ]
+}

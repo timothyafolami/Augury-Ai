@@ -1,0 +1,58 @@
+{
+  "findings": [
+    {
+      "path": "app/index/cache.py",
+      "line": 10,
+      "layer": "concurrency",
+      "symbol": "get",
+      "mechanism": "04-races-and-atomicity – increments of _hits/_misses are read‑modify‑write and not atomic under concurrent access, so cache hit/miss counters can lose updates.",
+      "severity": "medium",
+      "remediation": "Wrap updates to _hits and _misses in a threading.Lock (or use atomic counters) so each increment is performed under mutual exclusion.",
+      "arithmetic": "With N concurrent cache‑hits, each _hits += 1 may be interleaved with another thread, losing at most one increment per pair. In the worst case half the increments are lost, so observed hits ∈ [⌈N/2⌉, N].",
+      "prediction": {
+        "metric": "cache_hit_rate",
+        "comparator": "between",
+        "value": 0.5,
+        "upper": 1.0,
+        "unit": "x",
+        "condition": "100 concurrent get calls, all cache hits"
+      }
+    },
+    {
+      "path": "app/index/cache.py",
+      "line": 20,
+      "layer": "concurrency",
+      "symbol": "put",
+      "mechanism": "04-races-and-atomicity – concurrent writes to the shared _entries dict can corrupt the dictionary or overwrite entries, causing missing cache entries.",
+      "severity": "high",
+      "remediation": "Guard all accesses to _entries (get, put, clear) with a single threading.Lock or replace the dict with a thread‑safe mapping.",
+      "arithmetic": "With N concurrent distinct puts, each write can race with another, potentially losing up to half of the entries. Observed entry count after the writes ∈ [⌈N/2⌉, N].",
+      "prediction": {
+        "metric": "cache_hit_rate",
+        "comparator": "between",
+        "value": 0.5,
+        "upper": 1.0,
+        "unit": "x",
+        "condition": "50 concurrent put calls of distinct queries followed by 50 gets for those queries"
+      }
+    },
+    {
+      "path": "app/index/cache.py",
+      "line": 29,
+      "layer": "concurrency",
+      "symbol": "clear",
+      "mechanism": "04-races-and-atomicity – clear() mutates _entries and resets counters without synchronization; if it runs while get() is reading or writing, a request can miss a cached entry and trigger duplicate work.",
+      "severity": "medium",
+      "remediation": "Acquire the same lock used for get/put before clearing the cache, ensuring no concurrent reads or writes during clear.",
+      "arithmetic": "If clear runs concurrently with M get calls for the same key, at least one get may observe the cache as empty, causing an extra origin fetch. Hence duplicate side‑effects ≥ 1.",
+      "prediction": {
+        "metric": "duplicate_side_effects",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "clear invoked while 20 concurrent get calls for the same query"
+      }
+    }
+  ]
+}

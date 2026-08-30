@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/api/handlers.py",
+      "line": 14,
+      "layer": "security",
+      "symbol": "verify_token",
+      "mechanism": "The token verification always returns true because SHA‑256 always yields a 32‑byte digest, so the length check passes for any input. This defeats authentication, allowing any caller to obtain search results (reference 01-authn-authz-and-idor).",
+      "severity": "high",
+      "remediation": "Replace the custom verify_token with proper token validation (e.g., HMAC verification against a secret key or JWT signature check) and remove the length‑only check.",
+      "arithmetic": "SHA‑256 output length is fixed at 32 bytes. The loop hashes the input _ROUNDS times but never changes the digest size, so len(digest)==32 is always true regardless of the supplied token.",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "between",
+        "value": 200.0,
+        "upper": 399.0,
+        "unit": "count",
+        "condition": "token=\"invalid\""
+      }
+    },
+    {
+      "path": "app/api/handlers.py",
+      "line": 22,
+      "layer": "security",
+      "symbol": "search",
+      "mechanism": "The endpoint performs a deliberately expensive key‑stretching hash (60 000 SHA‑256 rounds) on every request without any rate‑limiting. With a single worker this caps throughput at roughly 83 req/s; higher request rates saturate the worker, causing denial‑of‑service (reference 01-authn-authz-and-idor).",
+      "severity": "medium",
+      "remediation": "Remove the unnecessary key‑stretching or replace it with a fast, constant‑time token verification and add rate‑limiting (e.g., 10 req/s per client).",
+      "arithmetic": "Assuming one SHA‑256 takes ~0.2 µs, 60 000 rounds ≈12 ms CPU time per request. One worker can handle ~1000 ms/12 ms ≈83 requests per second. At 100 rps the worker is fully occupied, yielding worker_saturation = 1.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "rate=100rps"
+      }
+    }
+  ]
+}

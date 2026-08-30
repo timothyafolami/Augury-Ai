@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 1,
+      "layer": "data",
+      "symbol": "engine",
+      "mechanism": "07-connection-pools — a pool is a queue, and sizing it is Little's Law, not intuition. With 8 workers and pool_size=5, max_overflow=0, the pool cannot serve all workers concurrently, causing queueing, increased latency, and worker saturation. (reference 07-connection-pools)",
+      "severity": "high",
+      "remediation": "Increase pool_size to at least the number of workers (e.g., set pool_size=8) or enable max_overflow to allow extra connections, matching worker count.",
+      "arithmetic": "Workers=8, pool_size=5, max_overflow=0. Max concurrent connections = pool_size + max_overflow =5. Under 8 concurrent requests, only 5 connections can be active, so active_connections ≤5 and worker_saturation =5/8=0.625.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_most",
+        "value": 5.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "8 concurrent workers"
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/payments.py",
+      "line": 15,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "Creates a new httpx.AsyncClient for every call, so each request incurs a cold TLS/TCP/DNS handshake and uses a pool of size 1 that is not shared across workers. This violates **01-what-a-connection-actually-costs** (cold connection costs ~4 × RTT) and **02-connection-pooling-and-pool-exhaustion** (effective pool size = 1 per worker, narrowing concurrency to workers × threads × pool = 4). When the upstream hangs, each request blocks a worker for up to 31 s (3 × 10 s timeout + 2 × 0.5 s sleep), saturating all workers as described in **03-timeouts-as-a-first-principle**.",
+      "severity": "high",
+      "remediation": "Instantiate a single httpx.AsyncClient at module load time (e.g., `client = httpx.AsyncClient(timeout=10.0, limits=httpx.Limits(max_keepalive_connections=20, max_connections=20))` and reuse it in `charge` instead of creating a new client per call.",
+      "arithmetic": "Pool size per request = 1 (client created per call). Workers = 4, threads = 1 → concurrency ceiling = 4 × 1 × 1 = 4. With a cold connection the latency adds ~3 RTT. Assuming RTT R ≈ 30 ms, cold request latency ≈ 4 R = 120 ms (extra 90 ms). In a scenario with 4 concurrent calls to a non‑responding gateway, each call blocks for up to 3 × 10 s + 2 × 0.5 s = 31 s, so all 4 workers are blocked → worker_saturation = 1.0.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "4 concurrent `charge` calls to a gateway that accepts the TCP connection but never responds"
+      }
+    }
+  ]
+}

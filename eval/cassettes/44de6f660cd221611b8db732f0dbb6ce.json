@@ -3,5 +3,5 @@
     "network",
     "data"
   ],
-  "reasoning": "Network: defines FastAPI routes and HTTP responses; Data: uses repository functions and async DB session for loading and serializing orders."
+  "reasoning": "network: the file defines FastAPI routes and HTTP responses; data: it accesses the database via sessions, loads and lists orders, and serializes them."
 }

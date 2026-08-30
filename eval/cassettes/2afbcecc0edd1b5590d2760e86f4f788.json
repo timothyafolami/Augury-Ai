@@ -3,5 +3,5 @@
     "concurrency",
     "observability"
   ],
-  "reasoning": "Concurrency: async functions, infinite event loop, and shared inbox queue require review; Observability: logging of recorded deliveries should be examined."
+  "reasoning": "Concurrency: async functions, infinite loop, and async queue usage need review; Observability: logging of recorded deliveries should be examined."
 }

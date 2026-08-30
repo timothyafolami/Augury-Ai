@@ -3,5 +3,5 @@
     "data",
     "security"
   ],
-  "reasoning": "data: review the async engine and session setup for data access; security: review handling of DATABASE_URL and connection parameters for credential exposure."
+  "reasoning": "data: review the database engine configuration and session management; security: assess environment variable handling and connection security."
 }

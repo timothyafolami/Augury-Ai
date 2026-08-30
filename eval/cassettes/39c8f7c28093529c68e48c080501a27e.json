@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/shipping.py",
+      "line": 16,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "01-what-a-connection-actually-costs — a new AsyncClient per request forces a cold TLS connection each call, incurring DNS, TCP, and TLS round‑trips.",
+      "severity": "high",
+      "remediation": "Create a module‑level httpx.AsyncClient with a reasonable timeout (e.g., 5s) and reuse it across calls.",
+      "arithmetic": "Cold connection adds DNS+TCP+TLS round trips. Assuming RTT R=30 ms, warm request ≈R, cold ≈4R, extra latency ≈3R=90 ms, so p99 increases by ≥90 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 90.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "cold client per request"
+      }
+    },
+    {
+      "path": "app/clients/shipping.py",
+      "line": 16,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "03-timeouts-as-a-first-principle — timeout=None means the request can hang indefinitely, blocking the worker and its pool slot.",
+      "severity": "high",
+      "remediation": "Set a finite timeout on the AsyncClient (e.g., timeout=5.0) to bound request duration.",
+      "arithmetic": "4 workers, each blocked by a hanging quote call → blocked_workers/total_workers = 4/4 = 1.0 worker_saturation after 8 s.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "4 concurrent shipping quotes, upstream never answers, measured after 8 s"
+      }
+    }
+  ]
+}

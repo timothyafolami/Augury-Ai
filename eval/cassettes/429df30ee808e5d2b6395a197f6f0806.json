@@ -1,0 +1,73 @@
+{
+  "findings": [
+    {
+      "path": "app/index/cache.py",
+      "line": 1,
+      "layer": "data",
+      "symbol": "put",
+      "mechanism": "Cache stores every distinct query result forever, causing memory usage to grow linearly with query diversity.",
+      "severity": "high",
+      "remediation": "Add a size limit and eviction policy to the cache, removing oldest entries when limit exceeded.",
+      "arithmetic": "2000 queries * 5 results per query * ~1KB per result ≈ 10,000,000 bytes",
+      "prediction": {
+        "metric": "memory_bytes",
+        "comparator": "at_least",
+        "value": 10000000.0,
+        "upper": null,
+        "unit": "bytes",
+        "condition": "2000 distinct queries memoised, 5 results each"
+      }
+    },
+    {
+      "path": "app/api/handlers.py",
+      "line": 13,
+      "layer": "concurrency",
+      "symbol": "verify_token",
+      "mechanism": "CPU‑intensive token verification runs in the event loop of a single uvicorn worker, limiting throughput and causing request latency to grow when request rate exceeds the worker’s processing capacity.",
+      "severity": "high",
+      "remediation": "Move token verification to a thread pool or reduce _ROUNDS, and increase the number of uvicorn workers.",
+      "arithmetic": "Assume each verification takes ~20 ms; a single worker can handle ~50 req/s. At 50 req/s the queue length grows, leading to p99 latency > 1000 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 1000.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "rate=50rps with 1 worker and _ROUNDS=60000"
+      }
+    },
+    {
+      "path": "app/index/cache.py",
+      "line": 9,
+      "layer": "concurrency",
+      "symbol": "get",
+      "mechanism": "The global _entries dict is accessed from multiple async requests without synchronization, risking race conditions and corrupted cache state under concurrent access.",
+      "severity": "high",
+      "remediation": "Guard all accesses to _entries with a threading.Lock or replace with a thread‑safe cache implementation.",
+      "arithmetic": "Concurrent requests can interleave reads/writes; risk appears as soon as >1 request overlaps.",
+      "prediction": null
+    },
+    {
+      "path": "app/index/searcher.py",
+      "line": 12,
+      "layer": "data",
+      "symbol": "connect",
+      "mechanism": "Each request opens a new SQLite connection; SQLite allows only one writer at a time, so concurrent writes block readers, increasing latency and possibly causing timeouts.",
+      "severity": "medium",
+      "remediation": "Use a shared connection or a connection pool and enable WAL mode to allow concurrent reads.",
+      "arithmetic": "With N concurrent writers, readers wait up to the default 5 s timeout; latency grows proportionally to writer count.",
+      "prediction": null
+    },
+    {
+      "path": "app/index/searcher.py",
+      "line": 15,
+      "layer": "data",
+      "symbol": "search",
+      "mechanism": "Search loads all document rows and filters in Python, causing query cost to scale with total document count, leading to latency spikes as the dataset grows.",
+      "severity": "medium",
+      "remediation": "Add an index on terms and perform filtered query in SQL instead of scanning all rows.",
+      "arithmetic": "If documents = D, time ≈ O(D); with D=10000, expected latency >200 ms.",
+      "prediction": null
+    }
+  ]
+}

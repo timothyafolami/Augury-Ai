@@ -1,0 +1,105 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 12,
+      "layer": "concurrency",
+      "symbol": "engine",
+      "mechanism": "The async engine pool (size 20 + max_overflow 10) can be exhausted when many requests run concurrently, causing connection wait or failure.",
+      "severity": "high",
+      "remediation": "increase max_overflow or reduce concurrent request handling, or configure a connection pool limit that matches worker concurrency",
+      "arithmetic": "4 workers * 10 concurrent requests per worker = 40 needed > pool capacity 30",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 30.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "rate=100rps"
+      }
+    },
+    {
+      "path": "app/clients/payments.py",
+      "line": 13,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "Retries are performed without backoff or jitter, so a failing gateway amplifies load (3 attempts per request).",
+      "severity": "high",
+      "remediation": "add exponential backoff with jitter and limit retry attempts",
+      "arithmetic": "20 concurrent charges * 3 attempts = 60 requests to gateway vs 20 original",
+      "prediction": {
+        "metric": "retry_amplification",
+        "comparator": "at_least",
+        "value": 3.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "gateway returns 503 to all attempts"
+      }
+    },
+    {
+      "path": "app/clients/shipping.py",
+      "line": 9,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "The client uses an infinite timeout, so a slow or stalled provider blocks the worker indefinitely, leading to full worker saturation.",
+      "severity": "high",
+      "remediation": "set a reasonable timeout (e.g., 5s) and handle timeout errors gracefully",
+      "arithmetic": "1 blocked request occupies a worker; with 4 workers all can be blocked => saturation 1 (100%)",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "share",
+        "condition": "provider stalls >8s with 4 workers"
+      }
+    },
+    {
+      "path": "app/services/wallet.py",
+      "line": 13,
+      "layer": "data",
+      "symbol": "debit",
+      "mechanism": "Read‑modify‑write on the wallet balance is done without a lock or SELECT FOR UPDATE, so concurrent debits can overspend the balance.",
+      "severity": "high",
+      "remediation": "perform the balance check and update inside a SELECT FOR UPDATE or use a SERIALIZABLE transaction",
+      "arithmetic": "10 concurrent debits of 10 each from a 100 balance could allow an extra 10 to be deducted, yielding -10",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_most",
+        "value": -10.0,
+        "upper": null,
+        "unit": "currency",
+        "condition": "10 concurrent debits of 10 each from 100 balance"
+      }
+    },
+    {
+      "path": "app/repositories/orders.py",
+      "line": 13,
+      "layer": "failure",
+      "symbol": "list_for_customer",
+      "mechanism": "Catches all exceptions and returns an empty list, silently masking database errors and causing data loss for callers.",
+      "severity": "medium",
+      "remediation": "log the error and re‑raise or return an appropriate HTTP error instead of an empty list",
+      "arithmetic": "N/A",
+      "prediction": null
+    },
+    {
+      "path": "app/api/orders.py",
+      "line": 22,
+      "layer": "data",
+      "symbol": "list_orders",
+      "mechanism": "N+1 query pattern: one query for orders then one query per order for line items, causing queries to grow with order count.",
+      "severity": "medium",
+      "remediation": "use a join or eager loading to fetch line items in a single query",
+      "arithmetic": "1 query for orders + 50 queries for line items = 51 queries per request",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 51.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "list_orders for customer with 50 orders each 3 items"
+      }
+    }
+  ]
+}

@@ -3,5 +3,5 @@
     "data",
     "network"
   ],
-  "reasoning": "data: the file uses an AsyncSession and executes a database query to check readiness; network: it defines FastAPI HTTP endpoints for health and readiness checks."
+  "reasoning": "data: the ready endpoint executes a database query; network: the file defines HTTP health and readiness routes."
 }
