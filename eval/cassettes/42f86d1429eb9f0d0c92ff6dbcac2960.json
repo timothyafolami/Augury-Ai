@@ -1,0 +1,26 @@
+{
+  "findings": [
+    {
+      "path": "app/repositories/orders.py",
+      "line": 13,
+      "layer": "observability",
+      "symbol": "load",
+      "mechanism": "Correlation identifiers are not propagated; logs cannot be linked to a single request, making diagnosis impossible (reference: correlation identifiers generated per service rather than propagated).",
+      "severity": "high",
+      "remediation": "Add a correlation_id argument to load, pass it through from request handling, and include it in logger calls.",
+      "arithmetic": "No correlation_id field exists; cannot construct a query to retrieve all logs for a request.",
+      "prediction": null
+    },
+    {
+      "path": "app/repositories/orders.py",
+      "line": 18,
+      "layer": "observability",
+      "symbol": "list_for_customer",
+      "mechanism": "Correlation identifiers are not propagated; logs cannot be linked to a single request, making diagnosis impossible (reference: correlation identifiers generated per service rather than propagated).",
+      "severity": "high",
+      "remediation": "Add a correlation_id argument to list_for_customer, propagate it, and include it in logger.exception call.",
+      "arithmetic": "No correlation_id field exists; cannot construct a query to retrieve all logs for a request.",
+      "prediction": null
+    }
+  ]
+}

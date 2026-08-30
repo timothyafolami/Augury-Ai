@@ -1,6 +1,0 @@
-{
-  "specialists": [
-    "data"
-  ],
-  "reasoning": "It creates and persists Order and LineItem records and handles monetary calculations, so the data specialist should review this file."
-}

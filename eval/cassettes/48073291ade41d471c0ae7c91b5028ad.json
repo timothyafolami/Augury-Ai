@@ -1,0 +1,51 @@
+{
+  "findings": [
+    {
+      "path": "app/queue/inbox.py",
+      "line": 8,
+      "layer": "concurrency",
+      "symbol": "_pending",
+      "mechanism": "Unbounded asyncio.Queue allows unlimited pending events, leading to memory exhaustion under burst traffic",
+      "severity": "high",
+      "remediation": "Initialize the queue with a maxsize, e.g., asyncio.Queue(maxsize=1000), and handle QueueFull errors appropriately",
+      "arithmetic": "5000 events are enqueued without draining, so queue depth becomes 5000",
+      "prediction": {
+        "metric": "queue_depth",
+        "comparator": "at_least",
+        "value": 5000.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "5000 events offered, no draining"
+      }
+    },
+    {
+      "path": "app/handlers/webhook.py",
+      "line": 20,
+      "layer": "data",
+      "symbol": "record_delivery",
+      "mechanism": "Read‑modify‑write on shipment.delivery_count is not atomic; concurrent workers can overwrite each other's increments causing lost updates",
+      "severity": "high",
+      "remediation": "Update delivery_count atomically in the database, e.g., use UPDATE shipments SET delivery_count = delivery_count + 1 WHERE id = :id RETURNING delivery_count, or lock the row with SELECT … FOR UPDATE",
+      "arithmetic": "Two concurrent workers may read the same count N, both write N+1, resulting in only +1 instead of +2",
+      "prediction": null
+    },
+    {
+      "path": "app/api.py",
+      "line": 11,
+      "layer": "distributed",
+      "symbol": "accept_delivery",
+      "mechanism": "Endpoint accepts delivery events without deduplication; the same delivery_id posted multiple times causes duplicate side effects",
+      "severity": "medium",
+      "remediation": "Add idempotency check before queuing, e.g., store processed delivery_id in a table with a unique constraint and skip already‑seen IDs",
+      "arithmetic": "Posting the same delivery_id three times results in three processed events",
+      "prediction": {
+        "metric": "duplicate_side_effects",
+        "comparator": "at_least",
+        "value": 3.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "same delivery_id posted 3 times"
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/handlers/webhook.py",
+      "line": 9,
+      "layer": "data",
+      "symbol": "record_delivery",
+      "mechanism": "Read‑modify‑write without SELECT FOR UPDATE (or atomic UPDATE) causes lost updates under READ COMMITTED isolation, as described in the reference material.",
+      "severity": "high",
+      "remediation": "Wrap the increment in a SELECT FOR UPDATE or replace the two statements with a single atomic UPDATE that increments delivery_count and sets status, or run the transaction at SERIALIZABLE isolation.",
+      "arithmetic": "Assume initial delivery_count=0 and N=5 concurrent writers. Each writer reads 0, computes 0+1=1, and commits. Because the reads are not locked, all writers see the same original value, so the final delivery_count is 1 (lost 4 increments).",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_most",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "5 concurrent writers"
+      }
+    }
+  ]
+}

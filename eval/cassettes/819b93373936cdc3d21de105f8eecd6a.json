@@ -1,0 +1,69 @@
+{
+  "findings": [
+    {
+      "path": "app/index/cache.py",
+      "line": 9,
+      "layer": "data",
+      "symbol": "_entries",
+      "mechanism": "The cache stores every distinct query forever; entries are never evicted, so memory usage grows linearly with the number of unique queries.",
+      "severity": "high",
+      "remediation": "Introduce an eviction policy (e.g., LRU) with a maximum number of entries or total size, and purge old entries periodically.",
+      "arithmetic": "Assume each cached result dict ≈200 bytes; 5 results per query ⇒ 1 000 bytes per entry. For 2 000 distinct queries: 2 000 × 1 000 ≈ 2 000 000 bytes (≈2 MB).",
+      "prediction": {
+        "metric": "memory_bytes",
+        "comparator": "at_least",
+        "value": 2000000.0,
+        "upper": null,
+        "unit": "bytes",
+        "condition": "2000 distinct queries memoised, 5 results each"
+      }
+    },
+    {
+      "path": "app/index/searcher.py",
+      "line": 20,
+      "layer": "data",
+      "symbol": "search",
+      "mechanism": "The search performs an N+1 query pattern: one query to list document ids, then a separate `by_id` query for each matching document, causing queries per request to scale with the number of matches.",
+      "severity": "medium",
+      "remediation": "Fetch all required columns (including body) in a single SQL statement or join the tables, eliminating the per‑row `by_id` call.",
+      "arithmetic": "For a cold search with 40 matching documents: 1 initial SELECT + 40 `by_id` calls = 41 queries per request.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 41.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "one cold search over 40 matching documents"
+      }
+    },
+    {
+      "path": "app/api/handlers.py",
+      "line": 15,
+      "layer": "concurrency",
+      "symbol": "verify_token",
+      "mechanism": "Token verification runs 60 000 SHA‑256 rounds synchronously, blocking the event loop. With a single worker this caps throughput to roughly 28 rps, so at higher request rates latency spikes dramatically.",
+      "severity": "high",
+      "remediation": "Reduce the number of rounds, move verification to a thread pool, or use an async‑friendly password‑hashing library.",
+      "arithmetic": "Assume each SHA‑256 round ≈0.5 µs → 60 000 × 0.5 µs ≈ 30 ms. Adding overhead ≈5 ms gives ~35 ms per request. Max sustainable rps ≈ 1000 ms / 35 ms ≈ 28 rps. At 250 rps the 99th‑percentile latency exceeds 1000 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 1000.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "rate=250rps"
+      }
+    },
+    {
+      "path": "app/index/cache.py",
+      "line": 12,
+      "layer": "concurrency",
+      "symbol": "cache.put",
+      "mechanism": "Cache reads and writes access a shared mutable dictionary without any synchronization; under concurrent requests this can lead to race conditions and inconsistent cache state.",
+      "severity": "medium",
+      "remediation": "Guard all accesses to `_entries`, `_hits`, and `_misses` with a threading.Lock (or use a thread‑safe cache implementation).",
+      "arithmetic": "No numeric threshold can be derived; the risk is qualitative.",
+      "prediction": null
+    }
+  ]
+}

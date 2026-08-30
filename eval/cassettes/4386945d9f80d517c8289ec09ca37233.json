@@ -1,0 +1,94 @@
+{
+  "findings": [
+    {
+      "path": "app/services/wallet.py",
+      "line": 15,
+      "layer": "concurrency",
+      "symbol": "debit",
+      "mechanism": "Read‑modify‑write on wallet balance without locking allows lost updates when multiple debits run concurrently.",
+      "severity": "high",
+      "remediation": "Use SELECT … FOR UPDATE (or an atomic UPDATE with a balance>=amount check) inside a transaction so the balance check and update are performed atomically.",
+      "arithmetic": "10 concurrent debits of 10.00 each on a wallet starting at 100.00 could each read 100.00, pass the check, and only one write wins, leaving a balance of 90.00 → final_balance ≥10.00.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_least",
+        "value": 10.0,
+        "upper": null,
+        "unit": "USD",
+        "condition": "10 concurrent debits of 10.00 each on a wallet starting at 100.00"
+      }
+    },
+    {
+      "path": "app/clients/shipping.py",
+      "line": 9,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "httpx.AsyncClient is created with timeout=None, so a slow or hung shipping provider can block the coroutine indefinitely, tying up a worker.",
+      "severity": "high",
+      "remediation": "Set a reasonable timeout (e.g., timeout=5.0) on the AsyncClient call and handle httpx.TimeoutException.",
+      "arithmetic": "4 workers, each blocked by a hanging quote → blocked_workers/total_workers = 4/4 = 1.0 → worker_saturation = 1.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "ratio",
+        "condition": "4 concurrent shipping quotes against a provider that never answers, measured after 8 seconds"
+      }
+    },
+    {
+      "path": "app/clients/payments.py",
+      "line": 9,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "Retries are performed with a fixed short sleep and no back‑off, so when the gateway returns 503 each request can generate up to three downstream calls, amplifying load.",
+      "severity": "medium",
+      "remediation": "Add exponential back‑off with jitter and limit total attempts, or use a circuit‑breaker to stop retrying after the first failure.",
+      "arithmetic": "MAX_ATTEMPTS=3 → each client request can cause up to 3 calls to the gateway, so retry_amplification ≤3.",
+      "prediction": {
+        "metric": "retry_amplification",
+        "comparator": "at_least",
+        "value": 3.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "20 concurrent charges against a gateway returning 503 to everything"
+      }
+    },
+    {
+      "path": "app/repositories/orders.py",
+      "line": 13,
+      "layer": "failure",
+      "symbol": "list_for_customer",
+      "mechanism": "Catches any Exception, logs it and returns an empty list, turning a database outage into a successful 200 response with no orders.",
+      "severity": "medium",
+      "remediation": "Remove the broad except block; let the exception propagate so the endpoint returns a 5xx error, or raise an HTTPException with appropriate status.",
+      "arithmetic": "When the DB is unreachable the repository returns [], the API returns [], resulting in HTTP 200 instead of an error.",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "at_most",
+        "value": 200.0,
+        "upper": null,
+        "unit": "code",
+        "condition": "orders listing while the database is unreachable"
+      }
+    },
+    {
+      "path": "app/api/orders.py",
+      "line": 13,
+      "layer": "data",
+      "symbol": "list_orders",
+      "mechanism": "For each order returned, serialize_order issues a separate SELECT for line items, causing N+1 queries that grow with the number of orders.",
+      "severity": "medium",
+      "remediation": "Fetch line items in the same query (e.g., join or selectinload) so only two queries are executed regardless of order count.",
+      "arithmetic": "1 query for orders + 1 query per order. For 50 orders → 1 + 50 = 51 queries per request.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 51.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "GET /orders for a customer with 50 orders (3 line items each)"
+      }
+    }
+  ]
+}

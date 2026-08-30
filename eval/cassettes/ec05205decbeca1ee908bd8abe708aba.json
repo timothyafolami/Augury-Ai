@@ -1,0 +1,58 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/payments.py",
+      "line": 24,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "A new httpx.AsyncClient is instantiated for every call, so each request incurs a TCP handshake, TLS handshake and DNS resolution instead of reusing an existing keep‑alive connection. This adds connection‑establishment latency and prevents connection pooling from being effective (Reference: connection establishment, pooling).",
+      "severity": "high",
+      "remediation": "Create a single shared httpx.AsyncClient (e.g., as a module‑level variable) and reuse it for all charge calls, enabling keep‑alive and connection pooling.",
+      "arithmetic": "Typical LAN RTT≈20 ms, TCP handshake≈20 ms, TLS handshake≈30 ms, DNS lookup≈5 ms → total added latency≈75 ms per request. The 99th‑percentile latency therefore increases by at least 75 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 75.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "normal network conditions with TCP RTT≈20 ms and TLS handshake≈30 ms"
+      }
+    },
+    {
+      "path": "app/clients/payments.py",
+      "line": 24,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "The client uses a fixed 10 s timeout and retries up to three times. If the upstream gateway hangs, each request can block a worker for up to 30 s, saturating all workers (4 workers from uvicorn). This matches the “outbound calls with no timeout or longer than caller’s deadline” pattern (Reference: timeouts, worker saturation).",
+      "severity": "high",
+      "remediation": "Reduce the request timeout to a value lower than the service’s overall deadline (e.g., 2 s) and limit retries or make them respect the remaining deadline.",
+      "arithmetic": "workers=4, each request blocks for timeout*attempts=10 s*3=30 s → all 4 workers can be blocked simultaneously → worker_saturation=1 (100 %).",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "4 concurrent charge calls to an unresponsive gateway"
+      }
+    },
+    {
+      "path": "app/clients/payments.py",
+      "line": 24,
+      "layer": "network",
+      "symbol": "charge",
+      "mechanism": "Because a new AsyncClient is created per call, DNS resolution is performed on every request and the result is not cached across calls, so a changed address is never picked up until the next client creation (Reference: DNS caching).",
+      "severity": "medium",
+      "remediation": "Reuse a long‑lived AsyncClient so that its internal DNS cache is reused, or configure a custom resolver with caching.",
+      "arithmetic": "Assuming a DNS lookup takes ~5 ms, each request incurs this extra latency; over 1000 req/s this adds ≈5 s of cumulative latency, raising p99 by at least 5 ms.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 5.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "steady request rate with DNS lookup cost ≈5 ms per request"
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "specialists": [
-    "data",
-    "network"
+    "network",
+    "data"
   ],
-  "reasoning": "data: the file accesses the database via AsyncSession and calls repository functions to load and list orders; network: it defines FastAPI endpoint routes and HTTP responses."
+  "reasoning": "Network: defines FastAPI routes and HTTP responses; Data: uses repository functions and async DB session for loading and serializing orders."
 }

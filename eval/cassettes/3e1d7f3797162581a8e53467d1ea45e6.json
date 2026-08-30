@@ -1,6 +1,0 @@
-{
-  "specialists": [
-    "data"
-  ],
-  "reasoning": "Defines a SQLAlchemy Customer model with mapped columns, which is relevant for the data specialist to review."
-}

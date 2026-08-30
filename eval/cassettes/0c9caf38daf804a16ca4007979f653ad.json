@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 11,
+      "layer": "data",
+      "symbol": "engine",
+      "mechanism": "Pool size is smaller than the number of workers, causing connection contention and worker saturation. This violates the guideline that pool size must match the real concurrency ceiling (worker count times threads).",
+      "severity": "high",
+      "remediation": "Increase pool_size to at least 8 (the number of workers) or enable max_overflow to allow extra connections, e.g., pool_size=8, max_overflow=0.",
+      "arithmetic": "workers=8, pool_size=5 => max concurrent connections=5, blocked workers=8-5=3, worker_saturation=3/8=0.375.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 0.375,
+        "upper": null,
+        "unit": "ratio",
+        "condition": "8 concurrent requests"
+      }
+    }
+  ]
+}

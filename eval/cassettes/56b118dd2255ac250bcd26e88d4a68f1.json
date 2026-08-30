@@ -1,6 +1,0 @@
-{
-  "specialists": [
-    "data"
-  ],
-  "reasoning": "Defines the Wallet SQLAlchemy model with database columns, so the data specialist should review it."
-}

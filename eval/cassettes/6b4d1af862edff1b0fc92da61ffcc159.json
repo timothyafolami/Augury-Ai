@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/services/checkout.py",
+      "line": 26,
+      "layer": "data",
+      "symbol": "place_order",
+      "mechanism": "Read‑modify‑write on the wallet balance is performed in wallet.debit without SELECT FOR UPDATE, atomic UPDATE, or SERIALIZABLE isolation. Under READ COMMITTED concurrent writers can lose updates, leaving the balance higher than expected (lost‑update anomaly).",
+      "severity": "high",
+      "remediation": "Change wallet.debit to perform an atomic UPDATE (e.g. UPDATE wallet SET balance = balance - :amount WHERE customer_id = :id) or acquire a row lock with SELECT … FOR UPDATE before modifying the balance, or run the transaction at SERIALIZABLE isolation.",
+      "arithmetic": "Initial balance = 100.00. Ten concurrent debits of 10.00 each. Without proper locking only one debit persists, so final_balance = 100 - 10 = 90. Correct locking would yield 0. The lost‑update scenario therefore yields a lower bound of 90 on the final balance.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_least",
+        "value": 90.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "wallet holds 100.00, 10 concurrent debits of 10.00 each"
+      }
+    },
+    {
+      "path": "app/services/checkout.py",
+      "line": 26,
+      "layer": "data",
+      "symbol": "place_order",
+      "mechanism": "A database transaction is opened by wallet.debit and kept open while awaiting the external shipping.quote network call. This holds a DB connection for the duration of the network latency, reducing pool availability and potentially saturating workers.",
+      "severity": "medium",
+      "remediation": "Move the shipping.quote call before any DB operation, or commit/rollback the session before awaiting the network call, or use a separate short‑lived session for the debit after the quote is obtained.",
+      "arithmetic": "Workers = 4 (uvicorn --workers 4). Each request opens one DB connection in wallet.debit and then awaits shipping.quote. With 4 concurrent requests all workers block, so active_connections = 4 and worker_saturation = 1 (100 % of workers blocked).",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "4 concurrent shipping.quote calls"
+      }
+    }
+  ]
+}

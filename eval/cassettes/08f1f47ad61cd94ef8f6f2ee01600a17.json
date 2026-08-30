@@ -1,6 +1,0 @@
-{
-  "specialists": [
-    "data"
-  ],
-  "reasoning": "The file performs a database query to retrieve a courier name, which is data-layer logic."
-}

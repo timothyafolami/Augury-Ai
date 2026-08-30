@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 11,
+      "layer": "concurrency",
+      "symbol": "engine",
+      "mechanism": "Database connection pool size (5) is less than the number of uvicorn workers (8), causing connection contention and request latency under load.",
+      "severity": "high",
+      "remediation": "Set pool_size to at least 8 (or higher) in create_async_engine, or allow max_overflow > 0.",
+      "arithmetic": "workers=8 (Dockerfile) - pool_size=5 => 3 workers may block; saturation = 3/8 = 0.375.",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 0.375,
+        "upper": null,
+        "unit": "x",
+        "condition": "workers=8, pool_size=5"
+      }
+    }
+  ]
+}

@@ -1,6 +1,0 @@
-{
-  "specialists": [
-    "data"
-  ],
-  "reasoning": "The file performs database queries and updates wallet balances using SQLAlchemy async sessions, which falls under the data specialist's domain."
-}

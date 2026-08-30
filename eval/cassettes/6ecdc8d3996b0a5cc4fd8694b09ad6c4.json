@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 8,
+      "layer": "security",
+      "symbol": "DATABASE_URL",
+      "mechanism": "Secret credentials are hard‑coded as a default value, exposing the database password in source code, which violates the rule against secrets in source.",
+      "severity": "high",
+      "remediation": "Remove the hard‑coded password from the default DATABASE_URL and require the full URL to be supplied via environment without containing credentials.",
+      "arithmetic": "N/A – the issue is the presence of a secret, not a measurable threshold.",
+      "prediction": null
+    }
+  ]
+}

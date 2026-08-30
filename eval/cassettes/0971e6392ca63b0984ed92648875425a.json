@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/reports.py",
+      "line": 10,
+      "layer": "data",
+      "symbol": "shipments_by_courier",
+      "mechanism": "Queries issued inside a loop cause the count to scale with the result set (N+1 query pattern). The function selects all shipments then calls `await name_for` for each shipment, issuing an extra query per row.",
+      "severity": "medium",
+      "remediation": "Replace the per‑shipment `await name_for(session, shipment.courier_id)` with a single query that joins `Shipment` to the courier table (or batch‑load courier names) so only one database round‑trip is needed.",
+      "arithmetic": "1 base SELECT for shipments + N calls to name_for; for 40 shipments N=40 → 41 total queries per request.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 41.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "40 shipments"
+      }
+    }
+  ]
+}

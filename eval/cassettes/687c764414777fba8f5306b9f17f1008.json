@@ -1,6 +1,0 @@
-{
-  "specialists": [
-    "data"
-  ],
-  "reasoning": "Defines the async SQLAlchemy engine, session maker, and session provider, which are core data-layer concerns."
-}

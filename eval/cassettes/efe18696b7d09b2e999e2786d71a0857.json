@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/clients/shipping.py",
+      "line": 16,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "No timeout on outbound HTTP call allows a request to block a worker indefinitely, violating the reference that timeouts must be bounded to avoid worker saturation.",
+      "severity": "high",
+      "remediation": "Set a finite timeout on httpx.AsyncClient, e.g., timeout=5.0 seconds, and handle timeout exceptions.",
+      "arithmetic": "workers=4; each concurrent quote holds a worker; saturation=workers_blocked/workers=4/4=1",
+      "prediction": {
+        "metric": "worker_saturation",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "4 concurrent shipping quotes against a provider that never answers, measured after 8 seconds"
+      }
+    },
+    {
+      "path": "app/clients/shipping.py",
+      "line": 16,
+      "layer": "network",
+      "symbol": "quote",
+      "mechanism": "A new httpx.AsyncClient is created per request, preventing connection reuse and incurring TCP/TLS handshake latency each time, as described in the reference about per‑request client construction.",
+      "severity": "medium",
+      "remediation": "Instantiate a single httpx.AsyncClient at module load and reuse it for all quote calls.",
+      "arithmetic": "tls_handshake≈100ms + tcp_handshake≈50ms =150ms added latency per request",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 150.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "single shipping quote request using a fresh client"
+      }
+    }
+  ]
+}

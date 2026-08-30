@@ -1,7 +1,7 @@
 {
   "specialists": [
-    "02-network",
-    "06-observability"
+    "network",
+    "observability"
   ],
-  "reasoning": "Network: the FastAPI app and router inclusion define HTTP endpoints; Observability: logging configuration is set up."
+  "reasoning": "Network: the FastAPI app definition and router inclusion expose HTTP endpoints that the network layer must review. Observability: the logging.basicConfig call configures logging for the service, which the observability specialist should examine."
 }

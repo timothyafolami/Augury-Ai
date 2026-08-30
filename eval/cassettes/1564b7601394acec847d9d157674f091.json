@@ -1,6 +1,0 @@
-{
-  "specialists": [
-    "network"
-  ],
-  "reasoning": "The file defines a FastAPI HTTP endpoint that handles delivery events, which is relevant to the network layer."
-}

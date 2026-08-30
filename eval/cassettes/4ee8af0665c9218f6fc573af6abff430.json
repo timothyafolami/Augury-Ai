@@ -1,7 +1,7 @@
 {
   "specialists": [
-    "network",
-    "data"
+    "data",
+    "network"
   ],
-  "reasoning": "Network: defines /health and /ready HTTP endpoints; Data: uses a database session to query readiness."
+  "reasoning": "data: the file uses an AsyncSession and executes a database query to check readiness; network: it defines FastAPI HTTP endpoints for health and readiness checks."
 }

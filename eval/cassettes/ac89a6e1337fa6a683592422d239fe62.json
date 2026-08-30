@@ -1,6 +1,0 @@
-{
-  "specialists": [
-    "data"
-  ],
-  "reasoning": "The file performs database queries and transforms ORM models into response payloads, which falls under the data specialist's domain."
-}

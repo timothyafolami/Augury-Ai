@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "path": "app/services/wallet.py",
+      "line": 15,
+      "layer": "data",
+      "symbol": "debit",
+      "mechanism": "Read‑modify‑write without SELECT FOR UPDATE or atomic UPDATE leads to lost updates under READ COMMITTED isolation (Reference: Correctness and cost at the database boundary).",
+      "severity": "high",
+      "remediation": "Use SELECT … FOR UPDATE on the wallet row or replace the read‑modify‑write with an atomic UPDATE statement that increments/decrements the balance in a single statement, then commit.",
+      "arithmetic": "Initial balance=100.00, N=10 concurrent debits of 10.00 each. Each transaction reads 100, subtracts 10 and writes 90; the last commit wins, so final_balance=90.00 (≥90.00) instead of 0.00.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_least",
+        "value": 90.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "10 concurrent debits of 10.00 on initial balance 100.00"
+      }
+    },
+    {
+      "path": "app/services/wallet.py",
+      "line": 31,
+      "layer": "data",
+      "symbol": "credit",
+      "mechanism": "Read‑modify‑write without SELECT FOR UPDATE or atomic UPDATE leads to lost updates under READ COMMITTED isolation (Reference: Correctness and cost at the database boundary).",
+      "severity": "high",
+      "remediation": "Use SELECT … FOR UPDATE on the wallet row or replace the read‑modify‑write with an atomic UPDATE statement that increments the balance in a single statement, then commit.",
+      "arithmetic": "Initial balance=100.00, N=10 concurrent credits of 10.00 each. Each transaction reads 100, adds 10 and writes 110; the last commit wins, so final_balance=110.00 (≥110.00) instead of 200.00.",
+      "prediction": {
+        "metric": "final_balance",
+        "comparator": "at_least",
+        "value": 110.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "10 concurrent credits of 10.00 on initial balance 100.00"
+      }
+    }
+  ]
+}
