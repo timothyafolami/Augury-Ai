@@ -1,0 +1,37 @@
+{
+  "findings": [
+    {
+      "path": "cmd/server/main.go",
+      "line": 15,
+      "layer": "observability",
+      "symbol": "api.Register",
+      "mechanism": "Correlation IDs are generated per service but never propagated via the transport (reference 03-correlation-ids). Without extracting and forwarding the `traceparent` header, logs cannot be queried per request, making incidents archaeological.",
+      "severity": "high",
+      "remediation": "Add middleware that extracts `traceparent` from incoming requests, injects it into the context, and ensures all downstream logs and spans include the same ID.",
+      "arithmetic": "No code reads or writes the `traceparent` header; therefore a single request's logs cannot be retrieved with one query. This violates the correlation‑id test.",
+      "prediction": null
+    },
+    {
+      "path": "cmd/server/main.go",
+      "line": 17,
+      "layer": "observability",
+      "symbol": "http.ListenAndServe",
+      "mechanism": "The service lacks a health‑check endpoint that validates dependencies (reference 05-red-and-use). Without such a check, a failing database or downstream service will not be reflected in readiness probes, leading to false‑positive health status.",
+      "severity": "medium",
+      "remediation": "Implement a `/healthz` HTTP handler that pings the database (e.g., `db.PingContext`) and returns 200 only if the dependency is healthy.",
+      "arithmetic": "No route is registered for health checks; therefore any external liveness probe will only test TCP connectivity, not actual service health.",
+      "prediction": null
+    },
+    {
+      "path": "cmd/server/main.go",
+      "line": 17,
+      "layer": "observability",
+      "symbol": "http.ListenAndServe",
+      "mechanism": "No request‑latency metric is recorded, so `http_req_duration_p99` cannot be measured end‑to‑end (reference 02-real-p99). Any reported p99 would have to be derived from incomplete data such as server‑side only timing or bucketed averages, which are known to be inaccurate.",
+      "severity": "high",
+      "remediation": "Wrap the handler with OpenTelemetry HTTP middleware that records `http.server.duration` and exports `http_req_duration_p99` as a histogram metric.",
+      "arithmetic": "The code calls `ListenAndServe` directly without instrumentation; therefore no span or metric for request duration exists, making true p99 unobservable.",
+      "prediction": null
+    }
+  ]
+}
