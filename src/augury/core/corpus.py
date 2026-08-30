@@ -72,20 +72,28 @@ def lab_root(explicit: Path | None = None) -> Path | None:
 def corpus_for(lab_layer: str, *, lab: Path | None = None) -> str:
     """The mechanisms this layer teaches, each with the topic it came from.
 
-    The lab when there is one, and the committed extract otherwise, which is
-    the ordinary case: the lab is a separate repository and most readers will
-    not have it. An explicit path that is not a directory falls through to the
-    extract rather than returning nothing, because a mistyped lab should cost
-    the caller its override and not the specialist its corpus.
+    The committed extract, unless a caller names a lab explicitly.
+
+    The lab used to win whenever a checkout happened to sit beside the
+    repository. The two texts agree today, so nothing showed; the day the lab
+    is edited, prompts recorded on a machine that has it stop replaying on
+    every machine that does not, and the cassette set silently becomes
+    unusable by everyone but its author. Preferring the shipped copy means
+    one commit builds one prompt everywhere. `extract_from` names the lab and
+    still reads it, which is how the shipped copy is regenerated.
+
+    An explicit path that is not a directory falls through to the extract
+    rather than returning nothing, because a mistyped lab should cost the
+    caller its override and not the specialist its corpus.
 
     Empty when neither is present, and empty rather than a sentence about being
     empty: a corpus explaining its own absence is still something the
     specialist reads on every call.
     """
-    root = lab_root(lab)
+    root = lab_root(lab) if lab is not None else None
     if root is None:
-        # No lab, or a path that is not one. The extract is what ships, so
-        # this is the ordinary case rather than the fallback.
+        # The shipped copy, whether or not a lab is sitting beside this
+        # checkout. This is the path every run takes unless one is named.
         shipped = EXTRACT / f"{lab_layer}.md"
         return shipped.read_text(encoding="utf-8").strip() if shipped.is_file() else ""
 
