@@ -101,21 +101,34 @@ export default function App() {
     return { active: seen, counts: found };
   }, [run.steps]);
 
-  const context = useMemo(
-    () => [
+  const context = useMemo(() => {
+    const entries = [
       { label: "modules mapped", value: String(discovery?.modules.length ?? 0) },
       { label: "modules read", value: `${run.read}/${run.total || discovery?.modules.length || 0}` },
-      { label: "findings held", value: String(report?.findings.length ?? countFindings(run.steps)) },
+      { label: "findings held", value: String(findingCount(report, run.findings)) },
       { label: "spent", value: `$${run.usd.toFixed(4)}` },
-    ],
-    [discovery, run, report],
-  );
+    ];
+    // Whatever the run itself counted. Reported rather than derived, so a
+    // cache hit on screen is a cache hit the engine recorded.
+    for (const [what, count] of Object.entries(run.context)) {
+      entries.push({ label: what, value: String(count) });
+    }
+    return entries;
+  }, [discovery, run, report]);
 
+  // The last few things the run learned, so the panel moves while it works.
   const recent = useMemo(
     () =>
       run.steps
-        .filter((step) => step.kind === "module" && (step.findings ?? 0) > 0)
-        .map((step) => `${step.findings} in ${step.path?.split("/").pop()}`)
+        .filter((step) => step.event === "finding.detected" || step.event === "research.finished")
+        .map((step) => {
+          const data = step.data ?? {};
+          if (step.event === "research.finished") {
+            return `${data.found ? "found" : "nothing on"} ${String(data.subject ?? "")}`;
+          }
+          const found = (data.finding ?? {}) as { symbol?: string; path?: string };
+          return `${found.symbol ?? "finding"} in ${found.path?.split("/").pop() ?? ""}`;
+        })
         .slice(-6),
     [run.steps],
   );
@@ -301,9 +314,8 @@ function Blank({ children }: { children: React.ReactNode }) {
   return <p className="py-8 text-center font-mono text-[11px] text-mist/45">{children}</p>;
 }
 
-function countFindings(steps: { kind?: string; findings?: number }[]): number {
-  return steps.reduce(
-    (total, step) => (step.kind === "module" ? total + (step.findings ?? 0) : total),
-    0,
-  );
+/** What the panel should say is held: the report once it exists, and what has
+ *  arrived while it does not. */
+function findingCount(report: { findings: unknown[] } | null, live: unknown[]): number {
+  return report ? report.findings.length : live.length;
 }

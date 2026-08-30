@@ -10,6 +10,10 @@ interface RunState {
    *  Rendering only the finished report meant a minute of agents moving over
    *  an empty panel, which reads as a simulation of a review. */
   findings: Finding[];
+  /** What the run has accumulated, as the run itself reports it: cache hits,
+   *  misses, and anything else it chooses to count. Never computed here, so
+   *  the panel cannot show a number the engine did not produce. */
+  context: Record<string, number>;
   stages: Record<StageKey, StageState>;
   files: Record<string, FileState>;
   spans: { agent: string; startedAt: number; endedAt: number | null }[];
@@ -23,6 +27,7 @@ interface RunState {
 const EMPTY: RunState = {
   steps: [],
   findings: [],
+  context: {},
   stages: { survey: "waiting", map: "waiting", schema: "waiting", specialists: "waiting", report: "waiting" },
   files: {},
   spans: [],
@@ -171,6 +176,10 @@ export function fold(prior: RunState, step: Step): RunState {
     // while the tree lights up makes a working run look like a mock of one.
     next.read = Object.keys({ ...next.files }).length;
   }
+  if (step.event === "context.updated" && typeof data.what === "string") {
+    next.context = { ...prior.context, [data.what]: Number(data.count ?? 0) };
+  }
+
   if (step.event === "finding.detected") {
     const found = (data.finding ?? {}) as Finding;
     if (found.path) next.files = { ...next.files, [found.path]: "flagged" };
