@@ -12,6 +12,9 @@ repository it sampled is worse than no report at all.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any
+
 from augury.core.findings import Finding, Report
 from augury.core.schema.model import SchemaFinding
 from augury.core.schemas import Comparator, Prediction
@@ -29,6 +32,8 @@ def write_report(
     report: Report,
     schema: tuple[SchemaFinding, ...],
     dependencies: tuple[SchemaFinding, ...],
+    deployment: tuple[SchemaFinding, ...] = (),
+    synthesis: Sequence[Any] = (),
     modules: int,
     unreachable: int,
     reading: dict[str, tuple[str, ...]] | None = None,
@@ -38,6 +43,13 @@ def write_report(
         _heading(name),
         _what_it_is(survey, modules, unreachable),
         _coverage(report, modules),
+        # First of the findings, because they are about the thing that runs
+        # rather than the thing that was written, and on a real backend they
+        # outnumber the code findings by an order of magnitude. Omitted
+        # entirely when empty: a heading over an empty section reads as a
+        # section that found nothing, which is not what a section that never
+        # ran should look like.
+        _section("Deployment", deployment, "") if deployment else "",
         _section(
             "Schema",
             schema,
@@ -52,6 +64,7 @@ def write_report(
         ),
         _reading(reading or {}),
         _code(report),
+        _synthesis(synthesis),
         _withdrawn(report),
         _limits(report),
     ]
@@ -220,6 +233,35 @@ def settled_as(finding: Finding) -> str:
 
 def _unit_of(finding: Finding) -> str:
     return finding.prediction.unit if finding.prediction else ""
+
+
+def _synthesis(observations: Sequence[Any]) -> str:
+    """What no single specialist could have said.
+
+    Empty when nothing connected, and silent about it: an empty synthesis is
+    the correct answer for a report whose findings do not connect, and a
+    heading announcing that is a paragraph nobody needed.
+    """
+    if not observations:
+        return ""
+
+    lines = [
+        "## Read together",
+        "",
+        "Each of these connects findings from more than one specialist. The "
+        "specialists never see each other's output, so none of them could have "
+        "written any of this alone.",
+        "",
+    ]
+    for item in observations:
+        lines.append(f"**{item.mechanism}**")
+        lines.append("")
+        lines.append(str(item.consequence))
+        lines.append("")
+        for cite in item.citations:
+            lines.append(f"- `{cite.symbol}` — `{cite.path}:{cite.line}` ({cite.layer})")
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def _withdrawn(report: Report) -> str:
