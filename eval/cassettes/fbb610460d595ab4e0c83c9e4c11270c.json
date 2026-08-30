@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/db.py",
+      "line": 12,
+      "layer": "data",
+      "symbol": "engine",
+      "mechanism": "07-connection-pools — a pool is a queue; oversizing it relative to worker count creates more concurrent connections than the database can handle, leading to connection exhaustion and full worker saturation (cite 07-connection-pools).",
+      "severity": "high",
+      "remediation": "Set pool_size=10 and max_overflow=5 (or any values such that workers*(pool_size+max_overflow) ≤ 97, the usable max_connections for the default Postgres config).",
+      "arithmetic": "workers=4 (Dockerfile uvicorn --workers 4); total_connections=workers*(pool_size+max_overflow)=4*(20+10)=120. Default max_connections=100, reserved superuser slots≈3 → usable=97. 120 > 97, so at peak load active connections will reach ≥97, exhausting the pool and saturating all workers.",
+      "prediction": {
+        "metric": "active_connections",
+        "comparator": "at_least",
+        "value": 97.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "4 workers, pool_size=20, max_overflow=10, sustained high request rate"
+      }
+    }
+  ]
+}
