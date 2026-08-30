@@ -1,0 +1,28 @@
+{
+  "observations": [
+    {
+      "mechanism": "Missing propagation of the request’s correlation ID (request context) across goroutine boundaries and outbound calls",
+      "consequence": "Logs cannot be correlated across components and blocked goroutine leaks remain invisible, reducing overall service observability and reliability",
+      "findings": [
+        3,
+        6
+      ]
+    },
+    {
+      "mechanism": "Network calls without a timeout keep workers blocked, and the unsynchronized early‑return leaves other goroutines waiting on unbuffered channels, both consuming the same worker pool",
+      "consequence": "The worker pool can be exhausted, causing the service to become unresponsive under load",
+      "findings": [
+        5,
+        6
+      ]
+    },
+    {
+      "mechanism": "Each iteration of the N+1 query builds a SQL statement by concatenating the user‑supplied warehouse parameter, so every per‑item query is an injection point",
+      "consequence": "An attacker can trigger many injection executions per request, dramatically increasing the potential data breach impact",
+      "findings": [
+        1,
+        2
+      ]
+    }
+  ]
+}
