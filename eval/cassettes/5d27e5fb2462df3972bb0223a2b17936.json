@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "src/lib/token.ts",
+      "line": 11,
+      "layer": "security",
+      "symbol": "claimsFrom",
+      "mechanism": "JWT tokens are decoded without signature verification, allowing attackers to forge arbitrary claims (04-jwt-and-revocation).",
+      "severity": "high",
+      "remediation": "Replace jwt.decode with jwt.verify(token, SECRET, {algorithms:['HS256']}) and reject tokens that fail verification.",
+      "arithmetic": "No arithmetic needed; the flaw is deterministic—any attacker‑supplied token will be accepted as valid claims.",
+      "prediction": {
+        "metric": "claims_extracted",
+        "comparator": "at_least",
+        "value": 1.0,
+        "upper": null,
+        "unit": "count",
+        "condition": "any attacker‑supplied token (e.g., a forged JWT)"
+      }
+    }
+  ]
+}
