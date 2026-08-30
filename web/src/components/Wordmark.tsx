@@ -60,21 +60,30 @@ const WHOLE = PER_LETTER + STEP * (LETTERS.length - 1);
 export function Wordmark({ onSettled }: { onSettled?: () => void }) {
   const still = useReducedMotion();
   const [settled, setSettled] = useState(Boolean(still));
+  // Bumping this remounts every letter, which restarts the reading. The
+  // animation is the mark, and a mark that can only be seen once is a mark
+  // most people never see.
+  const [take, setTake] = useState(0);
 
   useEffect(() => {
     if (still) {
       onSettled?.();
       return;
     }
+    setSettled(false);
     const done = setTimeout(() => {
       setSettled(true);
       onSettled?.();
     }, WHOLE * 1000);
     return () => clearTimeout(done);
-  }, [still, onSettled]);
+  }, [still, onSettled, take]);
 
   return (
-    <div className="relative w-full max-w-[42rem] pr-6">
+    <div
+      className="group relative w-full max-w-[42rem] cursor-pointer pr-6"
+      onClick={() => !still && setTake((n) => n + 1)}
+      title="read it again"
+    >
       <svg viewBox={`-8 -10 ${TOTAL + 16} 132`} className="w-full overflow-visible">
         <defs>
           <linearGradient id="augur-read" x1="0" y1="0" x2="1" y2="0">
@@ -135,7 +144,7 @@ export function Wordmark({ onSettled }: { onSettled?: () => void }) {
         />
 
         {LETTERS.map((letter, index) => (
-          <Letter key={index} glyph={letter} index={index} still={Boolean(still)} />
+          <Letter key={`${take}-${index}`} glyph={letter} index={index} still={Boolean(still)} />
         ))}
 
         {/* The head itself: it is between the letters, which is where the

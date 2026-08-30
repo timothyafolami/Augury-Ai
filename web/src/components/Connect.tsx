@@ -12,12 +12,15 @@ export function Connect({
   busy,
   error,
 }: {
-  onConnect: (path: string, scope: string) => void;
+  onConnect: (path: string, scope: string, budget: number) => void;
   busy: boolean;
   error: string;
 }) {
   const [path, setPath] = useState("../Interview-AI-Prod");
   const [scope, setScope] = useState("backend");
+  // A dollar, because that is what a review of a real backend costs and a
+  // ceiling low enough to stop one is a ceiling that hides the product.
+  const [budget, setBudget] = useState(1);
 
   return (
     <section className="relative flex min-h-screen items-center justify-center px-8">
@@ -40,7 +43,7 @@ export function Connect({
           <input
             value={path}
             onChange={(event) => setPath(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && onConnect(path, scope)}
+            onKeyDown={(event) => event.key === "Enter" && onConnect(path, scope, budget)}
             spellCheck={false}
             className="mt-2 w-full border border-edge bg-void px-4 py-3 font-mono text-sm text-chalk outline-none transition focus:border-augur-500"
           />
@@ -51,14 +54,37 @@ export function Connect({
           <input
             value={scope}
             onChange={(event) => setScope(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && onConnect(path, scope)}
+            onKeyDown={(event) => event.key === "Enter" && onConnect(path, scope, budget)}
             spellCheck={false}
-            placeholder="backend"
+            placeholder="backend — leave empty for the whole repository"
             className="mt-2 w-full border border-edge bg-void px-4 py-3 font-mono text-sm text-chalk outline-none transition focus:border-augur-500"
           />
 
+          <label className="mt-6 block font-mono text-[11px] uppercase tracking-widest text-mist">
+            spend ceiling
+            <span className="normal-case tracking-normal"> — 0 for no ceiling</span>
+          </label>
+          <div className="mt-2 flex items-center gap-3">
+            <input
+              type="range"
+              min={0}
+              max={5}
+              step={0.25}
+              value={budget}
+              onChange={(event) => setBudget(Number(event.target.value))}
+              className="h-1 flex-1 appearance-none bg-edge accent-augur-500"
+            />
+            <span className="w-24 shrink-0 border border-edge bg-void px-3 py-2 text-right font-mono text-sm text-chalk">
+              {budget === 0 ? "none" : `$${budget.toFixed(2)}`}
+            </span>
+          </div>
+          <p className="mt-2 font-mono text-[10px] leading-relaxed text-mist/60">
+            The ceiling is enforced before a module is issued, against a rate the
+            run measures from its own first two modules rather than a guess.
+          </p>
+
           <button
-            onClick={() => onConnect(path, scope)}
+            onClick={() => onConnect(path, scope, budget)}
             disabled={busy}
             className="mt-8 w-full bg-augur-600 py-3.5 font-mono text-sm text-white transition hover:bg-augur-500 disabled:opacity-40"
           >
