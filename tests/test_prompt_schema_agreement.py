@@ -84,7 +84,14 @@ def test_both_arms_are_told_what_a_vacuous_prediction_is(name: str) -> None:
     """
     prompt = raw(name).lower()
 
-    assert "zero is not a prediction" in prompt
+    # The gate's rules, not one phrasing of them: it rejects a threshold below
+    # what its unit can measure, a ceiling above it, and a band too wide to
+    # exclude anything. A test pinned to a sentence goes stale the moment the
+    # rule is stated better, and stale here means one arm quietly loses the
+    # explanation.
+    assert "at least 1" in prompt, "the unit floor"
+    assert "hundredfold" in prompt, "the widest honest band"
+    assert "greater than `value`" in prompt, "which bound is which"
 
 
 def test_draft_report_is_covered_by_the_finding_contracts() -> None:
