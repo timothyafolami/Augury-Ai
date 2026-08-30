@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "internal/api/handlers.go",
+      "line": 34,
+      "layer": "data",
+      "symbol": "Register",
+      "mechanism": "06-finding-n-plus-1 — N+1 query pattern: one query per item in loop causes queries_per_request scaling with result set.",
+      "severity": "high",
+      "remediation": "Replace per-item store.Reserved calls with a single batched query (e.g., join ByWarehouse with reservations) to issue only one query per request.",
+      "arithmetic": "queries = 1 (ByWarehouse) + N (Reserved per item). For N=100 items, queries = 101.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 101.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "100 items returned"
+      }
+    }
+  ]
+}
