@@ -275,20 +275,25 @@ export function fold(prior: RunState, step: Step): RunState {
     if (step.event === "agent.started" || open === -1) {
       next.spans = [...prior.spans, { agent: named, startedAt: step.at ?? 0, endedAt: null }];
     } else {
-      next.spans = prior.spans.map((s, i) => (i === open ? { ...s, endedAt: step.at ?? null } : s));
+      next.spans = prior.spans.map((s, i) =>
+        // Never before it began. The waterfall renders end minus start and was
+        // printing "-0.2s": whatever the ordering upstream, a negative
+        // duration is not something a reader can interpret. Clamping records
+        // an instant rather than an impossibility.
+        i === open ? { ...s, endedAt: Math.max(step.at ?? s.startedAt, s.startedAt) } : s,
+      );
     }
   }
 
+  // The file a trajectory step names is being read right now. The span
+  // tracking that used to sit here as well ran a second time over
+  // `prior.spans`, discarding what the block above had already written to
+  // `next.spans`, so one agent could be recorded twice and a close could land
+  // on the wrong span.
   if (step.agent) {
     const path = typeof step.detail === "object" ? (step.detail?.path as string | undefined) : undefined;
     if (path && prior.files[path] === undefined) {
       next.files = { ...next.files, [path]: "reading" };
-    }
-    const open = prior.spans.findIndex((s) => s.agent === step.agent && s.endedAt === null);
-    if (open === -1) {
-      next.spans = [...prior.spans, { agent: step.agent, startedAt: step.at ?? 0, endedAt: null }];
-    } else {
-      next.spans = prior.spans.map((s, i) => (i === open ? { ...s, endedAt: step.at ?? null } : s));
     }
   }
 
