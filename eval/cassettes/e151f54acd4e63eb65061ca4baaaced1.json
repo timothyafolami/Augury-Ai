@@ -1,0 +1,8 @@
+{
+  "specialists": [
+    "security",
+    "data",
+    "network"
+  ],
+  "reasoning": "security: verify token extraction and authentication handling; data: review raw SQL queries and potential injection; network: examine calls to external pricing service and receipt generation."
+}
