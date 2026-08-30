@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/api/orders.py",
+      "line": 22,
+      "layer": "data",
+      "symbol": "list_orders",
+      "mechanism": "N+1 query pattern: each order is serialized in a loop, invoking serialize_order which likely issues a separate SELECT per order. This matches mechanism 06-finding-n-plus-1 from the reference material.",
+      "severity": "high",
+      "remediation": "Replace the per-order serialization with a bulk query that preloads all needed related data (e.g., join items in list_for_customer or modify serialize_order to accept preloaded data), eliminating the N+1 queries.",
+      "arithmetic": "queries = 1 (list_for_customer) + N (serialize_order per order). For N=100 orders, queries = 101, i.e., queries_per_request = N+1.",
+      "prediction": {
+        "metric": "queries_per_request",
+        "comparator": "at_least",
+        "value": 101.0,
+        "upper": null,
+        "unit": "queries",
+        "condition": "100 orders returned"
+      }
+    }
+  ]
+}
