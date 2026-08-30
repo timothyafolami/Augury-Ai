@@ -26,8 +26,26 @@ FAR_FROM_ENTRYPOINT = 4
 _ORDER = {Severity.LOW: 0, Severity.MEDIUM: 1, Severity.HIGH: 2}
 
 
-def cap_severity(finding: Finding, *, depth: int | None, has_entrypoints: bool = True) -> Finding:
-    """The same finding, at a severity its reachability can support."""
+def cap_severity(
+    finding: Finding,
+    *,
+    depth: int | None,
+    has_entrypoints: bool = True,
+    known: bool = True,
+) -> Finding:
+    """The same finding, at a severity its reachability can support.
+
+    `known` says whether the map has this path at all. Without it, `depth is
+    None` meant both "no entrypoint reaches this module" and "this path is not
+    in the map", and only the first is a measurement -- so a finding whose path
+    the model omitted, or spelled differently, was demoted and stamped with a
+    fact that had never been computed about it.
+    """
+    if not known:
+        # An unrecognised path is not evidence of unreachability, by this
+        # module's own "only ever lowered" reasoning.
+        return finding
+
     if not has_entrypoints:
         # No declared entrypoint means no request path, and calling every
         # module unreachable would say nothing about any of them.
