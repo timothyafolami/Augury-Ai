@@ -88,6 +88,11 @@ export interface Report {
 
 /** One line of the raw feed, so a sceptical viewer can check the pretty view. */
 export interface Step {
+  /** The typed vocabulary: "review.started", "research.finished" and so on. */
+  event?: string;
+  seq?: number;
+  offsetMs?: number;
+  data?: Record<string, unknown>;
   kind?: string;
   agent?: string;
   action?: string;

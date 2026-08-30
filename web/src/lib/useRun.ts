@@ -85,11 +85,13 @@ export function useRun() {
       stream.onmessage = (raw) => {
         const step: Step = { ...JSON.parse(raw.data), at: Date.now() - openedAt };
         setRun((prior) => fold(prior, step));
-        if (step.kind === "done" && step.report) {
-          setReport(step.report);
+        const finished = step.event === "review.completed" || step.kind === "done";
+        if (finished) {
+          const report = (step.data?.report ?? step.report) as Report | undefined;
+          if (report) setReport(report);
           stream.close();
         }
-        if (step.kind === "failed") stream.close();
+        if (step.event === "review.failed" || step.kind === "failed") stream.close();
       };
       stream.onerror = () => stream.close();
       return runId;
@@ -104,11 +106,31 @@ export function useRun() {
 export function fold(prior: RunState, step: Step): RunState {
   const next: RunState = { ...prior, steps: [...prior.steps, step].slice(-400) };
 
+  // The typed vocabulary. The server names its own phases now, so the
+  // interface reads those rather than guessing from a shape.
+  const data = step.data ?? {};
+  if (step.event === "review.started" && data.model) next.model = String(data.model);
+  if (step.event === "review.failed") next.failed = String(data.detail ?? "the run failed");
+  if (step.event === "structure.discovered" && typeof data.modules === "number") {
+    next.total = data.modules;
+  }
+  if (step.event === "agent.started" && typeof data.module === "string") {
+    next.files = { ...next.files, [data.module]: "reading" };
+  }
+  if (step.event === "finding.detected") {
+    const found = (data.finding ?? {}) as { path?: string };
+    if (found.path) next.files = { ...next.files, [found.path]: "flagged" };
+  }
+
   if (step.kind === "model" && step.model) next.model = `${step.provider}/${step.model}`;
   // The report is authoritative about cost. Module events carry a running
   // total that stops the moment the last module lands, so a review whose last
   // work was the deterministic passes reported nothing.
   if (step.kind === "done" && step.report) next.usd = step.report.usd;
+  if (step.event === "review.completed") {
+    const report = data.report as { usd?: number } | undefined;
+    if (report?.usd !== undefined) next.usd = report.usd;
+  }
   if (step.kind === "failed") next.failed = String(step.detail ?? "the run failed");
 
   if (step.kind === "stage" && step.stage && step.state) {
@@ -124,6 +146,16 @@ export function fold(prior: RunState, step: Step): RunState {
 
   // A step recorded by an agent, from the trajectory the reviewer writes
   // anyway. The file it names is being read right now.
+  const named = step.agent ?? (step.event?.startsWith("agent.") ? String(data.agent ?? "") : "");
+  if (named) {
+    const open = prior.spans.findIndex((s) => s.agent === named && s.endedAt === null);
+    if (step.event === "agent.started" || open === -1) {
+      next.spans = [...prior.spans, { agent: named, startedAt: step.at ?? 0, endedAt: null }];
+    } else {
+      next.spans = prior.spans.map((s, i) => (i === open ? { ...s, endedAt: step.at ?? null } : s));
+    }
+  }
+
   if (step.agent) {
     const path = typeof step.detail === "object" ? (step.detail?.path as string | undefined) : undefined;
     if (path && prior.files[path] === undefined) {

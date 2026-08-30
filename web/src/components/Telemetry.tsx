@@ -24,7 +24,7 @@ export function Telemetry({ steps }: { steps: Step[] }) {
         </p>
       )}
       {steps.map((step, index) => {
-        const who = (step.agent ?? step.kind ?? "system").toUpperCase();
+        const who = actor(step);
         return (
           <motion.div
             key={index}
@@ -50,7 +50,11 @@ export function Telemetry({ steps }: { steps: Step[] }) {
                 </span>
               )}
             </div>
-            <p className="mt-1 pl-[3.4rem] font-mono text-[11px] leading-relaxed text-chalk/75">
+            <p
+              className={`mt-1 pl-[3.4rem] font-mono text-[11px] leading-relaxed ${
+                step.event?.startsWith("research") ? "text-augur-200" : "text-chalk/75"
+              }`}
+            >
               {say(step)}
             </p>
           </motion.div>
@@ -66,7 +70,60 @@ function clock(ms: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
+/** Who this step belongs to.
+ *
+ * The typed events name a phase, and the trajectory names an agent. Both are
+ * in the same feed on purpose: two of the agents never call a model, and a
+ * feed showing only calls would misrepresent where the work happens.
+ */
+function actor(step: Step): string {
+  if (step.event) return step.event.split(".")[0].toUpperCase();
+  return (step.agent ?? step.kind ?? "system").toUpperCase();
+}
+
+/** Research is the reviewer going and finding something, so it is worth its
+ *  own line rather than a JSON blob. */
+function research(data: Record<string, unknown>, done: boolean): string {
+  const subject = String(data.subject ?? "");
+  const source = String(data.source ?? "");
+  if (!done) return `asking ${source} about ${subject}`;
+  return data.found ? `${source} answered about ${subject}` : `${source} had nothing on ${subject}`;
+}
+
 function say(step: Step): string {
+  // The typed vocabulary, which is what the server emits now.
+  if (step.event) {
+    const data = step.data ?? {};
+    if (step.event === "research.started") return research(data, false);
+    if (step.event === "research.finished") return research(data, true);
+    if (step.event === "review.started") {
+      return `reviewing ${data.name} / ${data.scope || "all of it"} with ${data.model}`;
+    }
+    if (step.event === "language.detected") return `${data.modules} modules of ${data.language}`;
+    if (step.event === "service.detected") {
+      return `${data.service} from ${data.sourceRoot}${data.capacity ? ` — ${data.capacity}` : ""}`;
+    }
+    if (step.event === "structure.discovered") {
+      return `${data.modules} modules, ${data.reachable} reachable, ${data.unreachable} not`;
+    }
+    if (step.event === "agent.started") return `${data.agent} reading ${data.module ?? ""}`;
+    if (step.event === "agent.handoff") return `${data.from} to ${data.to}: ${data.why ?? ""}`;
+    if (step.event === "agent.finished") return `${data.agent} — ${data.findings} found`;
+    if (step.event === "finding.detected") {
+      const found = (data.finding ?? {}) as Record<string, unknown>;
+      return `${found.symbol ?? found.rule ?? ""} in ${found.path ?? ""}`;
+    }
+    if (step.event === "context.updated") return `${data.what}: ${data.count}`;
+    if (step.event === "review.failed") return String(data.detail ?? "the run failed");
+    // A phase with nothing worth saying is still worth showing as a beat.
+    const shown = Object.entries(data)
+      .filter(([, value]) => typeof value !== "object")
+      .slice(0, 3)
+      .map(([key, value]) => `${key}=${trim(String(value))}`)
+      .join("  ");
+    return `${step.event.split(".").slice(1).join(" ")}  ${shown}`.trim();
+  }
+
   if (step.kind === "module") {
     return `${step.path} — ${step.findings ?? 0} finding${step.findings === 1 ? "" : "s"}, ${step.read}/${step.total} read, $${(step.usd ?? 0).toFixed(4)}`;
   }
