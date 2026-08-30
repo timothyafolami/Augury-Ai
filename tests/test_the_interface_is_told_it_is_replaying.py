@@ -57,3 +57,21 @@ def test_live_mode_offers_no_recordings(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.delenv("AUGURY_REPLAY_ONLY", raising=False)
 
     assert TestClient(build()).get("/api/mode").json()["recorded"] == []
+
+
+def test_the_first_recorded_case_is_the_one_worth_showing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The interface offers the first as its default, so the order is a choice.
+
+    Alphabetical put A04 first, which is three files and is documented in its
+    own manifest as deliberately easy -- "a repository where reading
+    everything is free". Landing a first-time reviewer on the case designed
+    not to discriminate is the worst available introduction.
+    """
+    monkeypatch.setenv("AUGURY_REPLAY_ONLY", "1")
+
+    recorded = TestClient(build()).get("/api/mode").json()["recorded"]
+
+    assert "A04" not in recorded[0]
+    assert "B01-orders-service" in recorded[0]
