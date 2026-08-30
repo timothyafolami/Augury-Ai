@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "security",
+    "craft"
+  ],
+  "reasoning": "security: the file handles JWT secret and token decoding, which may have authentication vulnerabilities; craft: the implementation of token parsing and type handling should be reviewed for code quality."
+}
