@@ -1,11 +1,11 @@
 # One definition of green. CI runs `make check`; so do you.
-.PHONY: install check lint types test fmt
+.PHONY: install check lint types test web-test fmt
 
 install:
 	uv sync --frozen --all-extras
 	git config core.hooksPath .githooks
 
-check: lint types test
+check: lint types test web-test
 
 lint:
 	uv run ruff check src tests
@@ -20,6 +20,25 @@ types:
 # the code under test.
 test:
 	uv run --extra experiments pytest -q
+
+# The interface's own tests. `fold` turns one server event into what is on
+# screen, and it is a pure function, so there was never a reason not to test
+# it -- but the engine had 1372 tests and the interface had none, and the
+# consequence was a spend panel that read $0.0000 for entire runs and was
+# found by a person looking at a screenshot.
+#
+# Skipped loudly rather than silently when Node is absent. The engine does not
+# need Node and `make check` should still work without it, but a skip nobody
+# is told about is the same as a test that does not exist.
+web-test:
+	@if ! command -v npm >/dev/null 2>&1; then \
+	  echo "SKIPPED: interface tests need Node, which is not installed."; \
+	  echo "         The engine does not need it. Install Node to run them."; \
+	elif [ ! -d web/node_modules ]; then \
+	  echo "SKIPPED: interface tests need 'cd web && npm install' first."; \
+	else \
+	  cd web && npm test --silent; \
+	fi
 
 fmt:
 	uv run ruff check --fix src tests
