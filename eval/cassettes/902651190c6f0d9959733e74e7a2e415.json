@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "data",
+    "network"
+  ],
+  "reasoning": "data: the file calls store functions and accesses the database; network: it registers HTTP endpoints and handles HTTP requests."
+}
