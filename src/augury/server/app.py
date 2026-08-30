@@ -26,7 +26,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -813,6 +813,30 @@ def _sse(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, default=str)}\n\n"
 
 
+UNBUILT = """<!doctype html>
+<title>Augury — the interface is not built</title>
+<style>
+  body { background:#08070c; color:#e8e6f0; font:14px/1.7 ui-monospace, monospace;
+         display:grid; place-items:center; min-height:100vh; margin:0 }
+  main { max-width:34rem; padding:2rem }
+  h1 { font-size:1rem; letter-spacing:.3em; color:#a78bfa; font-weight:500 }
+  pre { background:#14131c; padding:1rem; overflow-x:auto; border:1px solid #221f2e }
+  a { color:#a78bfa }
+</style>
+<main>
+  <h1>AUGURY</h1>
+  <p>The API is running. The interface is not built, which is expected in a
+     fresh clone: a build is generated, and generated files are not committed.</p>
+  <pre>make web</pre>
+  <p>or, without make:</p>
+  <pre>cd web &amp;&amp; npm install &amp;&amp; npm run build</pre>
+  <p>Then reload. The review engine works without any of this:
+     <code>augury report --path REPO</code> writes the same document this page
+     would show you.</p>
+</main>
+"""
+
+
 def serve_frontend(app: FastAPI, dist: Path) -> FastAPI:
     """Serve the built interface from the same process as the API.
 
@@ -820,6 +844,14 @@ def serve_frontend(app: FastAPI, dist: Path) -> FastAPI:
     running Vite separately, not an error.
     """
     if not dist.is_dir():
+        # A clone has no build, because a build is generated and generated
+        # files are not committed. Serving the API and a blank page at / leaves
+        # a reader with no reason for it, and this is the one moment where the
+        # product is invisible.
+        @app.get("/", response_class=HTMLResponse)
+        def unbuilt() -> str:
+            return UNBUILT
+
         return app
     app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
 
