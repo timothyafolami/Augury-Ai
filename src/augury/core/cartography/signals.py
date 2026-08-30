@@ -10,7 +10,30 @@ from __future__ import annotations
 from augury.core.cartography.model import Signal
 
 # Top-level module name -> the concerns importing it implies.
+# A model in the request path. Deliberately narrow: these are the libraries
+# that put a forward pass or a remote generation inside a handler, not every
+# library that touches an array. Routing every service using numpy to this
+# specialist would buy a call per module for a concern most of them do not have.
+_SERVING = frozenset({Signal.SERVING})
+
 IMPORT_SIGNALS: dict[str, frozenset[Signal]] = {
+    "torch": _SERVING,
+    "tensorflow": _SERVING,
+    "transformers": _SERVING,
+    "sentence_transformers": _SERVING,
+    "vllm": _SERVING,
+    "onnxruntime": _SERVING,
+    "llama_cpp": _SERVING,
+    "openai": _SERVING | frozenset({Signal.NETWORK}),
+    "anthropic": _SERVING | frozenset({Signal.NETWORK}),
+    "cohere": _SERVING | frozenset({Signal.NETWORK}),
+    "langchain": _SERVING,
+    "llama_index": _SERVING,
+    "qdrant_client": _SERVING | frozenset({Signal.DATA}),
+    "pinecone": _SERVING | frozenset({Signal.DATA}),
+    "weaviate": _SERVING | frozenset({Signal.DATA}),
+    "chromadb": _SERVING | frozenset({Signal.DATA}),
+    "faiss": _SERVING,
     # 01-machine
     "threading": frozenset({Signal.CONCURRENCY}),
     "multiprocessing": frozenset({Signal.CONCURRENCY}),
