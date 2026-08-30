@@ -28,7 +28,7 @@ export function CodeTree({
   const root = useMemo(() => build(modules), [modules]);
 
   return (
-    <div className="overflow-y-auto font-mono text-[11px] leading-[1.7]">
+    <div className="max-h-[55vh] overflow-y-auto font-mono text-[11px] leading-[1.7] lg:max-h-none">
       {[...root.children.values()].map((branch) => (
         <Node key={branch.path} branch={branch} files={files} depth={0} />
       ))}
