@@ -7,6 +7,9 @@ import { CodeTree } from "./components/CodeTree";
 import { Telemetry } from "./components/Telemetry";
 import { Context } from "./components/Context";
 import { Findings } from "./components/Findings";
+import { Coverage } from "./components/Coverage";
+import { Forecast } from "./components/Forecast";
+import { NotRead } from "./components/NotRead";
 import { Waterfall } from "./components/Waterfall";
 import { useRun } from "./lib/useRun";
 
@@ -42,7 +45,7 @@ export default function App() {
   }, [report, run.failed]);
 
   const connect = useCallback(
-    async (path: string, chosen: string) => {
+    async (path: string, chosen: string, budget: number) => {
       setError("");
       setScope(chosen);
       try {
@@ -51,7 +54,7 @@ export default function App() {
         setReviewing(true);
         setStartedAt(Date.now());
         setNow(0);
-        await review(path, chosen, 0.15);
+        await review(path, chosen, budget);
       } catch (caught) {
         setReviewing(false);
         setError(String(caught instanceof Error ? caught.message : caught));
@@ -162,6 +165,44 @@ export default function App() {
               <Waterfall spans={run.spans} now={now} />
             </div>
           </div>
+
+          {discovery && (report || reviewing) && (
+            <div className="border-b border-edge p-5">
+              <Header>
+                what this review did not look at
+                <span className="ml-2 text-mist/60">stated, not implied</span>
+              </Header>
+              <div className="mt-4">
+                <NotRead discovery={discovery} report={report} />
+              </div>
+            </div>
+          )}
+
+          {report?.engineering && (
+            <div className="border-b border-edge p-5">
+              <Header>
+                engineering coverage
+                <span className="ml-2 text-mist/60">
+                  {report.engineering.modules} modules mapped
+                </span>
+              </Header>
+              <div className="mt-4">
+                <Coverage coverage={report.engineering} />
+              </div>
+            </div>
+          )}
+
+          {report?.forecast && (
+            <div className="border-b border-edge p-5">
+              <Header>
+                risk forecast
+                <span className="ml-2 text-mist/60">derived from findings, not measured</span>
+              </Header>
+              <div className="mt-4">
+                <Forecast items={report.forecast} />
+              </div>
+            </div>
+          )}
 
           <div className="p-5">
             <Header>
