@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "src/lib/token.ts",
+      "line": 8,
+      "layer": "craft",
+      "symbol": "claimsFrom",
+      "mechanism": "03-errors-as-interface – the function swallows verification errors and returns null, allowing malformed or tampered JWTs to be treated as valid claims, a silent failure that can pass as success",
+      "severity": "high",
+      "remediation": "Replace jwt.decode with jwt.verify using the SECRET, and return null only when verification throws; propagate verification errors instead of silently returning null",
+      "arithmetic": "jwt.decode does not verify signature, so any malformed token (probability 1) yields a Claims object. Authorized responses return HTTP 200, unauthorized should return 401. Because verification is omitted, unauthorized requests receive 200, i.e., status >=200 instead of 401",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "at_least",
+        "value": 200.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "invalid token with signature mismatch"
+      }
+    }
+  ]
+}
