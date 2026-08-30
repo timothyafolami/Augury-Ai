@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "app/repositories/orders.py",
+      "line": 18,
+      "layer": "craft",
+      "symbol": "list_for_customer",
+      "mechanism": "03-errors-as-interface – broad exception handler swallows DB errors and returns empty list, causing silent success",
+      "severity": "high",
+      "remediation": "Remove the blanket except block and let the exception propagate (or raise an HTTPException 500) instead of returning an empty list",
+      "arithmetic": "When the database raises any exception, the except clause returns [], which the API layer serialises as a 200 OK with an empty list. Therefore under a DB outage the client receives a successful HTTP status code (≤299).",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "at_most",
+        "value": 299.0,
+        "upper": null,
+        "unit": "x",
+        "condition": "db_unavailable"
+      }
+    }
+  ]
+}
