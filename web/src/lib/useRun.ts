@@ -18,6 +18,13 @@ interface RunState {
   files: Record<string, FileState>;
   spans: { agent: string; startedAt: number; endedAt: number | null }[];
   usd: number;
+  /** Spend per model, so a run that used more than one says which cost what.
+   *  Summed from the same call events as `usd`. */
+  byModel: Record<string, number>;
+  /** Model calls that have reported usage, which is what makes a running
+   *  total legible: $0.0043 over 31 calls reads as working, $0.0043 alone
+   *  reads as broken. */
+  calls: number;
   read: number;
   total: number;
   model: string;
@@ -32,6 +39,8 @@ const EMPTY: RunState = {
   files: {},
   spans: [],
   usd: 0,
+  byModel: {},
+  calls: 0,
   read: 0,
   total: 0,
   model: "",
@@ -42,6 +51,14 @@ const EMPTY: RunState = {
 export function useRun() {
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
+  // Whether this server can call a model at all. A replay server pointed at an
+  // unrecorded repository produces a review that read files, spent nothing and
+  // found nothing, which is indistinguishable from a broken model unless the
+  // interface says which it is.
+  const [mode, setMode] = useState<{ replay: boolean; recorded: string[] }>({
+    replay: false,
+    recorded: [],
+  });
   const [run, setRun] = useState<RunState>(EMPTY);
   const [report, setReport] = useState<Report | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,6 +67,8 @@ export function useRun() {
   const loadStages = useCallback(async () => {
     const answer = await fetch("/api/stages");
     setStages(await answer.json());
+    const told = await fetch("/api/mode");
+    if (told.ok) setMode(await told.json());
   }, []);
 
   const discover = useCallback(async (path: string, scope: string) => {
@@ -109,7 +128,7 @@ export function useRun() {
     [],
   );
 
-  return { discovery, stages, run, report, busy, loadStages, discover, review };
+  return { discovery, stages, mode, run, report, busy, loadStages, discover, review };
 }
 
 const ORDER: StageKey[] = ["survey", "map", "schema", "specialists", "report"];
@@ -164,6 +183,16 @@ export function fold(prior: RunState, step: Step): RunState {
   }
   if (step.event === "review.completed") {
     next.stages = { survey: "done", map: "done", schema: "done", specialists: "done", report: "done" };
+    // Nothing is being read any more, so nothing should still be pulsing. A
+    // file left in `reading` animates on an infinite repeat, and a finished
+    // review with three files breathing in the tree reads as a run that never
+    // ended. Findings keep their own state; only the in-progress one settles.
+    next.files = Object.fromEntries(
+      Object.entries(next.files).map(([path, state]) => [
+        path,
+        state === "reading" ? "read" : state,
+      ]),
+    ) as typeof next.files;
   }
   if (step.event === "review.failed") next.failed = String(data.detail ?? "the run failed");
   if (step.event === "structure.discovered" && typeof data.modules === "number") {
@@ -192,10 +221,29 @@ export function fold(prior: RunState, step: Step): RunState {
   }
 
   if (step.kind === "model" && step.model) next.model = `${step.provider}/${step.model}`;
-  // The report is authoritative about cost. Module events carry a running
-  // total that stops the moment the last module lands, so a review whose last
-  // work was the deterministic passes reported nothing.
-  if (step.kind === "done" && step.report) next.usd = step.report.usd;
+
+  // Cost, as each call reports it. This used to be read off a `module` event
+  // carrying a running total, and no such event is emitted: the spend panel
+  // therefore sat at $0.0000 for the whole run and only moved when the report
+  // landed, which reads as a review that is not costing anything.
+  //
+  // Every model call already carries its own usage. Summing them here is the
+  // one place that can show spend while it is being spent.
+  // On the step, not inside `data`: the trajectory writes it beside `agent`
+  // and `action`. Reading it from `data` found nothing and the panel showed
+  // $0.0000 over a whole run while the telemetry beside it listed the calls.
+  const usage = step.usage ?? (data as { usage?: { usd?: number } }).usage;
+  if (usage && typeof usage.usd === "number") {
+    next.usd = prior.usd + usage.usd;
+    next.calls = prior.calls + 1;
+    // Attributed to the model that answered, so a run that switches provider
+    // mid-way cannot bill one model for another's work.
+    const who = prior.model || "model";
+    next.byModel = { ...prior.byModel, [who]: (prior.byModel[who] ?? 0) + usage.usd };
+  }
+
+  // The report stays authoritative at the end: it counts calls this stream
+  // never saw, and a replayed run correctly reports nothing at all.
   if (step.event === "review.completed") {
     const report = data.report as
       | { usd?: number; coverage?: { analysed?: string[] } }
@@ -213,7 +261,6 @@ export function fold(prior: RunState, step: Step): RunState {
 
   if (step.kind === "module" && step.path) {
     next.files = { ...prior.files, [step.path]: (step.findings ?? 0) > 0 ? "flagged" : "read" };
-    next.usd = step.usd ?? prior.usd;
     next.read = step.read ?? prior.read;
     next.total = step.total ?? prior.total;
   }
