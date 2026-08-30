@@ -61,6 +61,12 @@ synthesis observations into a 259-line document, for $0.00. Every panel is
 populated from that recording rather than from anything invented for the
 occasion; the counts above are what a fresh clone with no key produced.
 
+`eval/cases/E01-go-inventory/repo` replays too, and is the more interesting
+one to watch: it is a Go service, so the topology, the architecture diagram and
+the findings are all built from Go source rather than Python. It returns 4
+deployment findings, 6 code findings, 4 pressures and 3 synthesis observations
+into a 151-line document, also for $0.00.
+
 `make serve` starts one process on <http://localhost:8000> holding both the API
 and the interface. The interface needs Node to build, once; the engine does
 not need it at all, and every number this README publishes comes from the CLI.
