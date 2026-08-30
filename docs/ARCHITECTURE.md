@@ -74,7 +74,7 @@ findings against three from the specialists, for nothing.
 ## Why the orchestration is not an agent framework
 
 `autogen-core` and `autogen-ext` are dependencies, and every import of them is
-in one file — `core/adapters/provider.py` — where they supply the model client
+in one file — `src/augury/core/adapters/provider.py` — where they supply the model client
 for Groq, OpenAI, Anthropic and DeepSeek behind one `ChatModel` protocol.
 
 No `AssistantAgent`, no `Swarm`, no `RoundRobinGroupChat`, no `GraphFlow`. The
@@ -141,6 +141,10 @@ web client watches it. None of them is a second implementation, and the
 document a team acts on is rendered by the same function whichever asked for
 it.
 
+The browser bundle is generated rather than committed. `make serve` builds it
+when needed and hosts it with the API; starting the server directly from a
+fresh clone instead serves a page that names the build command.
+
 ```
 CLI ────────────┐
 MCP ────────────┼──▶  survey · map · schedule · triage · specialists · passes
@@ -163,12 +167,14 @@ Cite them." For most of this project's life it was then handed the specialist's
 own brief a second time under that heading, so it had a brief and no corpus and
 was invited to attribute the brief to a lab it had never seen.
 
-`core/corpus.py` loads the real thing: the mechanism block from every topic in
-the layer this specialist owns, tagged with the topic it came from, because
-citing is only possible if the citation is in the text. Bounded, because it
-ships once per module per specialist. Deterministic, because a corpus that
-varies is a cassette that never replays. And empty when the lab is absent, with
-the prompt saying so rather than claiming a source it was not given.
+`src/augury/core/corpus.py` reads a committed extract by default: the mechanism
+block from every topic in the layer this specialist owns, tagged with the topic
+it came from, because citing is only possible if the citation is in the text.
+The practice lab remains canonical; `extract_from` regenerates the shipped
+extract when it changes. Bounded, because it ships once per module per
+specialist. Deterministic, because a corpus that varies is a cassette that
+never replays. A default run is empty only when its shipped extract is absent;
+an explicitly selected lab is read instead and can itself have no material.
 
 ---
 
@@ -181,6 +187,11 @@ lines — and a constant is a guess about a model nobody had run yet:
 | | Groq `gpt-oss-120b` | DeepSeek `v4-flash` |
 |---|---|---|
 | per module | $0.0056 | $0.098 |
+
+Triage can use a second, lower-cost model from the same provider through
+`AUGURY_TRIAGE_MODEL`. It defaults to the reviewing model, and its usage is
+included in both the reported spend and the budget before another module is
+issued, so cheaper routing cannot make paid analysis appear free.
 
 Eighteen times, from the model with the lower published price per token,
 because a reasoning model's chain of thought is billed as output: one call
@@ -272,24 +283,27 @@ grounded in what is installed rather than in a training cutoff.
 
 ## Where things live
 
+Paths below are relative to the repository root.
+
 | | |
 |---|---|
-| `core/survey/` | The deployment: services, commands, backing services, entrypoints |
-| `core/cartography/` | Six languages, imports, signals, depth, reachability |
-| `core/scheduling/` | Budget-bounded selection and coverage |
-| `core/schema/` | Migrations read as a schema, and what they do to live tables |
-| `core/reference/` | Registry versions, dependency staleness, changelog links |
-| `core/adapters/` | Providers, pricing, record-and-replay |
-| `core/layers.py`, `prompts/layers/` | The nine concerns |
-| `core/corpus.py` | The lab, as material a specialist can cite |
-| `core/artifacts/` | Every document a repository ships, and the rules over them |
-| `agents/synthesis.py` | What no single specialist could say |
-| `core/architecture.py`, `core/coverage.py`, `core/forecast.py` | The diagram, the coverage, the pressures |
-| `server/` | The web client: discovery, a live stream, the document |
-| `core/languages.py`, `prompts/languages/` | How each runtime fails |
-| `core/priority.py`, `reachability.py`, `repetition.py`, `indexes.py` | The passes over a finished report |
-| `core/report.py` | The document a team acts on |
-| `agents/` | Baseline, triage, the pipeline |
-| `core/proving/` | Generating an experiment, choosing where it runs, grading it |
-| `evaluation/` | Cases, runner, prover, significance |
-| `cli/` | `survey`, `review`, `report`, `history`, `evaluate`, `mcp`, `cases` |
+| `src/augury/core/survey/` | The deployment: services, commands, backing services, entrypoints |
+| `src/augury/core/cartography/` | Six languages, imports, signals, depth, reachability |
+| `src/augury/core/scheduling/` | Budget-bounded selection and coverage |
+| `src/augury/core/schema/` | Migrations read as a schema, and what they do to live tables |
+| `src/augury/core/reference/` | Registry versions, dependency staleness, changelog links |
+| `src/augury/core/adapters/` | Providers, pricing, record-and-replay |
+| `src/augury/core/layers.py`, `src/augury/prompts/layers/` | The nine concerns |
+| `src/augury/core/corpus.py`, `src/augury/core/corpus/` | The lab extractor and the committed material a specialist can cite |
+| `src/augury/core/artifacts/` | Every document a repository ships, and the rules over them |
+| `src/augury/agents/synthesis.py` | What no single specialist could say |
+| `src/augury/core/architecture.py`, `src/augury/core/coverage.py`, `src/augury/core/forecast.py` | The diagram, the coverage, the pressures |
+| `src/augury/server/` | The web client: discovery, a live stream, the document |
+| `src/augury/mcp/server.py` | The MCP server that exposes the review engine |
+| `src/augury/core/languages.py`, `src/augury/prompts/languages/` | How each runtime fails |
+| `src/augury/core/priority.py`, `src/augury/core/reachability.py`, `src/augury/core/repetition.py`, `src/augury/core/indexes.py` | The passes over a finished report |
+| `src/augury/core/report.py` | The document a team acts on |
+| `src/augury/agents/` | Baseline, triage, the pipeline |
+| `src/augury/core/proving/` | Generating an experiment, choosing where it runs, grading it |
+| `src/augury/evaluation/` | Cases, runner, prover, significance |
+| `src/augury/cli/` | `survey`, `review`, `report`, `history`, `evaluate`, `mcp`, `cases` |
