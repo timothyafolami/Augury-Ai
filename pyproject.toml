@@ -19,10 +19,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.8", "mypy>=1.13"]
-# What the case experiments need to run. Separate from dev because a judge
-# reproducing the measurements needs these and does not need the linters.
-# What a case experiment needs to run the repository under review. A judge
-# reproducing the measurements needs these; they are not used by the reviewer.
+# What a case experiment needs to import the repository it measures. Separate
+# from dev because a judge reproducing the measurements needs these and does
+# not need the linters, and an extra rather than a dependency because the
+# reviewer itself never imports any of them.
+#
+# `uv sync` installs no extras, so the Makefile targets ask for this one by
+# name. Without that a clean clone replays every model call correctly and
+# breaks every experiment.
 experiments = [
     "sqlalchemy[asyncio]>=2.0.36",
     "aiosqlite>=0.20",
@@ -40,7 +44,13 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/augury"]
-artifacts = ["src/augury/prompts/**/*.md"]
+artifacts = [
+    "src/augury/prompts/**/*.md",
+    # The lab extract. It is in every analyst prompt, so an installed copy
+    # without it produces different prompts from a checkout with it, and every
+    # recorded cassette misses.
+    "src/augury/core/corpus/*.md",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
