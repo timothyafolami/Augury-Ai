@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "src/lib/receipt.ts",
+      "line": 5,
+      "layer": "concurrency",
+      "symbol": "writeReceipt",
+      "mechanism": "Node.js runs JavaScript on a single‑threaded event loop; using fs.writeFileSync and crypto.pbkdf2Sync performs blocking I/O and CPU‑bound work on that thread, stalling all other requests (03-concurrency-models).",
+      "severity": "high",
+      "remediation": "Replace fs.writeFileSync with await fs.promises.writeFile and replace crypto.pbkdf2Sync with crypto.pbkdf2 (promise version) or offload the PBKDF2 computation to a worker thread so the event loop remains non‑blocking.",
+      "arithmetic": "pbkdf2Sync with 600 000 SHA‑512 iterations ≈200 ms on a typical CPU; synchronous file write ≈5 ms; total per request ≈205 ms. With 5 concurrent requests the event loop processes them sequentially, giving latency ≈5 × 205 ms ≈ 1025 ms, so the 99th‑percentile latency exceeds 1 s.",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 1000.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "5 concurrent requests"
+      }
+    }
+  ]
+}
