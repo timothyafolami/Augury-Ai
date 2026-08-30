@@ -81,6 +81,8 @@ export interface Report {
   schema: Finding[];
   dependencies: Finding[];
   engineering?: EngineeringCoverage;
+  architecture?: Architecture;
+  reading?: Record<string, string[]>;
   forecast?: Pressure[];
 }
 
@@ -150,4 +152,32 @@ export interface Pressure {
   independent_findings: number;
   band: "isolated" | "repeated" | "systemic";
   derivation: string;
+}
+
+/** The service drawn from what was read.
+ *
+ * `basis` travels with it because a diagram reads as authoritative unless
+ * something arriving alongside says where it came from.
+ */
+export interface ArchNode {
+  id: string;
+  label: string;
+  kind: "service" | "code" | "store";
+  detail: string;
+  ceiling: string;
+  modules: number;
+  findings: number;
+  depth: number | null;
+}
+
+export interface ArchEdge {
+  source: string;
+  target: string;
+  why: string;
+}
+
+export interface Architecture {
+  nodes: ArchNode[];
+  edges: ArchEdge[];
+  basis: string;
 }
