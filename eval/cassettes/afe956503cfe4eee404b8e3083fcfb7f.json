@@ -1,0 +1,15 @@
+{
+  "findings": [
+    {
+      "path": "src/routes/orders.ts",
+      "line": 19,
+      "layer": "security",
+      "symbol": "orders.get",
+      "mechanism": "02-sql-injection — the query interpolates the user‑controlled `status` parameter directly into the SQL string, allowing an attacker to inject arbitrary SQL (e.g. `status='open' OR '1'='1'`). This violates the requirement for parameterisation described in the reference material.",
+      "severity": "high",
+      "remediation": "Replace the interpolated query with a parameterised statement, e.g. `pool.query('SELECT id, sku, quantity FROM orders WHERE customer = $1 AND status = $2', [claims.sub, status])`.",
+      "arithmetic": "An attacker can supply `status=anything' OR '1'='1` which makes the WHERE clause always true, causing the query to return all rows for the customer. Because the number of rows returned is unbounded by the request, the impact is total data exposure for that customer, qualifying as high severity.",
+      "prediction": null
+    }
+  ]
+}
