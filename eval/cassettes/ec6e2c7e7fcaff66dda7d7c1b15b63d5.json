@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {
+      "path": "src/lib/token.ts",
+      "line": 11,
+      "layer": "craft",
+      "symbol": "claimsFrom",
+      "mechanism": "Swallowed exception and use of jwt.decode without verification allows invalid or malicious tokens to be accepted, turning an authentication failure into a successful response. Cites 03-errors-as-interface.",
+      "severity": "high",
+      "remediation": "Replace jwt.decode with jwt.verify using the SECRET, and propagate verification errors instead of returning null silently.",
+      "arithmetic": "jwt.decode never throws and does not verify signature, so any crafted token yields a Claims object; therefore under condition 'invalid JWT signature', the service will return an HTTP 2xx status, indicating success.",
+      "prediction": {
+        "metric": "http_status",
+        "comparator": "between",
+        "value": 200.0,
+        "upper": 299.0,
+        "unit": "count",
+        "condition": "invalid JWT signature"
+      }
+    }
+  ]
+}
