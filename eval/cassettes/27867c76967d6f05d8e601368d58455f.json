@@ -1,0 +1,7 @@
+{
+  "specialists": [
+    "concurrency",
+    "security"
+  ],
+  "reasoning": "concurrency: potential race conditions when writing receipts to shared volume. security: use of environment variable for salt and cryptographic signature generation."
+}
