@@ -1,0 +1,73 @@
+{
+  "findings": [
+    {
+      "path": "src/routes/orders.ts",
+      "line": 19,
+      "layer": "security",
+      "symbol": "orders.get",
+      "mechanism": "SQL query built with string interpolation of untrusted claims.sub and status, allowing injection",
+      "severity": "high",
+      "remediation": "use parameterized query: pool.query('SELECT id, sku, quantity FROM orders WHERE customer = $1 AND status = $2', [claims.sub, status])",
+      "arithmetic": "N/A",
+      "prediction": null
+    },
+    {
+      "path": "src/routes/orders.ts",
+      "line": 24,
+      "layer": "network",
+      "symbol": "quote loop",
+      "mechanism": "sequential fetch per order row causes latency scaling linearly with number of rows",
+      "severity": "medium",
+      "remediation": "fetch all quotes in parallel with Promise.all or add batch endpoint",
+      "arithmetic": "latency = rows * 100ms (assumed per quote)",
+      "prediction": {
+        "metric": "http_req_duration_p99",
+        "comparator": "at_least",
+        "value": 1000.0,
+        "upper": null,
+        "unit": "ms",
+        "condition": "rows=10"
+      }
+    },
+    {
+      "path": "src/lib/pricing.ts",
+      "line": 8,
+      "layer": "network",
+      "symbol": "fetch",
+      "mechanism": "fetch called without timeout can hang indefinitely, tying up worker threads",
+      "severity": "high",
+      "remediation": "wrap fetch with AbortController and set timeout (e.g., 2s)",
+      "arithmetic": "N/A",
+      "prediction": null
+    },
+    {
+      "path": "src/lib/receipt.ts",
+      "line": 7,
+      "layer": "concurrency",
+      "symbol": "writeReceipt",
+      "mechanism": "fs.writeFileSync blocks event loop, limiting throughput under concurrent requests",
+      "severity": "medium",
+      "remediation": "replace with await fs.promises.writeFile for non-blocking I/O",
+      "arithmetic": "max_rps = 1000ms / 5ms = 200 rps (write time assumed 5ms)",
+      "prediction": {
+        "metric": "throughput_rps",
+        "comparator": "at_most",
+        "value": 200.0,
+        "upper": null,
+        "unit": "rps",
+        "condition": "writeReceipt invoked"
+      }
+    },
+    {
+      "path": "src/lib/token.ts",
+      "line": 15,
+      "layer": "security",
+      "symbol": "claimsFrom",
+      "mechanism": "jwt.decode used without signature verification, allowing forged tokens",
+      "severity": "high",
+      "remediation": "use jwt.verify(token, SECRET) and handle errors",
+      "arithmetic": "N/A",
+      "prediction": null
+    }
+  ]
+}
