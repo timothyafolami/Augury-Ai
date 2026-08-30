@@ -188,6 +188,8 @@ async def _review(run: Run, root: Path, target: Target) -> None:
     """
     from augury.agents.augury import AuguryReviewer, Progress
     from augury.core.adapters.provider import model_from
+    from augury.core.coverage import engineering_coverage
+    from augury.core.forecast import forecast
     from augury.core.reference.registry import Registry
     from augury.core.reference.requirements import requirements_of
     from augury.core.reference.staleness import dependency_audit
@@ -280,12 +282,36 @@ async def _review(run: Run, root: Path, target: Target) -> None:
         say({"kind": "stage", "stage": "specialists", "state": "done"})
 
         say({"kind": "stage", "stage": "report", "state": "running"})
+
+        # Both are derived from the run rather than asserted over it: coverage
+        # counts modules the concern appears in against modules a specialist
+        # was asked about, and a pressure cannot be built without the findings
+        # it was read off. Each carries how it was worked out, because a bar
+        # beside a mechanism name looks like a measurement unless something
+        # travelling with it says otherwise.
+        engineering = engineering_coverage(repo, plan_coverage(result), result.findings)
+        pressures = forecast(result.findings)
+        say(
+            {
+                "kind": "coverage",
+                "layers": [row.model_dump(mode="json") for row in engineering.layers],
+            }
+        )
+        say(
+            {
+                "kind": "forecast",
+                "items": [item.model_dump(mode="json") for item in pressures],
+            }
+        )
+
         run.report = {
             "name": root.name,
             "usd": round(result.usd, 5),
             "seconds": round(result.seconds, 1),
             "modelId": result.model_id,
             "coverage": result.coverage.model_dump() if result.coverage else None,
+            "engineering": engineering.model_dump(mode="json"),
+            "forecast": [item.model_dump(mode="json") for item in pressures],
             "findings": [_finding(f) for f in result.findings],
             "dropped": [
                 {"symbol": d.symbol, "path": d.path, "reason": d.reason} for d in result.dropped
@@ -298,6 +324,13 @@ async def _review(run: Run, root: Path, target: Target) -> None:
     except Exception as error:  # a demo must say what broke, not stop moving
         run.failed = str(error)
         say({"kind": "failed", "detail": str(error)[:400]})
+
+
+def plan_coverage(result: Any) -> Any:
+    """The scheduler's coverage, or an empty one when a run produced none."""
+    from augury.core.scheduling import Coverage
+
+    return result.coverage if result.coverage is not None else Coverage(analysed=[])
 
 
 def _finding(item: Any) -> dict[str, Any]:
