@@ -183,7 +183,11 @@ Two components do the hardest work and neither is a language model.
 
 **Cartographer** walks a repository in any of six languages, resolves the
 import graph, computes fan-in and churn, and attaches the engineering concerns
-each module touches. Deterministic; no model call.
+each module touches. Deterministic; no model call. One of those six is
+measured end to end by the evaluation: `E01-go-inventory` is a Go service with
+eight seeded defects and a clean `go vet`. The other four are exercised by unit
+tests over their parsers and signal detectors, which is a weaker claim and is
+worth reading as one.
 
 **Scheduler** picks the next module worth reading by expected yield per dollar,
 boosts modules importing something already found defective, stops when nothing
@@ -254,19 +258,28 @@ Two of the tests that were supposed to catch this were instead enforcing it:
 one asserted the vacuity rule for the analyst *by name*, and one accepted a
 `nested` schema argument and never used it.
 
-### The result, on four cases
+### The result, on five cases
 
 A sweep was recorded call by call and the recordings committed, so this is
 reproducible exactly, with no API key: `make eval-replay` prints these numbers.
 
 | metric | baseline | augury |
 |---|---|---|
-| seeded recall | 0.846 | 0.846 |
-| falsifiable precision | 0.667 | **0.690** |
+| seeded recall | 0.857 | 0.857 |
+| falsifiable precision | **0.696** | 0.629 |
 | hit rate | 0.750 (6/8) | **0.857** (6/7) |
 | experiments run | 8 | 7 |
-| prediction coverage | **0.667** | 0.400 |
-| experiments that broke | 1 | **0** |
+| prediction coverage | **0.500** | 0.364 |
+| experiments that broke | 3 | **1** |
+
+**The fifth case reversed the precision line.** On the four Python cases the
+pipeline led on falsifiable precision, 0.690 against 0.667. Adding one Go
+service put the baseline ahead, 0.696 against 0.629, and left recall tied. The
+earlier number is not withdrawn as a mistake — it was correctly measured on the
+cases that existed — but it was measured on a suite that was entirely Python
+while the product claimed six languages, and the first language added moved it.
+That is the fourth time this margin has changed direction, which is the honest
+summary of how much five cases settle.
 
 ```
 hit rate  repeats not independent: p = n/a  not measured
@@ -342,10 +355,15 @@ and no case had ever settled. On four cases the hit rate went to 1.000 against
 0.600, and the lead was not merely gone but reversed.
 
 It has since reversed again, to 0.750 against 0.857, after the specialists were
-given the lab they had always been told they were citing. A margin that has
-now moved three times, twice in one direction and once in the other, over seven
-or eight experiments, is not a measurement of an architecture. It is a
-measurement of how little seven experiments can settle.
+given the lab they had always been told they were citing. And then a fourth
+time, on precision, when the suite stopped being entirely Python: one Go
+service was enough to put the baseline back in front, 0.696 against 0.629.
+
+A margin that has now moved four times, over seven or eight experiments and
+five cases, is not a measurement of an architecture. It is a measurement of how
+little five cases can settle. The fourth move is the most informative of them,
+because it did not come from tuning anything: it came from measuring a claim
+the suite had never tested.
 
 The prediction that preceded the first reversal is the part worth keeping: the
 margin was named as too small to survive more data,
