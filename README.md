@@ -633,7 +633,7 @@ and against more than one remediation, because passing against one is how
 ```bash
 make install
 cp .env.example .env      # add GROQ_API_KEY
-make check                # lint, types, 1438 tests
+make check                # lint, types, 1454 tests
 ```
 
 Full instructions, including reproducing the published numbers with no API key,
