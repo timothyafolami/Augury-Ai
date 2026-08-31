@@ -22,8 +22,8 @@ No Docker is required. The experiments run against an in-process database.
 ## Setup
 
 ```bash
-git clone <this repository>
-cd augury
+git clone https://github.com/timothyafolami/HackerEarth.git
+cd HackerEarth
 make install
 ```
 
@@ -32,6 +32,22 @@ committed `uv.lock` so your dependency versions match the ones that produced
 the numbers, and points git at the tracked hooks directory.
 
 Takes about 90 seconds, most of it downloading tree-sitter grammars.
+
+### Versions
+
+| | version | why it matters |
+|---|---|---|
+| Python | 3.12 | `uv` installs it if absent. Pinned because a later interpreter resolves a different dependency set, and the cassette keys include the response schema |
+| uv | 0.5 or later | `uv sync --frozen` behaviour is version-sensitive |
+| Node | 20 or later | only for the web interface; `make demo` builds it, everything else works without Node |
+| Docker | optional | experiments run in the reviewed service's image when the daemon is up, and beside the repository when it is not. Both paths are supported and the report says which ran |
+
+### What data you need: none that is not committed
+
+The six case repositories are in `eval/cases/`, authored for this project.
+The recorded model calls are in `eval/cassettes/`, 138 of them, tracked in
+git. Nothing is downloaded, no dataset is fetched, and no account is needed
+for any command on this page that says "with no API key".
 
 ---
 
@@ -42,8 +58,8 @@ make check
 ```
 
 Runs ruff, ruff format, mypy strict over `src` and `tests`, and the full test
-suite. Expect **534 passed, 3 skipped**, in about a minute. Nothing here
-reaches the network.
+suite. Expect **1438 passed, 7 skipped**, in four to five minutes. Nothing
+here reaches the network.
 
 This is the same command CI runs and the same command the pre-commit hook runs.
 There is one definition of green.
@@ -117,7 +133,7 @@ make review-augury      # schedule, triage, specialise, reconcile
 
 # any case, either arm, with the claims put to the experiments,
 # recording every step the agents took
-.venv/bin/python -m augury.cli review --case C01 --arm augury --prove \
+.venv/bin/python -m augury.cli review --case C01 --arm augury --prove 3 \
     --trajectory /tmp/run.jsonl
 ```
 
@@ -146,7 +162,7 @@ make eval-replay        # same command, served from the committed recordings
 ```
 
 Every model call comes from `eval/cassettes/`. Nothing reaches the network,
-nothing is spent, and it takes seconds. If a recording is missing the run stops
+nothing is spent, and it takes two to three minutes. If a recording is missing the run stops
 and names the call rather than quietly falling through to a provider.
 
 **Be precise about what this does and does not reproduce.** It reproduces the
