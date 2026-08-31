@@ -15,15 +15,64 @@ stopped.
 
 | file | what it is |
 |---|---|
-| `augury-B01.jsonl` | A pipeline review of B01: 59 steps across four agents |
-| `augury-C01.jsonl` | A pipeline review of C01. The Prover writes no trajectory, so no experiment appears here |
+| `augury-B01.jsonl` | A pipeline review of B01: 59 steps across four agent kinds |
+| `augury-C01.jsonl` | A pipeline review of C01 |
 | `baseline-B01.jsonl` | The baseline on B01: its whole prompt, and one call |
+| `report-B01.jsonl` | A full `report` run: the Surveyor, the free artefact pass, and the specialists behind a written document |
 
 Each was produced by a command in the reproduction guide:
 
 ```bash
 augury review --case B01 --arm augury --trajectory docs/trajectories/augury-B01.jsonl
+augury report --path eval/cases/B01-orders-service/repo \
+    --trajectory docs/trajectories/report-B01.jsonl
 ```
+
+Both replay from committed cassettes, so either can be regenerated with no API
+key and no spend.
+
+## Coverage, agent by agent
+
+The brief asks for a representative trajectory for every agent used. This is
+where each one is, and where three of them are not.
+
+| agent | recorded in | notes |
+|---|---|---|
+| Surveyor | `report-B01.jsonl` | Reads the deployment before any code. Consults no model |
+| Cartographer | all four | Six languages, imports, request path. Consults no model |
+| Artifacts pass | `report-B01.jsonl` | Migrations, dependencies, compose. Deterministic and free |
+| Scheduler | all pipeline files | 17 steps in `report-B01`: what it chose, and what it declined to spend on |
+| Triage | all pipeline files | One call per module, routing to specialists |
+| Baseline reviewer | `baseline-B01.jsonl` | One prompt, the whole repository, one call |
+| analyst:data | all pipeline files | |
+| analyst:network | all pipeline files | |
+| analyst:security | `augury-B01`, `report-B01` | |
+| analyst:observability | `augury-B01`, `report-B01` | |
+| analyst:craft | `report-B01` | |
+| analyst:concurrency | `augury-C01`, `report-B01` | |
+| **analyst:distributed** | **nowhere** | See below |
+| **analyst:failure** | **nowhere** | See below |
+| **analyst:serving** | **nowhere** | See below |
+| Synthesis | **no trajectory** | Runs only in the web path, which streams rather than writing JSONL. Its prompt and answer are in the committed cassettes |
+| Prover / experiment writer | **no trajectory** | Generates and runs code; its artefact is the experiment script and the measured number, both in the report |
+
+### Three specialists that no case exercises
+
+`distributed`, `failure` and `serving` have briefs, routing rules and tests,
+and **no case in the evaluation suite raises their signal**. Measured, not
+assumed: across all six case repositories the signals that occur are
+`data` (28), `network` (14), `entrypoint` (8), `security` (7), `concurrency`
+(6), `observability` (6) and `craft` (2). The other three occur zero times.
+
+So a third of the specialist fleet is unexercised end to end. They cannot have
+a trajectory because they never run, and that is a real limit on what this
+suite measures rather than a gap in the paperwork. It is the same shape as the
+Rust, C++ and Java detectors: implemented, unit-tested, and unmeasured against
+a case.
+
+Fixing it means writing cases that need them — a service with a queue and a
+retry policy for `failure`, something with a model server for `serving` — and
+that is the next thing this suite needs, ahead of a seventh Python case.
 
 The earlier version of this file had no such command -- `Trajectory` was
 constructed only in tests -- so the artefact could not be regenerated. An
