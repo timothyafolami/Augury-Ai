@@ -20,10 +20,10 @@ each message says what changed in that file.
 | `src/augury/core/` | Prediction and finding types, scoring, the metric vocabulary |
 | `src/augury/agents/` | Baseline reviewer, triage, the pipeline arm |
 | `src/augury/evaluation/` | Cases, runner, prover, reconciler, sweep |
-| `src/augury/prompts/` | Every prompt, including the eight layer briefs |
+| `src/augury/prompts/` | Every prompt, including the nine layer briefs and the committed lab corpus |
 | `src/augury/cli/` | The command line |
-| `eval/cases/` | Three case repositories, ten seeded defects, nine experiments, and the remediated version of every file broken in B01 and C01 |
-| `tests/` | 534 tests |
+| `eval/cases/` | Six case repositories across Python, Go and TypeScript; twenty-nine seeded defects; the experiments that settle them; and the remediated version of every file broken in B01 and C01 |
+| `tests/` | 1438 tests |
 
 ---
 
@@ -83,6 +83,13 @@ All standard, all pinned in `uv.lock`, all used as intended.
 | `typer`, `rich` | Command line |
 | `sqlalchemy`, `aiosqlite`, `httpx` | Only the case experiments; not the reviewer |
 | `pytest`, `ruff`, `mypy` | Development |
+| `react`, `vite`, `tailwindcss`, `framer-motion` | The web interface |
+
+Every dependency above is MIT, Apache-2.0 or BSD-licensed, all of which permit
+the use made of them here. This project is MIT; see [`LICENSE`](../LICENSE).
+No dependency was vendored, patched or redistributed in modified form, and no
+model provider's output is redistributed beyond the recorded calls in
+`eval/cassettes/`, which are this project's own API responses.
 
 The case repositories under `eval/cases/` contain deliberately defective code
 written for this submission. They are excluded from our linters, because
