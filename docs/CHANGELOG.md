@@ -504,13 +504,6 @@ asserting equivalence rather than superiority:
 
 ---
 
-## Removed
-
-Nothing yet. When something is removed, it stays listed here with what it cost
-to learn.
-
----
-
 ## 17. Pointed at a repository nobody prepared
 
 **What prompted it.** Every number in this file came from cases where this
@@ -843,20 +836,268 @@ least eight words.
 
 ---
 
+---
+
+## 24. The specialists had never read the lab they were told to cite
+
+**What prompted it.** An audit of the layer briefs against the practice lab
+they are drawn from, run because the briefs had never been checked against
+their source. It found twenty-five mechanisms in the lab that appeared in no
+brief.
+
+**What was tried.** Three things, together. The twenty-five missing mechanisms
+were added to the briefs. Eight metrics the lab's mechanisms need in order to
+be stated at all -- `throughput_rps`, `goodput`, `throttled_share`,
+`replication_lag_bytes`, `open_file_descriptors`, `cache_hit_rate`,
+`pool_wait_ms`, `series_cardinality` -- were added to the vocabulary. And a
+real corpus was extracted from the lab and shipped with the package.
+
+The corpus is the one worth naming. The prompt had always said the reference
+material *"comes from a practice lab written before this review existed, and
+they are the source of your authority -- cite them"*, and what it then handed
+the specialist under that heading was the specialist's own brief, a second
+time. The specialist had a brief and no corpus, and was invited to attribute
+the brief to a lab it had never seen.
+
+**What the evidence said.** On four Python cases the pipeline took the
+precision lead, 0.690 against 0.667, and seeded recall came level. The gap had
+been in what one arm was told, not in the architecture.
+
+**What was decided.** Keep it, and say so in the README in those words: *"the
+gap reversed after the specialists were given the lab, not that the
+architecture won."*
+
+**What it taught.** The third time on this project that a difference between
+the arms turned out to be a difference in their instructions. It is now the
+first hypothesis whenever the arms diverge, ahead of anything architectural.
+
+---
+
+## 25. A Go service, and the lead reversed again
+
+**What prompted it.** Four cases, all Python. The product's claim is six
+languages, and a suite in one language cannot test it. The guide's own
+question -- would another person reproduce this? -- has no good answer if the
+only evidence is Python.
+
+**What was tried.** E01, a Go inventory service: six modules, eight seeded
+defects, chosen so that the defects are ones Go makes available and Python does
+not. A goroutine per item over an unbuffered channel with an early return that
+strands every sender. A `defer` inside a loop. An error assigned to `_`.
+
+**What the evidence said.**
+
+| metric | four cases | five cases |
+|---|---|---|
+| falsifiable precision | **0.690** / 0.667 | 0.696 / **0.629** |
+
+Adding one non-Python case moved the baseline back in front.
+
+**What was decided.** Publish it. The alternative -- reporting the four-case
+number because it was more flattering -- is the failure this file exists to
+prevent.
+
+**What it taught.** That the margin was never stable enough to be a result. It
+had moved three times by this point, and each move was one case.
+
+---
+
+## 26. A TypeScript service, and back again
+
+**What prompted it.** The target user is someone reviewing generated code, and
+generated backends are disproportionately TypeScript. Two languages tested a
+claim about six; a third at least tests whether the second was a fluke.
+
+**What was tried.** F01, a checkout service in TypeScript: six modules, eight
+seeded defects, including two that are specifically Node's -- a synchronous
+crypto call on the request path, which in a single-threaded runtime stalls
+every concurrent request, and a floating promise whose rejection is never
+handled.
+
+**What the evidence said.** Falsifiable precision 0.675 for the pipeline
+against 0.643 for the baseline. The lead came back.
+
+**What was decided.** Publish, and write the sentence the numbers actually
+support: the margin has moved on every change to the suite, and a metric that
+changes direction whenever one case is added is not measuring the
+architecture.
+
+**What it taught.** Six cases is still not ten, and ten would probably not
+settle it either. The honest reading is that neither arm dominates: the
+baseline reads everything and finds slightly more, the pipeline reads a
+fraction and is slightly more often right about what it finds.
+
+---
+
+## 27. The Cartographer could not see a goroutine
+
+**What prompted it.** An audit of signal detection across all six languages,
+run by probing each with a hazard that language is known for. Nine of nine
+probes for Rust, C++ and Java raised nothing, and so did `go func`.
+
+**What was tried.** Measuring what the Go case actually routed.
+`internal/reindex/worker.go` -- the file that exists to demonstrate a goroutine
+leak -- raised `data` and `observability`. The concurrency specialist, the one
+qualified to name that mechanism, was never asked to read it.
+
+The cause was that signals for the compiled languages came off the import
+list, and none of these constructs import anything. `go func` imports nothing.
+`synchronized` imports nothing. `Runtime.exec` lives in `java.lang`, which is
+imported implicitly and appears in no import list anywhere. A C++ file that
+already includes `<thread>` for one reason gets no credit for the line that
+spawns.
+
+So detection moved to the source: threads, tasks, channels and locks in Go,
+Java, C++ and Rust, and the escapes from each language's safety guarantee --
+`unsafe`, `transmute`, `strcpy`, `ObjectInputStream`.
+
+**What the evidence said.** Falsifiable precision moved to 0.679 for the
+baseline against 0.675 for the pipeline: a tie in everything but the third
+decimal, and the fifth direction change in six cases. But E01's recall went
+from 6 of 8 to **7 of 8**, and the defect it gained is the goroutine leak.
+
+**What was decided.** Keep it, and publish the capability rather than the
+score. A detector that finds the defect the case was built around is worth
+more than four thousandths of a precision point in either direction.
+
+**What it taught.** Every rule is anchored on syntax rather than on a word,
+because routing a file to a specialist costs a model call and a detector that
+fires on "go" in an English sentence spends money to be told nothing. Fourteen
+false-positive guards hold that line. `memcpy` and `snprintf` were deliberately
+left out for the same reason: they take a length, they are ordinary, and
+flagging them would route most of a C++ codebase to the security specialist.
+
+---
+
+## 28. The recording replayed on one machine, and that machine was mine
+
+**What prompted it.** Not a test. A clone. `git clone`, no API key, `make
+demo` -- the path a judge takes -- returned 4 deployment findings and **zero**
+code findings, zero pressures, zero synthesis. The same review in the working
+checkout returned sixteen.
+
+**What was tried.** Instrumenting the cassette layer to log every key it looked
+up, in both trees. The clone made 32 lookups and missed all 32. The checkout
+made **7** and hit all 7.
+
+The other twenty-five answers were never coming from cassettes here either.
+They came from `~/.cache/augury` -- 958 entries, keyed by absolute repository
+path -- which sits *above* the cassette layer. During the recording run the
+memo answered, so no cassette was written; and the memo cannot travel, because
+its key is a path that exists on one machine.
+
+**What the evidence said.** The recording was complete for the calls my cache
+happened to miss that day, and for no others. `make eval-replay` reported zero
+misses throughout, because the evaluation harness disables the memo and the web
+path did not.
+
+**What was decided.** The memo stands down whenever a recording is being made.
+The saving is real -- 167 modules re-read after editing three files -- but it
+is worth less than a cassette set that travels. Re-recorded: 26 new cassettes,
+$0.03.
+
+A cold clone with no key now returns 4 deployment findings, 16 code findings,
+5 pressures, 4 synthesis observations and a 259-line report, for $0.00.
+
+**What it taught.** The lesson this project keeps relearning, in its sharpest
+form yet: **every defect that changed a number was found by running the thing
+or by cloning it, never by testing it.** 1372 tests passed over this bug. What
+found it was typing `git clone` and looking at the output. A cache above a
+recorder is a correctness bug wearing a performance costume, and the general
+shape -- state on the author's machine silently substituting for state in the
+artefact -- is worth checking for anywhere a system records itself.
+
+---
+
+## Removed
+
+Kept here with what each cost to learn, because a removed experiment is
+evidence about the problem and deleting it silently loses that.
+
+**The `http_req_duration_p99` experiment (D01).** Written, working, deleted.
+This project requires every experiment to return the same number twice, and a
+wall-clock percentile cannot. It measured 33.9 ms seeded against 0.001 ms
+remediated -- four orders of magnitude apart -- and keeping it would have meant
+weakening the determinism guarantee for one measurement. The metric stays in
+the vocabulary and is predicted against by four of the layer briefs, and is
+settled by nothing. **Cost to learn:** the experiment, plus a second defect
+found while writing it -- at a hundred samples the nearest-rank p99 *is* the
+maximum, so a remediation that pays its cost once measured no better than the
+defect, because that one warm-up request was the p99.
+
+**The memo cache, during recording only.** Not deleted -- suspended, and only
+while cassettes are being written. It stays on for live runs, which is where it
+pays. **Cost to learn:** a keyless demo that returned nothing on every machine
+but the one that recorded it, and would have been the first thing a judge ran.
+
+**Autogen's orchestration.** `autogen-core` is still a dependency and is used
+for exactly one thing: a model-client abstraction in `provider.py`.
+`AssistantAgent`, `Swarm` and `GroupChat` were tried and dropped. The
+scheduling this system needs -- a budget consumed across a loop, with the next
+batch chosen from what the last one returned -- is a control-flow problem, and
+expressing it as agent handoffs made it harder to see and impossible to test.
+The orchestration is hand-rolled asyncio and that is a decision, not an
+omission. **Cost to learn:** roughly half a day, and it is why the scheduler is
+a plain object with a `record` method that a unit test can drive.
+
+**Two baseline arms.** The plan promised B0 (one prompt) and B1 (a
+human-in-the-loop arm). B1 was dropped: with one person on the clock it would
+have measured how long I personally take to review a case, on cases I wrote and
+whose defects I already knew. That is not a baseline, it is a memory test.
+**Cost to learn:** nothing but the paragraph, and it is a reminder that a
+baseline has to be reproducible by the reader too.
+
+---
+
+## The main failure mode
+
+**Experiments that measure the harness instead of the code.** It has happened
+four times on this project, each time producing a number that looked like a
+result: a benchmark that ran for 400 microseconds and measured the scheduler; a
+p99 over a hundred samples that was really the maximum; a lost-update counter
+whose zero was the optimiser deleting the loop; a "remediated" arm that was
+faster because it did less, not because it was fixed. Three of the four
+survived a code review and were caught by re-running with the defect removed
+and watching the number *not* move.
+
+That is why `Outcome` has three values rather than two. **Hit**, **miss** and
+**broken** -- and broken counts as neither. An architecture that cannot say "I
+do not trust this measurement" will report the measurement.
+
+## Hot take
+
+**Everyone building AI code review is measuring whether the reviewer named the
+defect. That is the easy half, it is nearly free to score, and it is why the
+tools do not get better. The hard half is whether the reviewer's claim is true
+-- and almost nobody builds the apparatus to find out, because the moment you
+do, it starts telling you things you did not want to hear.**
+
+This project built the apparatus and then published what it said, including
+that the architecture it was built to demonstrate does not clearly beat one
+prompt. The full argument is in [`HOT_TAKE.md`](HOT_TAKE.md).
+
 ## Still open
 
-- The pipeline costs five times the baseline. It finds the same defects, states
-  *more* testable claims of which a smaller share survive validation, and is
-  ahead on hit rate by a single experiment -- five of five against five of six,
-  with no p-value attached because the repeats are not independent. Either that
-  last effect is real and the crossover is at a repository size not yet tested,
-  or it is noise and the architecture does not pay for itself. Ten seeded
-  defects over three cases cannot separate those, and neither can more repeats:
-  repeats vary nothing but the provider.
-- The margin is one experiment. A single measurement moving would erase or
-  double it. It needs a fourth case, not a sixth repeat.
-- Two metrics in the published vocabulary, `http_req_duration_p99` and
-  `memory_bytes`, have no experiment in any case. A prediction naming one of
-  them is Broken however good it is, so which metric an arm happens to choose
-  partly decides whether its claim reaches the hit-rate denominator at all.
-  This is the Iteration 10 artefact, reduced but not gone.
+- **Six cases, and the margin has changed direction five times.** The guide
+  suggests ten or more. Six is what fits the time, and the honest consequence
+  is that no comparison here is significant: the seeds are not independent, and
+  a hit rate over seven experiments moves by 0.14 when one of them changes its
+  mind. What the suite does support is the narrower claim: neither arm
+  dominates, and the pipeline's advantage is in being right rather than in
+  finding more.
+- **The pipeline costs five times the baseline** -- $0.0582 against $0.0108
+  over six cases. It finds slightly fewer defects, states a smaller share of
+  testable claims, and is slightly more often right about the claims it does
+  state. Whether that trade is worth paying is a question about repository
+  size, and the crossover has not been found.
+- **Experiments that broke rose from 1 to 6 for the pipeline** while the
+  baseline held. The likeliest cause is that the claims changed when the
+  recordings were refreshed after the memo fix, but that has not been
+  demonstrated. Recorded as an open question, not an explained one.
+- **Two metrics in the vocabulary settle nothing.** `http_req_duration_p99` and
+  `memory_bytes` have no experiment in any case, so a prediction naming one is
+  Broken however good it is. This is the Iteration 10 artefact, reduced and not
+  gone.
+- **Rust, C++ and Java have detectors and no case.** Their coverage rests on
+  unit tests over realistic files, which is a weaker claim than the three
+  measured languages and is worth reading as one.
