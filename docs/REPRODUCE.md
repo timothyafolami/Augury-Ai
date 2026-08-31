@@ -58,7 +58,7 @@ make check
 ```
 
 Runs ruff, ruff format, mypy strict over `src` and `tests`, and the full test
-suite. Expect **1438 passed, 7 skipped**, in four to five minutes. Nothing
+suite. Expect **1454 passed, 7 skipped**, in four to five minutes. Nothing
 here reaches the network.
 
 This is the same command CI runs and the same command the pre-commit hook runs.
