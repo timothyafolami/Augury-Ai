@@ -227,6 +227,7 @@ def report(
     model: str = typer.Option("", help="Model id, e.g. deepseek-v4-flash"),
     api_key: str = typer.Option("", help="Key for this run, instead of the environment"),
     out: str = typer.Option("augury-report.md", help="Where to write the document"),
+    trajectory: str = typer.Option("", help="Write every step to this JSONL file"),
 ) -> None:
     """Review a repository and write a document a team can act on.
 
@@ -238,6 +239,10 @@ def report(
     root = Path(path).expanduser().resolve()
     if not root.is_dir():
         _fail(f"--path must be a directory: {root}")
+
+    # Opened before the Surveyor runs, so the deployment read is in the file
+    # rather than only the model calls that follow it.
+    recording = Trajectory(Path(trajectory)) if trajectory else None
 
     settings = _settings_from(provider, model, api_key)
     banner.opening(
@@ -254,6 +259,17 @@ def report(
         f"{counted(len(found.backing), 'backing service')}, "
         f"{counted(len(entrypoints), 'entrypoint')} declared by their commands",
     )
+
+    if recording:
+        recording.record(
+            agent="surveyor",
+            action="read the deployment",
+            detail={
+                "services": [s.name for s in found.services],
+                "backing": [b.name for b in found.backing],
+                "entrypoints": sorted(entrypoints),
+            },
+        )
 
     banner.stage(console, 2, 5, "Cartographer", "six languages, imports, request path")
     try:
@@ -286,8 +302,20 @@ def report(
         "all deterministic and free",
     )
 
+    if recording:
+        recording.record(
+            agent="artifacts",
+            action="read what ships beside the code",
+            detail={
+                "deployment": len(deployment),
+                "schema": len(schema),
+                "dependencies": len(dependencies),
+                "cost_usd": 0.0,
+            },
+        )
+
     ceiling = f"${budget:.2f}" if budget else "no ceiling"
-    banner.stage(console, 4, 5, "Specialists", f"eight concerns, {ceiling}")
+    banner.stage(console, 4, 5, "Specialists", f"nine concerns, {ceiling}")
     built_model = model_from(settings)
 
     # Recorded before any specialist runs. A run written down on completion is
@@ -310,6 +338,7 @@ def report(
             watching=_watcher(),
             memo=_memo_for(root, enabled=cache, model_id=built_model.model_id),
             triage_model=triage_model_from(settings),
+            trajectory=recording,
         )
         result: Report = await built.review(repo, root)
         return result
