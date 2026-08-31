@@ -189,7 +189,16 @@ down, and the whole difference is absorbed by whoever is paged.
 
 The bottleneck is not writing the fix. It is forming a correct hypothesis about
 an unfamiliar system while the clock runs, from evidence spread across logs,
-metrics, configuration and deploy history.
+metrics, configuration and deploy history. Getting that hypothesis wrong is
+what turns a twenty-minute incident into a two-hour one, and it is why the
+expensive defects are the ones that read correctly line by line.
+
+**This is evidence for an engineer, not a verdict.** Augury produces findings,
+measurements and a report; deciding what to change remains a qualified
+person's job, and nothing here should be applied to a running system without
+one. The design says so on purpose: a claim carries the experiment that tested
+it so a reviewer can disagree with the measurement rather than with the
+model.
 
 And the defects that cause this share a signature. From the practice lab this
 project's knowledge comes from, written months before it existed:
@@ -265,8 +274,24 @@ The full architecture, written from the code and one recorded run, is in
 
 ## Results
 
-Three cases, ten seeded defects, five runs per arm, every prediction put to
-the case's own experiments. `openai/gpt-oss-120b` on Groq at temperature 0.
+Six cases, twenty-nine seeded defects across Python, Go and TypeScript, five
+runs per arm, every prediction put to the case's own experiments.
+`openai/gpt-oss-120b` on Groq at temperature 0.
+
+**The primary metric is hit rate:** of the claims that were falsifiable enough
+to test, what share survived an experiment that tried to refute them. It is
+the primary one because it is the only metric here that measures whether the
+reviewer was *right*, which is the thing the user needs and the thing every
+other reviewer on the market leaves unmeasured. Recall counts what was named,
+precision counts what was well-formed; only hit rate counts what was true.
+
+**What was defined as a good result, before the sweep ran:** the pipeline
+ahead of the baseline on hit rate at equal or better recall, on at least four
+cases, at a cost premium under 10x. Recorded here because a target written
+afterwards is not a target. **The observed result meets two of those three and
+misses recall**, and the margin has changed direction five times in six cases,
+so the honest reading is in the paragraphs below the table rather than in the
+table.
 
 **Read this section knowing what it measures.** The seeded cases are 3 to 23
 modules. A repository that small fits in one prompt, so the pipeline's whole
@@ -362,6 +387,23 @@ Cost is not in that table because replay is free, which is what makes it
 reproducible without a key. On the recording run the baseline spent $0.0108 and
 the pipeline $0.0582.
 
+#### The comparison in the shape the brief asks for
+
+| metric | simple baseline | agent solution | change |
+|---|---|---|---|
+| **primary outcome** — hit rate | 0.750 (6/8) | **0.857** (6/7) | **+0.107** |
+| human time per task | ~35 min | ~45 s of attention | **−97%** |
+| cost per task | $0.0018 | $0.0097 | **5.4x** |
+
+*Human time per task* is the one estimate in this document rather than a
+measurement, and it is marked as such. The baseline figure is how long it took
+me to read one case repository and write down its defects by hand while
+building the suite; the agent figure is wall-clock attention, not wall-clock
+runtime — a six-case sweep takes 4 to 12 minutes but wants nothing from you
+while it runs. Treat it as an order of magnitude, not a number.
+
+*Cost per task* is measured: $0.0108 and $0.0582 over six cases.
+
 Reproduced from a fresh clone of this repository, which is the only test of
 that claim that counts. Every figure matches except the hit rate, which came
 back 7/7 rather than 6/7: one of the seven experiments measures a lost update
@@ -406,11 +448,17 @@ Falsifiable precision divides by findings plus discarded, so every collapsed
 finding quietly left the denominator. Counting them again cost this arm about
 nine points, with nothing about the reviewer changed.
 
-**The baseline still wins on cost and on coverage.** One prompt containing the
-whole repository states a higher share of testable claims and gets more of them
-measured, at a fifth of the price. What it no longer wins on is being right:
-the pipeline is now ahead on hit rate and on falsifiable precision, and level on
-recall.
+**The baseline wins on cost, on coverage and on recall.** One prompt
+containing the whole repository finds more of the seeded defects, states a
+higher share of testable claims, gets more of them measured, and does it at a
+fifth of the price. What it does not win on is being right: the pipeline leads
+on hit rate, 0.857 against 0.750, and precision is a tie in the third decimal.
+
+That is the whole finding, stated at the size it actually is. The pipeline
+reads a fraction of the repository and is somewhat more often correct about
+what it reports. Whether that trade is worth five times the price is a
+question about repository size, and this suite is too small to locate the
+crossover.
 
 #### The fourth case erased the pipeline's only lead
 
@@ -585,7 +633,7 @@ and against more than one remediation, because passing against one is how
 ```bash
 make install
 cp .env.example .env      # add GROQ_API_KEY
-make check                # lint, types, 534 tests
+make check                # lint, types, 1438 tests
 ```
 
 Full instructions, including reproducing the published numbers with no API key,
@@ -760,7 +808,16 @@ a denominator.
 
 ## Hot take
 
-See [`docs/HOT_TAKE.md`](docs/HOT_TAKE.md).
+**Everyone building AI code review is measuring whether the reviewer named the
+defect. That is the easy half, it is nearly free to score, and it is why the
+tools do not get better. The hard half is whether the reviewer's claim is true
+— and almost nobody builds the apparatus to find out, because the moment you
+do, it starts telling you things you did not want to hear.**
+
+This project built the apparatus and then published what it said, including
+that the architecture it was built to demonstrate does not clearly beat one
+prompt. The full argument, with the four experiments that measured the harness
+instead of the code, is in [`docs/HOT_TAKE.md`](docs/HOT_TAKE.md).
 
 ---
 
