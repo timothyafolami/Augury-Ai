@@ -13,6 +13,7 @@ import { NotRead } from "./components/NotRead";
 import { Diagram } from "./components/Diagram";
 import { Synthesis } from "./components/Synthesis";
 import { Document } from "./components/Document";
+import { Dossier } from "./components/Dossier";
 import { Waterfall } from "./components/Waterfall";
 import { useRun } from "./lib/useRun";
 
@@ -254,10 +255,24 @@ export default function App() {
             </div>
           )}
 
-          {report?.document && (
+          {report && (
             <div className="border-b border-edge p-5">
               <Header>
-                the review, as a document
+                the report
+                <span className="ml-2 text-mist/60">
+                  what a team acts on, and what leaves the building
+                </span>
+              </Header>
+              <div className="mt-4">
+                <Dossier report={report} />
+              </div>
+            </div>
+          )}
+
+          {report?.document && (
+            <div className="border-b border-edge p-5 no-print">
+              <Header>
+                the same review, as markdown
                 <span className="ml-2 text-mist/60">one engine, three clients</span>
               </Header>
               <div className="mt-4">
