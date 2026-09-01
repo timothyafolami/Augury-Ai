@@ -59,3 +59,418 @@
     box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25), 0 0 40px -12px rgba(139, 92, 246, 0.55);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   The report sheet.
+
+   A light document inside a dark application, because this is the artefact
+   that leaves the building and it should look on screen exactly as it looks on
+   paper. The print rules below remove the application and change nothing about
+   the sheet, so there is only ever one layout to keep honest.
+   --------------------------------------------------------------------------- */
+
+.dossier-wrap {
+  --paper: #ffffff;
+  --paper-ink: #17161d;
+  --paper-mute: #5d5a6b;
+  --paper-rule: #e3e0ea;
+  --paper-accent: #6d3fd4;
+}
+
+.sheet {
+  background: var(--paper);
+  color: var(--paper-ink);
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 3.5rem 3.25rem 2.5rem;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.62;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 24px 60px -28px rgba(0, 0, 0, 0.8);
+}
+
+.sheet-head {
+  border-bottom: 2px solid var(--paper-ink);
+  padding-bottom: 1.5rem;
+}
+.sheet-brand {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.sheet-mark {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.34em;
+  color: var(--paper-accent);
+}
+.sheet-kind {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+}
+.sheet-title {
+  margin: 1.1rem 0 0;
+  font-size: 2.35rem;
+  line-height: 1.1;
+  letter-spacing: -0.022em;
+  font-weight: 600;
+}
+.sheet-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 0;
+}
+.sheet-meta dt,
+.sheet-facts dt {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+}
+.sheet-meta dd,
+.sheet-facts dd {
+  margin: 0.3rem 0 0;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* At a glance. Four numbers, weighted so the eye lands on severity first. */
+.sheet-glance {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--paper-rule);
+  border-left: 3px solid var(--paper-accent);
+  margin: 1.75rem 0 0;
+}
+.sheet-tally {
+  padding: 0.95rem 1rem;
+  border-right: 1px solid var(--paper-rule);
+}
+.sheet-tally:last-child {
+  border-right: 0;
+}
+.sheet-tally-value {
+  display: block;
+  font-size: 1.85rem;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.sheet-tally-label {
+  display: block;
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+}
+.sheet-tally-high .sheet-tally-value {
+  color: #b3261e;
+}
+.sheet-tally-medium .sheet-tally-value {
+  color: #a35b00;
+}
+.sheet-tally-measured .sheet-tally-value {
+  color: var(--paper-accent);
+}
+
+.sheet-section {
+  margin-top: 2.5rem;
+}
+.sheet-section h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--paper-rule);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  break-after: avoid;
+}
+.sheet-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--paper-mute);
+  font-weight: 400;
+}
+.sheet-lede {
+  margin: -0.35rem 0 1.25rem;
+  color: var(--paper-mute);
+  font-size: 12.5px;
+  max-width: 46rem;
+}
+.sheet-empty {
+  color: var(--paper-mute);
+  font-size: 12.5px;
+}
+
+.sheet-observation,
+.sheet-pressure {
+  margin-bottom: 1.15rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--paper-rule);
+  break-inside: avoid;
+}
+.sheet-observation h3,
+.sheet-pressure h3 {
+  margin: 0 0 0.3rem;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.sheet-observation p,
+.sheet-pressure p {
+  margin: 0;
+  color: #3b3947;
+}
+.sheet-evidence,
+.sheet-derivation {
+  margin-top: 0.35rem !important;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--paper-mute) !important;
+  overflow-wrap: anywhere;
+}
+
+/* One finding. Never split across a page: half a finding is not actionable. */
+.sheet-entry {
+  padding: 1rem 0 1.1rem;
+  border-bottom: 1px solid var(--paper-rule);
+  break-inside: avoid;
+}
+.sheet-entry-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.sheet-sev {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.14rem 0.42rem;
+  border: 1px solid currentColor;
+}
+.sheet-sev-high {
+  color: #b3261e;
+}
+.sheet-sev-medium {
+  color: #a35b00;
+}
+.sheet-sev-low {
+  color: var(--paper-mute);
+}
+.sheet-index {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--paper-mute);
+}
+.sheet-where {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.sheet-line {
+  color: var(--paper-accent);
+}
+.sheet-layer {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+}
+.sheet-symbol {
+  margin: 0.55rem 0 0.25rem;
+  font-size: 14px;
+  font-weight: 600;
+}
+.sheet-mechanism {
+  margin: 0;
+  color: #3b3947;
+  max-width: 48rem;
+}
+.sheet-claim {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.7rem;
+  padding: 0.5rem 0.7rem;
+  background: #f7f6fa;
+  border-left: 2px solid var(--paper-accent);
+}
+.sheet-claim-label,
+.sheet-fix-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+}
+.sheet-claim-body {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.sheet-verdict {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.sheet-verdict-hit {
+  color: #0f7b4f;
+}
+.sheet-verdict-miss {
+  color: #b3261e;
+}
+.sheet-verdict-broken {
+  color: #a35b00;
+}
+.sheet-verdict-untested {
+  color: var(--paper-mute);
+}
+.sheet-measured {
+  margin: 0.45rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--paper-mute);
+}
+.sheet-fix {
+  margin-top: 0.7rem;
+}
+.sheet-fix p {
+  margin: 0.2rem 0 0;
+  color: #3b3947;
+  max-width: 48rem;
+}
+
+.sheet-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+  margin: 0;
+}
+.sheet-fact-wide {
+  grid-column: 1 / -1;
+}
+.sheet-dropped {
+  margin-top: 1.1rem;
+  font-size: 12px;
+}
+.sheet-dropped summary {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-mute);
+  cursor: pointer;
+}
+.sheet-dropped ul {
+  margin: 0.6rem 0 0;
+  padding-left: 1.1rem;
+  color: #3b3947;
+}
+.sheet-dropped code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.sheet-foot {
+  margin-top: 2.75rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--paper-rule);
+  color: var(--paper-mute);
+  font-size: 11.5px;
+}
+.sheet-foot p {
+  margin: 0;
+  max-width: 46rem;
+}
+.sheet-stamp {
+  margin-top: 0.6rem !important;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+/* ---------------------------------------------------------------------------
+   Print. The application disappears and the sheet becomes the page.
+
+   Visibility rather than display, because hiding ancestors with `display:none`
+   would take the sheet with them. The sheet keeps its own colours: a report
+   printed in the application's dark theme wastes a cartridge and is unreadable
+   photocopied.
+   --------------------------------------------------------------------------- */
+
+@page {
+  size: A4;
+  margin: 16mm 14mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* The application is not printed. Only the copy lifted onto the body is,
+     and it is a sibling of everything else rather than a descendant, so
+     nothing above it can clip it. */
+  html.is-printing body > *:not(#augury-print-root) {
+    display: none !important;
+  }
+  #augury-print-root {
+    display: block !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+
+  #augury-print-root .sheet {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    font-size: 10.5pt;
+    line-height: 1.5;
+  }
+  #augury-print-root .sheet-title {
+    font-size: 24pt;
+  }
+  #augury-print-root .sheet-tally-value {
+    font-size: 18pt;
+  }
+
+  /* A heading alone at the foot of a page, with its section overleaf, reads
+     as a document nobody proofread. */
+  .sheet-section h2 {
+    break-after: avoid;
+  }
+  /* Half a finding is not actionable. */
+  .sheet-entry,
+  .sheet-observation,
+  .sheet-pressure,
+  .sheet-foot,
+  .sheet-glance {
+    break-inside: avoid;
+  }
+  /* A detail collapsed on paper is a detail missing from the report. */
+  .sheet-dropped ul {
+    display: block !important;
+  }
+}
