@@ -778,6 +778,11 @@ async def _review(run: Run, root: Path, target: Target) -> None:
             "deployment": [_finding(f) for f in deployment],
             "synthesis": [item.model_dump(mode="json") for item in observations],
             "name": root.name,
+            # Where the review was pointed. The report is headed with a name,
+            # and a folder called "repo" or "backend" names nothing a reader
+            # can act on -- the interface climbs one level, which it cannot do
+            # from a leaf on its own.
+            "root": str(root),
             "usd": round(result.usd, 5),
             "seconds": round(result.seconds, 1),
             "modelId": result.model_id,
