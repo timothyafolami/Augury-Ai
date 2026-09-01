@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { claimOf, everyFinding, headline, ranked, titleFor, verdictOf } from "./dossier";
+import {
+  claimOf,
+  everyFinding,
+  filenameFor,
+  headline,
+  ranked,
+  titleFor,
+  verdictOf,
+} from "./dossier";
 import type { Finding, Report } from "./types";
 
 /** The logic behind the printed report.
@@ -293,6 +301,32 @@ describe("the headline a reader sees first", () => {
 
     expect(said.total).toBe(0);
     expect(said.measured).toBe(0);
+  });
+});
+
+describe("what the downloaded file is called", () => {
+  it("is the folder name and what the document is", () => {
+    expect(filenameFor({ name: "orders-service", root: "/src/orders-service" })).toBe(
+      "orders-service_augury_review_report",
+    );
+  });
+
+  it("uses the name the report is headed with, not the raw folder", () => {
+    // A file called `repo_augury_review_report` in a downloads folder names
+    // nothing, and two of them collide.
+    expect(
+      filenameFor({ name: "repo", root: "/eval/cases/B01-orders-service/repo" }),
+    ).toBe("B01-orders-service_augury_review_report");
+  });
+
+  it("strips anything a filesystem would object to", () => {
+    expect(filenameFor({ name: "my service (v2)", root: "/x/my service (v2)" })).toBe(
+      "my-service-v2_augury_review_report",
+    );
+  });
+
+  it("still produces a usable name when there is nothing to go on", () => {
+    expect(filenameFor({ name: "", root: "" })).toBe("this-repository_augury_review_report");
   });
 });
 

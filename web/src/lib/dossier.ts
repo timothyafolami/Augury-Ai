@@ -123,17 +123,6 @@ export function headline(report: Report): Headline {
   };
 }
 
-/** What the downloaded file is called.
- *
- * Dated, because a review is of a repository at a moment, and two reports of
- * the same service a month apart are different documents.
- */
-export function filenameFor(report: Report, on: Date): string {
-  const day = on.toISOString().slice(0, 10);
-  const safe = (report.name || "repository").replace(/[^A-Za-z0-9._-]+/g, "-");
-  return `augury-${safe}-${day}`;
-}
-
 /** Folder names that describe a role rather than a service.
  *
  * A report headed "backend" or "repo" names nothing the reader can act on.
@@ -155,4 +144,17 @@ export function titleFor({ name, root }: { name: string; root: string }): string
   // guessing further is worse than showing what the user pointed at.
   const above = parts[parts.length - 2];
   return above || own;
+}
+
+/** What the downloaded file is called.
+ *
+ * The name the report is headed with, not the raw folder: a file called
+ * `repo_augury_review_report` sitting in a downloads folder names nothing,
+ * and the second one collides with the first.
+ */
+export function filenameFor(where: { name: string; root: string }): string {
+  const safe = titleFor(where)
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${safe || "review"}_augury_review_report`;
 }
