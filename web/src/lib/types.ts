@@ -72,6 +72,9 @@ export interface Finding {
 
 export interface Report {
   name: string;
+  /** Where the review was pointed. Used to head the report with something
+   *  more useful than a folder called `repo`. */
+  root?: string;
   usd: number;
   seconds: number;
   modelId: string;
