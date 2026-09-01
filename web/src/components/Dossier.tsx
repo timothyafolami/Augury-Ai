@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   claimOf,
@@ -29,6 +29,11 @@ export function Dossier({ report }: { report: Report }) {
   const counts = useMemo(() => headline(report), [report]);
   const printed = useMemo(() => new Date(), []);
   const sheet = useRef<HTMLElement>(null);
+  // Off-stage until asked for. The review column is a narrow scroller, and a
+  // full document rendered into it reads as a cramped preview of itself
+  // rather than as the artefact. It stays in the DOM either way, because the
+  // print copy is taken from it.
+  const [showing, setShowing] = useState(false);
   const title = useMemo(
     () => titleFor({ name: report.name, root: report.root ?? "" }),
     [report],
@@ -47,7 +52,7 @@ export function Dossier({ report }: { report: Report }) {
   const save = () => {
     if (!sheet.current) return;
     const was = window.document.title;
-    window.document.title = filenameFor(report, printed);
+    window.document.title = filenameFor({ name: report.name, root: report.root ?? "" });
 
     // Lifted out of the review column before printing. That column scrolls,
     // and a scrolling ancestor clips its contents in paged media exactly as it
@@ -68,24 +73,39 @@ export function Dossier({ report }: { report: Report }) {
 
   return (
     <div className="dossier-wrap">
-      <div className="no-print mb-4 flex items-center justify-between gap-4 border border-edge bg-ink px-4 py-3">
-        <div>
+      <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-4 border border-edge bg-ink px-4 py-3">
+        <div className="min-w-0">
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-augur-400">
-            the report
+            engineering review · {title}
           </p>
           <p className="mt-1 text-[13px] text-mist">
-            {counts.total} finding{counts.total === 1 ? "" : "s"} on {title}, ranked by
-            severity. Print or save it as PDF.
+            {counts.total} finding{counts.total === 1 ? "" : "s"}
+            {counts.high > 0 && (
+              <>
+                , <span className="text-verdict-miss">{counts.high} high</span>
+              </>
+            )}
+            {counts.measured > 0 && <> · {counts.measured} settled by experiment</>} · ranked and
+            written up for a team.
           </p>
         </div>
-        <button
-          onClick={save}
-          className="shrink-0 whitespace-nowrap border border-augur-500 bg-augur-600/20 px-4 py-2 font-mono text-[12px] text-augur-200 transition hover:bg-augur-600/40"
-        >
-          download PDF
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => setShowing((was) => !was)}
+            className="whitespace-nowrap border border-edge px-3 py-2 font-mono text-[12px] text-mist transition hover:border-augur-500 hover:text-chalk"
+          >
+            {showing ? "hide preview" : "preview"}
+          </button>
+          <button
+            onClick={save}
+            className="whitespace-nowrap border border-augur-500 bg-augur-600/20 px-4 py-2 font-mono text-[12px] text-augur-200 transition hover:bg-augur-600/40"
+          >
+            download PDF
+          </button>
+        </div>
       </div>
 
+      <div className={showing ? "sheet-stage" : "sheet-offstage"} aria-hidden={!showing}>
       <article ref={sheet} className="sheet">
         <header className="sheet-head">
           <div className="sheet-brand">
@@ -224,6 +244,7 @@ export function Dossier({ report }: { report: Report }) {
           </p>
         </footer>
       </article>
+      </div>
     </div>
   );
 }
