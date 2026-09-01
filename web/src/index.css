@@ -69,15 +69,20 @@
    the sheet, so there is only ever one layout to keep honest.
    --------------------------------------------------------------------------- */
 
-.dossier-wrap {
+/* Declared on the sheet, not on a wrapper around it.
+   Printing clones the sheet onto `<body>` to escape the review column's
+   scroll clipping, which leaves every ancestor behind. With the palette on
+   `.dossier-wrap` the copy resolved every `var(--paper-ink)` to nothing and
+   inherited the application's pale chalk: washed-out headings, an invisible
+   claim box, an invisible "what to do". The tokens have to travel with the
+   thing that uses them. */
+.sheet {
   --paper: #ffffff;
   --paper-ink: #17161d;
   --paper-mute: #5d5a6b;
   --paper-rule: #e3e0ea;
   --paper-accent: #6d3fd4;
-}
 
-.sheet {
   background: var(--paper);
   color: var(--paper-ink);
   max-width: 60rem;
@@ -473,4 +478,20 @@
   .sheet-dropped ul {
     display: block !important;
   }
+}
+
+/* The document is rendered whether or not it is on screen, because the print
+   copy is taken from it. Off-stage rather than `display: none`, so it lays
+   out at a real width and the clone is a copy of a laid-out document rather
+   than of an unrendered one. The positioning lives on the wrapper, so cloning
+   the sheet does not carry it into the printed page. */
+.sheet-offstage {
+  position: absolute;
+  left: -100000px;
+  top: 0;
+  width: 56rem;
+  pointer-events: none;
+}
+.sheet-stage {
+  position: static;
 }
